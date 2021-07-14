@@ -1,0 +1,239 @@
+module Main
+
+// The data that is used when compiling the program code.
+type CodeData
+    // functionNameForErrorMessage String
+    // thisGroup                   String
+    // resultType                  OType
+    // namedOperands               Map(name String, operand NamedOperand)
+    // level                       Int
+    // registerCounter             Int
+    // endLabels                   Map(name String, Label)
+    // nextLabels                  Map(name String, Label)
+    // fallthroughLabels           Map(name String, Label)
+    // catchLabels                 [Label]
+    // allocs                      [String]
+    // unneededAllocs              [String]
+    // ownerNoThrow                Bool
+
+attach CodeData to FieldFunctionNameForErrorMessage
+    #alwaysinline
+    def functionNameForErrorMessage~(codeData CodeData) String
+        return codeData.typeGetItem(0)
+
+    #alwaysinline
+    def functionNameForErrorMessage`(write codeData CodeData, new String) String
+        return codeData.typePut(0, new)
+
+attach CodeData to FieldThisGroup
+    #alwaysinline
+    def thisGroup~(codeData CodeData) String
+        return codeData.typeGetItem(1)
+
+    #alwaysinline
+    def thisGroup`(write codeData CodeData, new String) String
+        return codeData.typePut(1, new)
+
+attach CodeData to FieldResultType
+    #alwaysinline
+    def resultType~(codeData CodeData) OType
+        return codeData.typeGetItem(2)
+
+    #alwaysinline
+    def resultType`(write codeData CodeData, new <>OType) <>OType
+        return codeData.typePut(2, new)
+
+attach CodeData to FieldNamedOperands
+    #alwaysinline
+    def namedOperands~(codeData CodeData) Map
+        return codeData.typeGetItem(3)
+
+    #alwaysinline
+    def namedOperands`(write codeData CodeData, new <>Map) <>Map
+        return codeData.typePut(3, new)
+
+attach CodeData to FieldLevel
+    #alwaysinline
+    def level~(codeData CodeData) Int
+        return codeData.typeGetItem(4)
+
+    #alwaysinline
+    def level`(write codeData CodeData, new Int) Int
+        return codeData.typePut(4, new)
+
+attach CodeData to FieldRegisterCounter
+    #alwaysinline
+    def registerCounter~(codeData CodeData) Int
+        return codeData.typeGetItem(5)
+
+    #alwaysinline
+    def registerCounter`(write codeData CodeData, new Int) Int
+        return codeData.typePut(5, new)
+
+attach CodeData to FieldEndLabels
+    #alwaysinline
+    def endLabels~(codeData CodeData) Map
+        return codeData.typeGetItem(6)
+
+    #alwaysinline
+    def endLabels`(write codeData CodeData, new <>Map) <>Map
+        return codeData.typePut(6, new)
+
+attach CodeData to FieldNextLabels
+    #alwaysinline
+    def nextLabels~(codeData CodeData) Map
+        return codeData.typeGetItem(7)
+
+    #alwaysinline
+    def nextLabels`(write codeData CodeData, new <>Map) <>Map
+        return codeData.typePut(7, new)
+
+attach CodeData to FieldFallthroughLabels
+    #alwaysinline
+    def fallthroughLabels~(codeData CodeData) Map
+        return codeData.typeGetItem(8)
+
+    #alwaysinline
+    def fallthroughLabels`(write codeData CodeData, new <>Map) <>Map
+        return codeData.typePut(8, new)
+
+attach CodeData to FieldCatchLabels
+    #alwaysinline
+    def catchLabels~(codeData CodeData) Array
+        return codeData.typeGetItem(9)
+
+    #alwaysinline
+    def catchLabels`(write codeData CodeData, new Array) Array
+        return codeData.typePut(9, new)
+
+attach CodeData to FieldAllocs
+    #alwaysinline
+    def allocs~(codeData CodeData) Array
+        return codeData.typeGetItem(10)
+
+    #alwaysinline
+    def allocs`(write codeData CodeData, new Array) Array
+        return codeData.typePut(10, new)
+
+attach CodeData to FieldUnneededAllocs
+    #alwaysinline
+    def unneededAllocs~(codeData CodeData) Array
+        return codeData.typeGetItem(11)
+
+    #alwaysinline
+    def unneededAllocs`(write codeData CodeData, new Array) Array
+        return codeData.typePut(11, new)
+
+attach CodeData to FieldOwnerNoThrow
+    #alwaysinline
+    def ownerNoThrow~(codeData CodeData) Bool
+        return codeData.typeGetItem(12)
+
+    #alwaysinline
+    def ownerNoThrow`(write codeData CodeData, new Bool) Bool
+        return codeData.typePut(12, new)
+
+#alwaysinline
+def codeData(functionNameForErrorMessage, thisGroup String, resultType OType, namedOperands Map, level, registerCounter Int, endLabels, nextLabels, fallthroughLabels Map, catchLabels, allocs, unneededAllocs Array, ownerNoThrow Bool) CodeData
+    return CodeData.fromList({functionNameForErrorMessage, thisGroup, resultType, namedOperands, level, registerCounter, endLabels, nextLabels, fallthroughLabels, catchLabels, allocs, unneededAllocs, ownerNoThrow})
+
+// The function creates ir code with allocations.
+#alwaysinline
+def allocsToIR(codeData CodeData) String
+    var llvmIR String = ""
+    const allocs Array = codeData.allocs~()
+    parse _, register = allocs
+        llvmIR += "\t%##nreg##" + register[8 : register.length~()] + " = alloca [2 x i64], align 8\n"
+    return llvmIR
+
+// The function creates a new llvm ir register and assigns it the specified value.
+#alwaysinline
+def createRegister(write codeData CodeData, registerValue String, write llvmIR String) String
+    const registerNumber String = codeData.registerCounter~().toString()
+    llvmIR += "\t%##nreg##" + registerNumber + "## = " + registerValue + "\n"
+    codeData.registerCounter`(codeData.registerCounter~() + 1)
+    return "%##reg##" + registerNumber + "##"
+
+// The function creates a new llvm ir register for the label.
+#alwaysinline
+def createLabel(write codeData CodeData) String
+    const registerNumber Int = codeData.registerCounter~()
+    const registerName String = registerNumber.toString()
+    codeData.registerCounter`(registerNumber + 1)
+    return registerName
+
+// The function creates llvm code which indicates that a certain value with type i1 is most likely equal to 1.
+#alwaysinline
+def likelyI1Register(register String, write codeData CodeData, write llvmIR String) String
+    return codeData.createRegister("call i1 @llvm.expect.i1(i1 " + register + ", i1 1)", llvmIR)
+
+// The function creates llvm code which indicates that a certain value with type i1 is most likely equal to 0.
+#alwaysinline
+def unlikelyI1Register(register String, write codeData CodeData, write llvmIR String) String
+    return codeData.createRegister("call i1 @llvm.expect.i1(i1 " + register + ", i1 0)", llvmIR)
+
+// The function creates an interrupt with an error about the wrong type.
+#alwaysinline
+def createInvalidTypeThrow(write codeData CodeData, compiledData CData, freedOnError Array, write llvmIR String)
+    parse _, freedOperand = freedOnError
+        freedOperand.freeOperand(codeData, compiledData, llvmIR)
+    if codeData.catchLabels~().empty?()
+        codeData.freeLevel(1, compiledData, llvmIR)
+        llvmIR += "\tret [2 x i64] " + createError("0", "Invalid type.\\n<- " + codeData.functionNameForErrorMessage~()) + "\n"
+    else
+        const catchLabel Label = codeData.catchLabels~()[codeData.catchLabels~().length~() - 1]
+        codeData.freeLevel(catchLabel.level~(), compiledData, llvmIR)
+        llvmIR += {
+            "\tstore [2 x i64] [i64 1, i64 ptrtoint ([3 x i64]* @invalid.type.error to i64)], [2 x i64]* %##reg##0##, align 8\n"
+            "\tbr label %##reg##" + catchLabel.label~() + "##\n"
+        }
+
+// The function releases all operands declared at the specified level and above.
+#alwaysinline
+def freeLevel(write codeData CodeData, level Int, compiledData CData, write llvmIR String)
+    parse _, operand = codeData.namedOperands~()
+        if operand.level~() >= level
+            operand.operand~().freeOperand(codeData, compiledData, llvmIR)
+
+// The function returns a register with memory allocated on the stack.
+def newAlloc(write codeData CodeData) String
+    var register String = ""
+    if codeData.unneededAllocs~().empty?()
+        register = "%##reg##" + codeData.registerCounter~().toString() + "##"
+        codeData.registerCounter`(codeData.registerCounter~() + 1)
+        var allocs Array = codeData.allocs`([])
+        allocs.addItem(register)
+        codeData.allocs`(allocs)
+    else
+        var unneededAllocs Array = codeData.unneededAllocs`([])
+        register = unneededAllocs[unneededAllocs.length~() - 1]
+        unneededAllocs.delete(unneededAllocs.length~() - 1, 1)
+        codeData.unneededAllocs`(unneededAllocs)
+    return register
+
+// The function removes operands without freeing them, it also sets the current level to one less than the specified level.
+def deleteLevel(write codeData CodeData, level Int)
+    var namedOperands Map = codeData.namedOperands`(nothing)
+    var unneededAllocs Array = codeData.unneededAllocs`([])
+    var needToDetele Array = []
+    parse name, operand = namedOperands
+        if operand.level~() >= level
+            needToDetele.addItem(name)
+            if !operand.operand~().used?()
+                warningDeclaredButNotUsed(operand.operand~().code~(), (operand.operand~().access~() == enum::access_write).select("Variable", "Constant"))
+            if operand.operand~().access~() == enum::access_write
+                parse :(parse) _, register = codeData.allocs~()
+                    if register == operand.operand~().value~()
+                        unneededAllocs.addItem(register)
+                        end parse
+    parse _, name = needToDetele
+        namedOperands.put(name, nothing)
+    codeData.namedOperands`(namedOperands)
+    codeData.unneededAllocs`(unneededAllocs)
+    codeData.level`(level - 1)
+
+// The function finds out whether all the operanads remaining at the end of a function have been used.
+def allOperandsUsed!(codeData CodeData)
+    parse _, operand = codeData.namedOperands~()
+        if !operand.operand~().used?()
+            warningDeclaredButNotUsed(operand.operand~().code~(), (operand.operand~().access~() == enum::access_write).select("Variable", "Constant"))

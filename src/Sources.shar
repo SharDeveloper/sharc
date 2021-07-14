@@ -1,0 +1,317 @@
+module Main
+
+// Character type (used in getToken function).
+enum
+    ct_none
+    ct_digit
+    ct_regular
+    ct_special
+
+// The function loads and structures data from sources.
+def loadBlocks(files Array) Array // of Block
+    var result Array = []
+    for :(fileID Int = 0) fileID < files.length~(); fileID++
+        const fileName String = files[fileID]
+        const file <>String = String.loadFromUTF8File(fileName)
+        if file.nothing?()
+            errorCanNotLoadFile(fileName)
+        const lines Array = file.split('\n')
+        var lineIndex Int = 0
+        for :(loop)
+            const block <>Block = lines.loadBlock(fileName, fileID + 1, lineIndex, 0 /*expected level*/, true /*check level*/)
+            if block.nothing?()
+                end loop
+            result.addItem(block)
+    return result
+
+// The function loads and structures data from a file in memory.
+def loadBlock(lines Array, fileName String, fileID, write lineIndex, expectedLevel Int, checkLevel Bool) <>Block
+    lines.nextLineIndex(lineIndex, fileName)
+    if lineIndex < lines.length~()
+        const line String = lines[lineIndex]
+        const lineLevel Int = line.getLevel()
+        if lineLevel == expectedLevel
+            var tokens Array = line.getTokens(fileName, fileID, lineIndex, lineLevel)
+            lineIndex++
+            var ignoreSplittedStrings Bool = false
+            if tokens[tokens.length~() - 1].text~() == "{"
+                delete(tokens, tokens.length~() - 1, 1)
+                tokens.joinTokens(lines, fileName, fileID, lineIndex)
+            elif tokens.length~() == 1 && tokens[0].text~() == "llvm"
+                ignoreSplittedStrings = true
+                tokens = lines.getLLVMCode(fileName, fileID, lineIndex, expectedLevel + 1)
+            if !ignoreSplittedStrings
+                tokens.joinSplittedStrings()
+            return block(tokens, lines.getSubBlocks(fileName, fileID, lineIndex, expectedLevel + 1))
+        elif checkLevel
+            errorWrongLevel(fileName, lineIndex, expectedLevel, lineLevel)
+    return nothing
+
+// The function loads and structures data from rows with a specific level.
+#alwaysinline
+def getSubBlocks(lines Array, fileName String, fileID, write lineIndex, expectedLevel Int) Array // of Block
+    var result Array = []
+    for :(loop)
+        const block <>Block = loadBlock(lines, fileName, fileID, lineIndex, expectedLevel, false /*check level*/)
+        if block.nothing?()
+            end loop
+        result.addItem(block)
+    return result
+
+// The function searches among the strings for the first row in which there is any useful data.
+def nextLineIndex(lines Array, write lineIndex Int, fileName String)
+    for :(loop) lineIndex < lines.length~()
+        const line String = lines[lineIndex]
+        var columnIndex Int = 0
+        if !(line.empty?() || line.getToken(fileName, 0 /*fileID*/, lineIndex, columnIndex).nothing?())
+            end loop
+        lineIndex++
+
+// The function recognizes the level in the line. (how much the line is shifted to the right)
+#alwaysinline
+def getLevel(line String) Int
+    parse index, char = line
+        if char != ' '
+            return index >> 2
+    return 0
+
+// The function converts the string to an array of tokens.
+#alwaysinline
+def getTokens(line, fileName String, fileID, lineIndex, lineLevel Int) Array // of Token
+    var result Array = []
+    var columnIndex Int = lineLevel * 4
+    for :(loop)
+        const token <>Token = line.getToken(fileName, fileID, lineIndex, columnIndex)
+        if token.nothing?()
+            end loop
+        result.addItem(token)
+    return result
+
+// The function receives the token from the string from the specified position.
+def getToken(line, fileName String, fileID, lineIndex, write columnIndex Int) <>Token
+    var token Token = token("", fileName, fileID, lineIndex, columnIndex)
+    var previousCharType Int = enum::ct_none
+    for
+        if columnIndex >= line.length~()
+            if previousCharType == enum::ct_none
+                return nothing
+            return token
+        const tokenText String = token.text~()
+        const char Char = line[columnIndex]
+        switch char
+        case ' '
+            if previousCharType != enum::ct_none
+                return token
+        case '(', ')', ',', ';', '[', ']', '{', '}', '$'
+            if previousCharType == enum::ct_none
+                token.addChar(char)
+                token.columnIndex`(columnIndex)
+                columnIndex++
+            return token
+        case 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'Y', 'Z', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'y', 'z', '_'
+            eSwitch previousCharType
+            case ct_regular
+                token.addChar(char)
+            case ct_none
+                previousCharType = enum::ct_regular
+                token.addChar(char)
+                token.columnIndex`(columnIndex)
+            default
+                return token
+        case '!', '#', '%', '&', ':', '<', '=', '>', '?', '@', '^', '`', '|', '~'
+            eSwitch previousCharType
+            case ct_special
+                if char == '!' && tokenText == "!"
+                    return token
+                token.addChar(char)
+            case ct_none
+                previousCharType = enum::ct_special
+                token.addChar(char)
+                token.columnIndex`(columnIndex)
+            default
+                return token
+        case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'
+            eSwitch previousCharType
+            case ct_digit, ct_regular
+                token.addChar(char)
+            case ct_none
+                previousCharType = enum::ct_digit
+                token.addChar(char)
+                token.columnIndex`(columnIndex)
+            default
+                if tokenText == "-" || tokenText == "+"
+                    previousCharType = enum::ct_digit
+                    token.addChar(char)
+                else
+                    return token
+        case 'A', 'B', 'C', 'D', 'F', 'a', 'b', 'c', 'd', 'f'
+            if previousCharType == enum::ct_regular || (previousCharType == enum::ct_digit && tokenText.containAny?("xX"))
+                token.addChar(char)
+            elif previousCharType == enum::ct_none
+                previousCharType = enum::ct_regular
+                token.addChar(char)
+                token.columnIndex`(columnIndex)
+            else
+                return token
+        case 'x', 'X'
+            if previousCharType == enum::ct_regular || (previousCharType == enum::ct_digit && tokenText == "0")
+                token.addChar(char)
+            elif previousCharType == enum::ct_none
+                previousCharType = enum::ct_regular
+                token.addChar(char)
+                token.columnIndex`(columnIndex)
+            else
+                return token
+        case 'e', 'E'
+            if previousCharType == enum::ct_regular || (previousCharType == enum::ct_digit && (tokenText.contain?('.') && !tokenText.containAny?("eE") || tokenText.containAny?("xX")))
+                token.addChar(char)
+            elif previousCharType == enum::ct_none
+                previousCharType = enum::ct_regular
+                token.addChar(char)
+                token.columnIndex`(columnIndex)
+            else
+                return token
+        case '-', '+'
+            eSwitch previousCharType
+            case ct_special
+                if char == '-'
+                    switch tokenText
+                    case "!", "*", "/", "%", "+", "<<", ">>", "<", ">", "<=", ">=", "==", "!=", "&", "&&", "^", "|", "||", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", ":"
+                        return token
+                token.addChar(char)
+            case ct_none
+                previousCharType = enum::ct_special
+                token.addChar(char)
+                token.columnIndex`(columnIndex)
+            case ct_digit
+                if tokenText.contain?('.') && "eE".contain?(token[token.length~() - 1])
+                    token.addChar(char)
+                else
+                    return token
+            default
+                return token
+        case '.'
+            if previousCharType == enum::ct_none
+                token.addChar(char)
+                token.columnIndex`(columnIndex)
+                columnIndex++
+                return token
+            elif previousCharType == enum::ct_digit && {
+                !tokenText.containAny?("xX.") &&
+                columnIndex + 1 < line.length~() &&
+                line[columnIndex + 1].inRange?('0', ':')
+            }
+                token.addChar(char)
+            else
+                return token
+        case '/'
+            if tokenText == "/"
+                return nothing
+            eSwitch previousCharType
+            case ct_none
+                previousCharType = enum::ct_special
+                token.addChar(char)
+                token.columnIndex`(columnIndex)
+            case ct_special
+                token.addChar(char)
+            default
+                return token
+        case '*'
+            if tokenText == "/"
+                const endIndex <>Int = line.lookPartFromAtoB("*/", columnIndex + 1, line.length~())
+                if endIndex.nothing?()
+                    errorNotExpectedEOL(token("", fileName, fileID, lineIndex, line.length~() - 1), "*/")
+                columnIndex = endIndex + 1
+                token.text`("")
+                previousCharType = enum::ct_none
+            else
+                eSwitch previousCharType
+                case ct_none
+                    previousCharType = enum::ct_special
+                    token.addChar(char)
+                    token.columnIndex`(columnIndex)
+                case ct_special
+                    token.addChar(char)
+                default
+                    return token
+        case '\q', '\p'
+            if previousCharType == enum::ct_none
+                token.columnIndex`(columnIndex)
+                const beginIndex Int = columnIndex
+                const endIndex <>Int = line.lookFromAtoB(char, columnIndex + 1, line.length~())
+                if endIndex.nothing?()
+                    errorNotExpectedEOL(token("", fileName, fileID, lineIndex, line.length~() - 1), char.toString())
+                columnIndex = endIndex + 1
+                token.text`(line[beginIndex : columnIndex])
+            return token
+        default
+            errorInvalidCharacter(token(char.charToInt().toString(), fileName, fileID, lineIndex, columnIndex))
+        columnIndex++
+
+// Functions attaches to existing tokens, tokens from the following lines.
+// Such actions are needed to join several lines into one.
+def joinTokens(write existedTokens, lines Array, fileName String, fileID, write lineIndex Int)
+    for :(loop)
+        lines.nextLineIndex(lineIndex, fileName)
+        if lineIndex >= lines.length~()
+            errorNotExpectedEOL(existedTokens[existedTokens.length~() - 1], "}")
+        const line String = lines[lineIndex]
+        const lineLevel Int = line.getLevel()
+        const newTokens Array = line.getTokens(fileName, fileID, lineIndex, lineLevel)
+        if newTokens.length~() == 1 && newTokens[0].text~() == "}"
+            lineIndex++
+            end loop
+        existedTokens += newTokens
+        lineIndex++
+
+// The function gets the llvm code. Token - a line of llvm code.
+def getLLVMCode(lines Array, fileName String, fileID, write lineIndex, level Int) Array
+    var line String = lines[lineIndex]
+    var lineLevel Int = line.getLevel()
+    if lineLevel < level
+        errorWrongLevel(fileName, lineIndex, level, lineLevel)
+    var result Array = [const::llvmToken, token(line[lineLevel * 4 : line.length~()], fileName, fileID, lineIndex, level * 4)]
+    lineIndex++
+    if lineIndex != lines.length~()
+        for :(loop)
+            lines.nextLineIndex(lineIndex, fileName)
+            if lineIndex == lines.length~()
+                end loop
+            line = lines[lineIndex]
+            lineLevel = line.getLevel()
+            if lineLevel < level
+                end loop
+            result.addItem(token(line[level * 4 : line.length~()], fileName, fileID, lineIndex, level * 4))
+            lineIndex++
+    return result
+
+// The function searches the specified tokens for several lines in a row and combines them into one line.
+def joinSplittedStrings(write tokens Array)
+    var stringBegin Int = 0
+    var stringEnd Int = 0
+    var index Int = 0
+    for :(mainLoop)
+        for :(beginLoop) index + 1 < tokens.length~(); index++
+            if tokens[index][0] == '\q' && tokens[index + 1][0] == '\q'
+                stringBegin = index
+                stringEnd = index + 1
+                for :(endLoop) stringEnd < tokens.length~(); stringEnd++
+                    if tokens[stringEnd][0] != '\q'
+                        end endLoop
+                index = stringEnd - 1
+                end beginLoop
+        if stringBegin == stringEnd
+            end mainLoop
+        var newToken Token = tokens[stringBegin]
+        newToken.text`(newToken.text~()[0 : newToken.length~() - 1])
+        for :(stringIndex Int = stringBegin + 1) stringIndex < stringEnd; stringIndex++
+            const string String = tokens[stringIndex].text~()
+            newToken.addString(string[1 : string.length~() - 1])
+        newToken.addChar('\q')
+        const leftPart Array = tokens[0 : stringBegin]
+        const rightPart Array = tokens[stringEnd : tokens.length~()]
+        tokens = leftPart
+        tokens.addItem(newToken)
+        tokens += rightPart
+        stringBegin = 0
+        stringEnd = 0

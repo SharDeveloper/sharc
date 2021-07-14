@@ -1,0 +1,138 @@
+module Main
+
+// A type for storing the signature of functions.
+type FSignature
+    // coordinates Token
+    // arguments   [FSArgument]
+    // resultType  OType
+
+attach FSignature to FieldCoordinates
+    #alwaysinline
+    def coordinates~(signature FSignature) Token
+        return signature.typeGetItem(0)
+
+    #alwaysinline
+    def coordinates`(write signature FSignature, new <>Token) <>Token
+        return signature.typePut(0, new)
+
+attach FSignature to FieldArguments
+    #alwaysinline
+    def arguments~(signature FSignature) Array
+        return signature.typeGetItem(1)
+
+    #alwaysinline
+    def arguments`(write signature FSignature, new Array) Array
+        return signature.typePut(1, new)
+
+attach FSignature to FieldResultType
+    #alwaysinline
+    def resultType~(signature FSignature) OType
+        return signature.typeGetItem(2)
+
+    #alwaysinline
+    def resultType`(write signature FSignature, new <>OType) <>OType
+        return signature.typePut(2, new)
+
+#alwaysinline
+def fSignature(coordinates Token, arguments Array, resultType OType) FSignature
+    return FSignature.fromList({coordinates.replaceText(""), arguments, resultType})
+
+// The function makes sure that one of the arguments to "This" is in the function type.
+#alwaysinline
+def this!(signature FSignature)
+    const arguments Array = signature.arguments~()
+    parse _, argument = arguments
+        const argumentType OType = argument.type~()
+        if argumentType.this?() && !argumentType.optional?()
+            return
+    errorNoThis(signatureToToken(signature))
+
+// The function turns the function signature into a token.
+#alwaysinline
+def signatureToToken(signature FSignature) Token
+    var result Token = signature.coordinates~().replaceText("(")
+    const arguments Array = signature.arguments~()
+    const resultType OType = signature.resultType~()
+    parse _, argument = arguments
+        if argument.access~() != enum::access_read
+            result.addString(" " + accessToString(argument.access~()))
+        result.addString(oTypeToToken(argument.type~(), true).text~() + ", ")
+    if result.text~().hasSuffix?(", ")
+        result.text`(result.text~()[0 : result.length~() - 2])
+    result.addString(") " + oTypeToToken(resultType, true).text~())
+    return result
+
+attach FSignature to BinarySerializable
+    #alwaysinline
+    def serialize(signature FSignature, write bytes Bytes)
+        const arguments Array = signature.arguments~()
+        const resultType OType = signature.resultType~()
+        arguments.length~().serialize(bytes)
+        parse _, argument = arguments
+            argument.serialize(bytes)
+        resultType.serialize(bytes)
+
+    #alwaysinline
+    def deserialize(noread type FSignature, bytes Bytes, write position Int) FSignature
+        const startPosition Int = position
+        try
+            const argumentsLength Int = Int.deserialize(bytes, position)
+            var arguments Array = []
+            for :(counter Int = 0) counter < argumentsLength; counter++
+                arguments.addItem(FSArgument.deserialize(bytes, position))
+            const resultType OType = OType.deserialize(bytes, position)
+            return fSignature(const::emptyToken, arguments, resultType)
+        catch id, message
+            position = startPosition
+            throw(id, message)
+
+attach FSignature to ToFull
+    #alwaysinline
+    def toFull(signature FSignature, compiledData CData) FSignature
+        const oldArguments Array = signature.arguments~()
+        var newArguments Array = []
+        parse _, oldArgument = oldArguments
+            newArguments.addItem(fsArgument(oldArgument.access~(), oldArgument.type~().toFull(compiledData)))
+        return fSignature(signature.coordinates~(), newArguments, signature.resultType~().toFull(compiledData))
+
+// The function replaces the "This" type with a specific type.
+#alwaysinline
+def replaceThisType(signature FSignature, thisType String) FSignature
+    const oldArguments Array = signature.arguments~()
+    var newArguments Array = []
+    parse _, oldArgument = oldArguments
+        const newArgument FSArgument = oldArgument.type~().this?().select(fsArgument(oldArgument.access~(), oType(oldArgument.type~().type~().replaceText(thisType), oldArgument.type~().optional?())), oldArgument)
+        newArguments.addItem(newArgument)
+    const oldResultType OType = signature.resultType~()
+    const newResultType OType = oldResultType.this?().select(oType(oldResultType.type~().replaceText(thisType), oldResultType.optional?()), oldResultType)
+    return fSignature(signature.coordinates~(), newArguments, newResultType)
+
+// The function finds out if the signatures are compatible.
+def signatureCompatible?(compatibleSignature, originalSignature FSignature, compiledData CData) Bool
+    const compatibleArguments Array = compatibleSignature.arguments~()
+    const originalArguments Array = originalSignature.arguments~()
+    if compatibleArguments.length~() != originalArguments.length~()
+        return false
+    parse index, compatibleArgument = compatibleArguments
+        const originalArgument FSArgument = originalArguments[index]
+        if !compatibleArgument.argumentCompatible?(originalArgument, compiledData)
+            return false
+    return fsArgument(enum::access_read, compatibleSignature.resultType~()).argumentCompatible?(fsArgument(enum::access_read, originalSignature.resultType~()), compiledData)
+
+// The function makes sure that the signatures of the functions are compatible.
+def signatureCompatible!(compatibleSignature, originalSignature FSignature, compiledData CData)
+    if !signatureCompatible?(compatibleSignature, originalSignature, compiledData)
+        errorFunctionsNotCompatible(originalSignature.coordinates~(), compatibleSignature.coordinates~())
+
+// The function gets what type in the function is considered as "This".
+#alwaysinline
+def getThisType(realFunctionSignature, functionSignatureWithThis FSignature) Token
+    if realFunctionSignature.arguments~().length~() != functionSignatureWithThis.arguments~().length~()
+        errorInvalidType(realFunctionSignature.coordinates~(), signatureToToken(realFunctionSignature).text~(), signatureToToken(functionSignatureWithThis).text~())
+    parse index, argument = functionSignatureWithThis.arguments~()
+        if argument.type~().this?() && !argument.type~().optional?()
+            const realArgumentType OType = realFunctionSignature.arguments~()[index].type~()
+            if !realArgumentType.simple?()
+                errorThisNotSimple(oTypeToToken(realArgumentType, false))
+            return realArgumentType.type~()
+    unreachable()

@@ -1,0 +1,46 @@
+module Main
+
+// Type (including type and primitives).
+type Type
+    // export?    Bool
+    // name       Token
+    // primitive? Bool
+
+attach Type to FieldExport
+    #alwaysinline
+    def export?(type Type) Bool
+        return type.typeGetItem(0)
+
+    #alwaysinline
+    def export`(write type Type, new Bool) Bool
+        return type.typePut(0, new)
+
+attach Type to FieldName
+    #alwaysinline
+    def name~(type Type) Token
+        return type.typeGetItem(1)
+
+    #alwaysinline
+    def name`(write type Type, new <>Token) <>Token
+        return type.typePut(1, new)
+
+attach Type to FieldPrimitive
+    #alwaysinline
+    def primitive?(type Type) Bool
+        return type.typeGetItem(2)
+
+    #alwaysinline
+    def primitive`(write type Type, new Bool) Bool
+        return type.typePut(2, new)
+
+#alwaysinline
+def type(isExport Bool, name Token, isPrimitive Bool) Type
+    return Type.fromList({isExport, name, isPrimitive})
+
+// The function compiles the data in the type.
+def compileType(type Type, write compiledData CData)
+    var groups Set = Set.createEmpty()
+    groups.add("STD::Any")
+    if !(compiledData.currentModule~() == "STD" && type.name~().text~() == "Nothing")
+        groups.add(type.primitive?().select("STD::Primitive", "STD::Type"))
+    compiledData.addCType(cType(type.export?(), compiledData.currentModule~() + "::" + type.name~().text~(), groups))

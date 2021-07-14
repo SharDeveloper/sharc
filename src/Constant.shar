@@ -1,0 +1,99 @@
+module Main
+
+// Global constant.
+type Constant
+    // export?  Bool
+    // name     Token
+    // type     OType
+    // value    Expression
+
+attach Constant to FieldExport
+    #alwaysinline
+    def export?(constant Constant) Bool
+        return constant.typeGetItem(0)
+
+    #alwaysinline
+    def export`(write constant Constant, new Bool) Bool
+        return constant.typePut(0, new)
+
+attach Constant to FieldName
+    #alwaysinline
+    def name~(constant Constant) Token
+        return constant.typeGetItem(1)
+
+    #alwaysinline
+    def name`(write constant Constant, new <>Token) <>Token
+        return constant.typePut(1, new)
+
+attach Constant to FieldType
+    #alwaysinline
+    def type~(constant Constant) OType
+        return constant.typeGetItem(2)
+
+    #alwaysinline
+    def type`(write constant Constant, new <>OType) <>OType
+        return constant.typePut(2, new)
+
+attach Constant to FieldValue
+    #alwaysinline
+    def value~(constant Constant) Expression
+        return constant.typeGetItem(3)
+
+    #alwaysinline
+    def value`(write constant Constant, new <>Expression) <>Expression
+        return constant.typePut(3, new)
+
+#alwaysinline
+def constant(isExport Bool, name Token, type OType, value Expression) Constant
+    return Constant.fromList({isExport, name, type, value})
+
+// The function partially compiles the constant.
+#alwaysinline
+def precompileConstant(constant Constant, write compiledData CData)
+    var constants Map = compiledData.constants`(nothing)
+    var constantsWithSameName <>Map = constants.put(constant.name~().text~(), Map.createEmpty())
+    if constantsWithSameName.nothing?()
+        constantsWithSameName = Map.createEmpty()
+    if !constantsWithSameName.put{
+        (compiledData.currentModule~(),
+        cConstant(constant.export?(),
+        compiledData.currentModule~() + "::" + constant.name~().text~(),
+        "",
+        constant.type~().toFull(compiledData))).nothing?()
+    }
+        errorAlreadyExist(constant.name~(), "constant")
+    constants.put(constant.name~().text~(), constantsWithSameName)
+    compiledData.constants`(constants)
+
+// The function partially compiles the constant.
+#alwaysinline
+def compileConstant(constant Constant, write compiledData CData)
+    var compiledConstant CConstant = compiledData.constants~()[constant.name~().text~()][compiledData.currentModule~()]
+    var codeData CodeData = codeData{
+        ("const::" + compiledData.currentModule~() + "::" + constant.name~().text~() /*functionNameForErrorMessage*/,
+        "" /*thisGroup*/,
+        OType.fromList({}) /*resultType*/,
+        Map.createEmpty() /*namedOperands*/,
+        1 /*level*/,
+        0 /*registerCounter*/,
+        Map.createEmpty() /*endLabels*/,
+        Map.createEmpty() /*nextLabels*/,
+        Map.createEmpty() /*fallthroughLabels*/,
+        [] /*catchLabels*/,
+        [] /*allocs*/,
+        [] /*unneededAllocs*/,
+        false /*ownerNoThrow*/)
+    }
+    var llvmIR String = ""
+    const constOperand Operand = constant.value~().compileExpression(compiledConstant.type~(), codeData, compiledData, [], llvmIR)
+    llvmIR = codeData.allocsToIR() + llvmIR
+    constOperand.operandToConst(codeData, compiledData, llvmIR)
+    llvmIR += "\tret [2 x i64] " + constOperand.value~() + "\n"
+    llvmIR.sharRegistersToLLVMRegisters(1, constant.name~())
+    var constants Map = compiledData.constants`(nothing)
+    var constantsWithSameName <>Map = constants.put(constant.name~().text~(), Map.createEmpty())
+    compiledConstant = constantsWithSameName.put(compiledData.currentModule~(), CConstant.fromList({}))
+    compiledConstant.llvmIR`(llvmIR)
+    constantsWithSameName.put(compiledData.currentModule~(), compiledConstant)
+    constants.put(constant.name~().text~(), constantsWithSameName)
+    compiledData.constants`(constants)

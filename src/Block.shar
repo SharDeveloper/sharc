@@ -1,0 +1,670 @@
+module Main
+
+// Structured blocks of source code.
+type Block
+    // line      [Token]
+    // subBlocks [Block]
+
+attach Block to FieldLine
+    #alwaysinline
+    def line~(block Block) Array
+        return block.typeGetItem(0)
+
+    #alwaysinline
+    def line`(write block Block, new Array) Array
+        return block.typePut(0, new)
+
+attach Block to FieldSubBlocks
+    #alwaysinline
+    def subBlocks~(block Block) Array
+        return block.typeGetItem(1)
+
+    #alwaysinline
+    def subBlocks`(write block Block, new Array) Array
+        return block.typePut(1, new)
+
+#alwaysinline
+def block(line, subBlocks Array) Block
+    return Block.fromList({line, subBlocks})
+
+// The function receives the next token.
+#alwaysinline
+def next(block Block, write tokenIndex Int) Token
+    block.notEOL!(tokenIndex)
+    const result Token = block.line~()[tokenIndex]
+    tokenIndex++
+    return result
+
+// The function finds out whether the text in the next token matches one of the specified options.
+#alwaysinline
+def next?(block Block, write tokenIndex Int, variants Array) Bool
+    var result Bool = false
+    if !block.eol?(tokenIndex)
+        result = variants.contain?(block.line~()[tokenIndex].text~())
+    if result
+        tokenIndex++
+    return result
+
+// The function checks whether the text in the next token matches one of the specified options.
+#alwaysinline
+def next!(block Block, write tokenIndex Int, variants Array)
+    if !block.next?(tokenIndex, variants)
+        errorNotExpectedToken(block.next(tokenIndex), variants[0])
+
+// The function finds out if the line has ended.
+#alwaysinline
+def eol?(block Block, tokenIndex Int) Bool
+    return tokenIndex >= block.line~().length~()
+
+// The function checks that the line has ended.
+#alwaysinline
+def eol!(block Block, tokenIndex Int)
+    if !block.eol?(tokenIndex)
+        var mutTokenIndex Int = tokenIndex
+        errorNotExpectedToken(block.next(mutTokenIndex), "")
+
+// The function checks that the line has not ended.
+#alwaysinline
+def notEOL!(block Block, tokenIndex Int)
+    if block.eol?(tokenIndex)
+        const line Array = block.line~()
+        errorNotExpectedToken(line[line.length~() - 1], "")
+
+// The function checks that there are sub-blocks in the block.
+#alwaysinline
+def subBlocks!(block Block)
+    if block.subBlocks~().empty?()
+        const token Token = block.line~()[0]
+        errorExpectSubBlock(token.fileName~(), token.lineIndex~() + 1)
+
+// The function checks that there are no sub-blocks in the block.
+#alwaysinline
+def noSubBlocks!(block Block)
+    if !block.subBlocks~().empty?()
+        errorNotExpectedToken(block.subBlocks~()[0].line~()[0], "")
+
+// The function gets any name starting with a lowercase letter.
+#alwaysinline
+def getLowercaseName(block Block, write tokenIndex Int, nameOf String) Token
+    const name Token = block.next(tokenIndex)
+    if !name[0].inRange?('a', '{')
+        errorInvalidName(name, nameOf)
+    return name
+
+// The function gets any name starting with a capital letter.
+#alwaysinline
+def getUppercaseName(block Block, write tokenIndex Int, nameOf String) Token
+    const name Token = block.next(tokenIndex)
+    if !name[0].inRange?('A', '[')
+        errorInvalidName(name, nameOf)
+    return name
+
+// The function gets any name starting with a lowercase letter, along with the module name, if the module name was specified. (e.g. STD::func)
+#alwaysinline
+def getFullLowercaseName(block Block, write tokenIndex Int, nameOf String) Token
+    tokenIndex++
+    var name Token = const::emptyToken
+    if block.next?(tokenIndex, ["::"])
+        tokenIndex -= 2
+        name = block.getUppercaseName(tokenIndex, "module")
+        tokenIndex++
+        name.addString("::" + block.getLowercaseName(tokenIndex, nameOf).text~())
+    else
+        tokenIndex--
+        name = block.getLowercaseName(tokenIndex, nameOf)
+    return name
+
+// The function gets any name starting with a capital letter, along with the module name, if the module name was specified. (e.g. STD::Type)
+#alwaysinline
+def getFullUppercaseName(block Block, write tokenIndex Int, nameOf String) Token
+    tokenIndex++
+    var name Token = const::emptyToken
+    if block.next?(tokenIndex, ["::"])
+        tokenIndex -= 2
+        name = block.getUppercaseName(tokenIndex, "module")
+        tokenIndex++
+        name.addString("::" + block.getUppercaseName(tokenIndex, nameOf).text~())
+    else
+        tokenIndex--
+        name = block.getUppercaseName(tokenIndex, nameOf)
+    return name
+
+// The function turns the block in which the constant is stored into a constant.
+#alwaysinline
+def toConstant(block Block) Constant
+    block.noSubBlocks!()
+    var tokenIndex Int = 0
+    const isExport Bool = block.next?(tokenIndex, ["export"])
+    block.next!(tokenIndex, ["const"])
+    const name Token = block.getLowercaseName(tokenIndex, "constant")
+    const type OType = block.getOperandType(tokenIndex, false /*allow this*/)
+    block.next!(tokenIndex, ["="])
+    const value Expression = block.getExpression(tokenIndex)
+    block.eol!(tokenIndex)
+    return constant(isExport, name, type, value)
+
+// The function turns the block in which the type is stored into a type.
+#alwaysinline
+def toType(block Block) Type
+    block.noSubBlocks!()
+    var tokenIndex Int = 0
+    const isExport Bool = block.next?(tokenIndex, ["export"])
+    const typeOfType String = block.next(tokenIndex).text~()
+    const typeName Token = block.getUppercaseName(tokenIndex, "type")
+    block.eol!(tokenIndex)
+    if typeName.text~() == "This"
+        errorInvalidName(typeName, "type")
+    var result Type = Type.fromList({})
+    switch typeOfType
+    case "type"
+        result = type(isExport, typeName, false)
+    case "primitive"
+        result = type(isExport, typeName, true)
+    default
+        unreachable()
+    return result
+
+// The function turns the block in which the enumeration is stored into an enumeration.
+#alwaysinline
+def toEnum(block Block) Enumeration
+    block.subBlocks!()
+    var tokenIndex Int = 0
+    const isExport Bool = block.next?(tokenIndex, ["export"])
+    block.next!(tokenIndex, ["enum"])
+    block.eol!(tokenIndex)
+    var elements Array = []
+    const subBlocks Array = block.subBlocks~()
+    parse _, subBlock = subBlocks
+        subBlock.noSubBlocks!()
+        tokenIndex = 0
+        const newEnumElement Token = subBlock.getLowercaseName(tokenIndex, "enumeration element")
+        subBlock.eol!(tokenIndex)
+        if elements.contain?(newEnumElement)
+            errorAlreadyExist(newEnumElement, "enumeration element")
+        elements.addItem(newEnumElement)
+    return enumeration(isExport, elements)
+
+// The function turns the block in which the group is stored into a group.
+#alwaysinline
+def toGroup(block Block) Group
+    var tokenIndex Int = 0
+    const isExport Bool = block.next?(tokenIndex, ["export"])
+    block.next!(tokenIndex, ["group"])
+    const groupName Token = block.getUppercaseName(tokenIndex, "group")
+    var subGroups Array = []
+    if block.next?(tokenIndex, [":"])
+        for :(loop)
+            const newSubGroup Token = block.getUppercaseName(tokenIndex, "group")
+            if subGroups.contain?(newSubGroup)
+                errorAlreadyExist(newSubGroup, "group")
+            subGroups.addItem(newSubGroup)
+            if !block.next?(tokenIndex, [","])
+                end loop
+    block.eol!(tokenIndex)
+    var result Group = group(isExport, groupName, subGroups, Map.createEmpty())
+    const subBlocks Array = block.subBlocks~()
+    parse _, groupFunctionBlock = subBlocks
+        result.addGroupFunction(groupFunctionBlock.toGroupFunction())
+    return result
+
+// The function turns the block in which the function from the group is stored into a function.
+#alwaysinline
+def toGroupFunction(block Block) GFunction
+    block.noSubBlocks!()
+    var tokenIndex Int = 0
+    var name Token = block.getLowercaseName(tokenIndex, "function")
+    if block.next?(tokenIndex, ["?", "!", "$", "~", "`"])
+        name.addString(block.line~()[tokenIndex - 1].text~())
+    switch name.text~()
+    case "select", "inGroups?", "if", "for", "parse","switch", "tSwitch", "eSwitch", "var", "return"
+        errorInvalidName(name, "function")
+    block.next!(tokenIndex, ["("])
+    tokenIndex--
+    const functionType FSignature = block.getFunctionSignature(tokenIndex, true)
+    this!(functionType)
+    return gFunction(name, functionType)
+
+// The function gets the type of function.
+#alwaysinline
+def getFunctionSignature(block Block, write tokenIndex Int, allowThis Bool) FSignature
+    block.next!(tokenIndex, ["("])
+    const coordinates Token = block.line~()[tokenIndex - 1]
+    var arguments Array = []
+    if !block.next?(tokenIndex, [")"])
+        for :(loop)
+            const access Int = block.getAccess(tokenIndex)
+            const argumentType OType = block.getOperandType(tokenIndex, allowThis)
+            arguments.addItem(fsArgument(access, argumentType))
+            if !block.next?(tokenIndex, [","])
+                block.next!(tokenIndex, [")"])
+                end loop
+    const resultType OType = block.getResultType(tokenIndex, allowThis)
+    return fSignature(coordinates, arguments, resultType)
+
+// The function gets the type of operand.
+#alwaysinline
+def getOperandType(block Block, write tokenIndex Int, allowThis Bool) OType
+    const optional Bool = block.next?(tokenIndex, ["<>"])
+    const firstToken Token = block.next(tokenIndex)
+    var result OType = OType.fromList({})
+    if firstToken.text~() == "$"
+        var groups Array = []
+        if block.next?(tokenIndex, ["{"])
+            for :(loop)
+                const newGroup Token = block.getFullUppercaseName(tokenIndex, "group")
+                if groups.contain?(newGroup)
+                    errorAlreadyExist(newGroup, "group")
+                groups.addItem(newGroup)
+                if !block.next?(tokenIndex, [","])
+                    block.next!(tokenIndex, ["}"])
+                    end loop
+        else
+            groups = [block.getFullUppercaseName(tokenIndex, "group")]
+        result = oType(groups, optional)
+    else
+        tokenIndex--
+        const typeName Token = block.getFullUppercaseName(tokenIndex, "type")
+        result = oType(typeName, optional)
+        if !allowThis && typeName.text~() == "This"
+            errorNotExpectedToken(typeName, "")
+    return result
+
+// The function receives an expression from a string starting at the specified position.
+def getExpression(block Block, write tokenIndex Int) Expression
+    var expressionArray List = {}
+    var previousIsOperand Bool = false
+    var token Token = const::emptyToken
+    const line Array = block.line~()
+    for :(mainLoop)
+        if block.eol?(tokenIndex)
+            if !previousIsOperand
+                errorNotExpectedEOL(line[line.length~() - 1], "")
+            end mainLoop
+        token = block.next(tokenIndex)
+        switch token[0]
+        case 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'
+            if previousIsOperand
+                errorNotExpectedToken(token, "")
+            const isFunction Bool = block.next?(tokenIndex, ["!", "?", "$", "~", "`", "("])
+            if !isFunction
+                switch token.text~()
+                case "const"
+                    block.next!(tokenIndex, ["::"])
+                    const constName Token = block.getFullLowercaseName(tokenIndex, "constant")
+                    expressionArray.addItem({enum::exp_const, constName})
+                case "enum"
+                    block.next!(tokenIndex, ["::"])
+                    const elementName Token = block.getFullLowercaseName(tokenIndex, "enumeration element")
+                    expressionArray.addItem({enum::exp_enum, elementName})
+                case "true", "false"
+                    expressionArray.addItem({enum::exp_bool, token})
+                case "nothing"
+                    expressionArray.addItem({enum::exp_nothing, token})
+                default
+                    expressionArray.addItem({enum::exp_var, token})
+            if isFunction
+                tokenIndex--
+                if block.next?(tokenIndex, ["!", "?", "$", "~", "`"])
+                    token.addString(line[tokenIndex - 1].text~())
+                block.next!(tokenIndex, ["("])
+                switch token.text~()
+                case "select"
+                    const predicate Expression = block.getExpression(tokenIndex)
+                    block.next!(tokenIndex, [","])
+                    const first Expression = block.getExpression(tokenIndex)
+                    block.next!(tokenIndex, [","])
+                    const second Expression = block.getExpression(tokenIndex)
+                    block.next!(tokenIndex, [")"])
+                    expressionArray.addItem({enum::exp_select, predicate, false, first, second})
+                case "inGroups?"
+                    const operand Expression = block.getExpression(tokenIndex)
+                    block.next!(tokenIndex, [","])
+                    var groups Array = []
+                    for :(loop)
+                        groups.addItem(block.getFullUppercaseName(tokenIndex, "group"))
+                        if !block.next?(tokenIndex, [","])
+                            block.next!(tokenIndex, [")"])
+                            end loop
+                    expressionArray.addItem({enum::exp_inGroups, operand, false, groups})
+                default
+                    const arguments Array = block.getExpressions(tokenIndex, ")")
+                    expressionArray.addItem({enum::exp_function, token, false, arguments})
+            previousIsOperand = true
+        case 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'
+            if previousIsOperand
+                errorNotExpectedToken(token, "")
+            if block.next?(tokenIndex, ["::"])
+                var nextToken Token = block.next(tokenIndex)
+                if nextToken[0].inRange?('a', '{')
+                    if block.next?(tokenIndex, ["!", "?", "$", "~", "`"])
+                        nextToken.addString(line[tokenIndex - 1].text~())
+                    block.next!(tokenIndex, ["("])
+                    const arguments Array = block.getExpressions(tokenIndex, ")")
+                    expressionArray.addItem({enum::exp_function, token, false, arguments})
+                elif nextToken[0].inRange?('A', '[')
+                    token.addString("::" + nextToken.text~())
+                    expressionArray.addItem({enum::exp_noReadOperand, token})
+                else
+                    errorNotExpectedToken(nextToken, "")
+            else
+                expressionArray.addItem({enum::exp_noReadOperand, token})
+            previousIsOperand = true
+        case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'
+            if previousIsOperand
+                errorNotExpectedToken(token, "")
+            expressionArray.addItem({token.text~().contain?('.').select(enum::exp_real, enum::exp_int), token})
+            previousIsOperand = true
+        case '.'
+            if !previousIsOperand
+                errorNotExpectedToken(token, "")
+            expressionArray.addItem(token)
+            var functionName Token = block.getFullLowercaseName(tokenIndex, "function")
+            if block.next?(tokenIndex, ["!", "?", "$", "~", "`"])
+                functionName.addString(line[tokenIndex - 1].text~())
+            block.next!(tokenIndex, ["("])
+            switch functionName.text~()
+            case "select"
+                const first Expression = block.getExpression(tokenIndex)
+                block.next!(tokenIndex, [","])
+                const second Expression = block.getExpression(tokenIndex)
+                block.next!(tokenIndex, [")"])
+                expressionArray.addItem({enum::exp_select, nothing, false, first, second})
+            case "inGroups?"
+                var groups Array = []
+                for :(loop)
+                    groups.addItem(block.getFullUppercaseName(tokenIndex, "group"))
+                    if !block.next?(tokenIndex, [","])
+                        block.next!(tokenIndex, [")"])
+                        end loop
+                expressionArray.addItem({enum::exp_inGroups, nothing, false, groups})
+            default
+                const arguments Array = block.getExpressions(tokenIndex, ")")
+                expressionArray.addItem({enum::exp_function, functionName, false, arguments})
+            previousIsOperand = true
+        case '+', '-'
+            switch token.text~()
+            case "+", "-", "+=", "-="
+                if !previousIsOperand
+                    errorNotExpectedToken(token, "")
+                expressionArray.addItem(token)
+                previousIsOperand = false
+            case "++", "--"
+                if !previousIsOperand
+                    errorNotExpectedToken(token, "")
+                expressionArray.addItem(token)
+            case "->"
+                if !previousIsOperand
+                    errorNotExpectedToken(token, "")
+                expressionArray.addItem(token)
+                var functionName Token = block.getFullLowercaseName(tokenIndex, "function")
+                if block.next?(tokenIndex, ["!", "?", "$", "~", "`"])
+                    functionName.addString(line[tokenIndex - 1].text~())
+                block.next!(tokenIndex, ["("])
+                switch functionName.text~()
+                case "select"
+                    const first Expression = block.getExpression(tokenIndex)
+                    block.next!(tokenIndex, [","])
+                    const second Expression = block.getExpression(tokenIndex)
+                    block.next!(tokenIndex, [")"])
+                    expressionArray.addItem({enum::exp_select, nothing, true, first, second})
+                case "inGroups?"
+                    var groups Array = []
+                    for :(loop)
+                        groups.addItem(block.getFullUppercaseName(tokenIndex, "group"))
+                        if !block.next?(tokenIndex, [","])
+                            block.next!(tokenIndex, [")"])
+                            end loop
+                    expressionArray.addItem({enum::exp_inGroups, nothing, true, groups})
+                default
+                    const arguments Array = block.getExpressions(tokenIndex, ")")
+                    expressionArray.addItem({enum::exp_function, functionName, true, arguments})
+                previousIsOperand = true
+            default
+                if token[1].inRange?('0', ':')
+                    if previousIsOperand
+                        expressionArray.addItem(token.replaceText(token[0].toString()))
+                        token.addToColumnIndex(1)
+                        token.text`(token.text~()[1 : token.length~()])
+                    expressionArray.addItem({token.text~().contain?('.').select(enum::exp_real, enum::exp_int), token})
+                    previousIsOperand = true
+                else
+                    errorNotExpectedToken(token, "")
+        case '*', '/', '%', '<', '>', '=', '!', '&', '|', '^'
+            if token.text~() == "!"
+                if previousIsOperand
+                    errorNotExpectedToken(token, "")
+            elif !previousIsOperand
+                errorNotExpectedToken(token, "")
+            previousIsOperand = false
+            expressionArray.addItem(token)
+        case '['
+            if previousIsOperand
+                expressionArray.addItem(token.replaceText("."))
+                const fromIndex Expression = block.getExpression(tokenIndex)
+                if block.next?(tokenIndex, [":"])
+                    const toIndex Expression = block.getExpression(tokenIndex)
+                    expressionArray.addItem({enum::exp_function, token.replaceText("STD::shar__sugar__getRange"), false, [fromIndex, toIndex]})
+                else
+                    expressionArray.addItem({enum::exp_function, token.replaceText("STD::shar__sugar__getItem"), false, [fromIndex]})
+                block.next!(tokenIndex, ["]"])
+            else
+                expressionArray.addItem({enum::exp_array, token, block.getExpressions(tokenIndex, "]")})
+                previousIsOperand = true
+        case '{'
+            if previousIsOperand
+                errorNotExpectedToken(token, "")
+            expressionArray.addItem({enum::exp_list, token, block.getExpressions(tokenIndex, "}")})
+            previousIsOperand = true
+        case '('
+            if previousIsOperand
+                errorNotExpectedToken(token, "")
+            expressionArray.addItem({enum::exp_expression, block.getExpression(tokenIndex)})
+            block.next!(tokenIndex, [")"])
+            previousIsOperand = true
+        case ',', ')', ']', '}', ';', ':'
+            if token.text~() == "::" || !previousIsOperand
+                errorNotExpectedToken(token, "")
+            tokenIndex--
+            end mainLoop
+        case '\q'
+            if previousIsOperand
+                errorNotExpectedToken(token, "")
+            token.addToColumnIndex(1)
+            token.text`(token.text~()[1 : token.length~() - 1])
+            expressionArray.addItem({enum::exp_string, token})
+            previousIsOperand = true
+        case '\p'
+            if previousIsOperand
+                errorNotExpectedToken(token, "")
+            expressionArray.addItem({enum::exp_char, token})
+            previousIsOperand = true
+        default
+            errorNotExpectedToken(token, "")
+    if !previousIsOperand
+        errorNotExpectedEOL(token, "")
+    return expressionArrayToTree(expressionArray)
+
+// The function receives several expressions separated by a comma and ending with the specified token.
+#alwaysinline
+def getExpressions(block Block, write tokenIndex Int, breakToken String) Array// of Expression
+    var result Array = []
+    const breakTokenArray Array = [breakToken]
+    if !block.next?(tokenIndex, breakTokenArray)
+        for :(loop)
+            result.addItem(block.getExpression(tokenIndex))
+            if !block.next?(tokenIndex, [","])
+                block.next!(tokenIndex, breakTokenArray)
+                end loop
+    return result
+
+// The function gets the access level of the function argument.
+#alwaysinline
+def getAccess(block Block, write tokenIndex Int) Int
+    var result Int = 0
+    switch block.next(tokenIndex).text~()
+    case "noread"
+        result = enum::access_noread
+    case "write"
+        result = enum::access_write
+    default
+        tokenIndex--
+        result = enum::access_read
+    return result
+
+// The function gets the result type of the function, if it is not there, the result type is "Nothing".
+#alwaysinline
+def getResultType(block Block, write tokenIndex Int, allowThis Bool) OType
+    if block.eol?(tokenIndex)
+        const line Array = block.line~()
+        var token Token = line[line.length~() - 1]
+        token.addToColumnIndex(token.length~())
+        return oType(token.replaceText("STD::Nothing"), false)
+    return block.getOperandType(tokenIndex, allowThis)
+
+// The function turns the block in which the attributes of the function are stored into the attributes of the function.
+#alwaysinline
+def toFunctionAttributes(block Block) FAttributes
+    block.noSubBlocks!()
+    var tokenIndex Int = 1
+    var boolAttributes Int = 0
+    var this Token = const::emptyToken
+    var override Token = const::emptyToken
+    for :(loop)
+        const attribute Token = block.next(tokenIndex)
+        switch attribute.text~()
+        case "alwaysinline"
+            if (boolAttributes & 1) == 1
+                errorAlreadyExist(attribute, "function attribute")
+            if (boolAttributes & 14) != 0
+                errorNotExpectedToken(attribute, "")
+            boolAttributes |= 1
+        case "inline"
+            if (boolAttributes & 2) == 2
+                errorAlreadyExist(attribute, "function attribute")
+            if (boolAttributes & 13) != 0
+                errorNotExpectedToken(attribute, "")
+            boolAttributes |= 2
+        case "noinline"
+            if (boolAttributes & 4) == 4
+                errorAlreadyExist(attribute, "function attribute")
+            if (boolAttributes & 11) != 0
+                errorNotExpectedToken(attribute, "")
+            boolAttributes |= 4
+        case "cold"
+            if (boolAttributes & 8) == 8
+                errorAlreadyExist(attribute, "function attribute")
+            if (boolAttributes & 7) != 0
+                errorNotExpectedToken(attribute, "")
+            boolAttributes |= 8
+        case "nothrow"
+            if (boolAttributes & 16) == 16
+                errorAlreadyExist(attribute, "function attribute")
+            if !this.empty?()
+                errorNotExpectedToken(attribute, "")
+            boolAttributes |= 16
+        case "unsafewrite"
+            if (boolAttributes & 32) == 32
+                errorAlreadyExist(attribute, "function attribute")
+            boolAttributes |= 32
+        case "this"
+            if !this.empty?()
+                errorAlreadyExist(attribute, "function attribute")
+            if !(override.empty?() && (boolAttributes & 16) == 0)
+                errorNotExpectedToken(attribute, "")
+            block.next!(tokenIndex, ["("])
+            this = block.getUppercaseName(tokenIndex, "group")
+            block.next!(tokenIndex, [")"])
+        case "override"
+            if !override.empty?()
+                errorAlreadyExist(attribute, "function attribute")
+            if !this.empty?()
+                errorNotExpectedToken(attribute, "")
+            block.next!(tokenIndex, ["("])
+            override = block.getUppercaseName(tokenIndex, "module")
+            block.next!(tokenIndex, [")"])
+        default
+            errorNotExpectedToken(attribute, "")
+        if block.eol?(tokenIndex)
+            end loop
+    return FAttributes.fromList({boolAttributes, this, override})
+
+// The function turns the block in which the function is stored into a function.
+#alwaysinline
+def toFunction(block Block, attributes FAttributes) Function
+    block.subBlocks!()
+    var tokenIndex Int = 0
+    const isExport Bool = block.next?(tokenIndex, ["export"])
+    if isExport && !attributes.override~().empty?()
+        errorNotExpectedToken(block.line~()[0], "")
+    block.next!(tokenIndex, ["def"])
+    var name Token = block.getLowercaseName(tokenIndex, "function")
+    if block.next?(tokenIndex, ["?", "!", "$", "~", "`"])
+        name.addString(block.line~()[tokenIndex - 1].text~())
+    switch name.text~()
+    case "select", "inGroups?", "if", "for", "parse", "switch", "tSwitch", "eSwitch", "var", "return"
+        errorInvalidName(name, "function")
+    block.next!(tokenIndex, ["("])
+    var arguments Array = []
+    if !block.next?(tokenIndex, [")"])
+        for :(mainLoop)
+            var newArguments Array = []
+            for :(loop)
+                const access Int = block.getAccess(tokenIndex)
+                const argumentName Token = block.getLowercaseName(tokenIndex, "function argument")
+                switch argumentName.text~()
+                case "var", "const", "enum", "for", "parse", "if", "elif", "select", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough"
+                    errorInvalidName(argumentName, "function argument")
+                newArguments.addItem(fArgument(access, argumentName, OType.fromList({})))
+                if !block.next?(tokenIndex, [","])
+                    end loop
+            const type OType = block.getOperandType(tokenIndex, !attributes.this~().empty?())
+            for :(newArgumentIndex Int = 0) newArgumentIndex < newArguments.length~(); newArgumentIndex++
+                var newArgument FArgument = newArguments[newArgumentIndex]
+                const newArgumentName Token = newArgument.name~()
+                parse _, existedArgument = arguments
+                    if existedArgument.name~() == newArgumentName
+                        errorAlreadyExist(newArgumentName, "function argument")
+                newArgument.type`(type)
+                if newArgument.access~() == enum::access_write && !(attributes.unsafewrite?() || newArgument.type~().simple?())
+                    errorNotExpectedToken(oTypeToToken(type, true), "")
+                arguments.addItem(newArgument)
+            if !block.next?(tokenIndex, [","])
+                block.next!(tokenIndex, [")"])
+                end mainLoop
+    const resultType OType = block.getResultType(tokenIndex, !attributes.this~().empty?())
+    block.eol!(tokenIndex)
+    return function(attributes, isExport, name, arguments, resultType, block.subBlocks~())
+
+// The function turns a block in which information about what type to which group needs to be added is stored into a structure with this information.
+#alwaysinline
+def toAttachment(block Block) Attachment
+    var tokenIndex Int = 1
+    const typeName Token = block.getFullUppercaseName(tokenIndex, "type")
+    block.next!(tokenIndex, ["to"])
+    const groupName Token = block.getFullUppercaseName(tokenIndex, "group")
+    block.eol!(tokenIndex)
+    var functions Map = Map.createEmpty()
+    const subBlocks Array = block.subBlocks~()
+    for :(subBlockIndex Int = 0) subBlockIndex < subBlocks.length~(); subBlockIndex++
+        var subBlock Block = subBlocks[subBlockIndex]
+        tokenIndex = 0
+        var functionAttributes FAttributes = const::defaultFAttributes
+        if subBlock.next?(tokenIndex, ["#"])
+            functionAttributes = subBlock.toFunctionAttributes()
+            const thisAttribute Token = functionAttributes.this~()
+            if !thisAttribute.empty?()
+                errorNotExpectedToken(thisAttribute, "")
+            const overrideAttribute Token = functionAttributes.override~()
+            if !overrideAttribute.empty?()
+                errorNotExpectedToken(overrideAttribute, "")
+            subBlockIndex++
+            if subBlockIndex == subBlocks.length~()
+                errorNotExpectedToken(subBlock.line~()[0], "")
+            subBlock = subBlocks[subBlockIndex]
+            tokenIndex = 0
+        if subBlock.next?(tokenIndex, ["export"])
+            errorNotExpectedToken(subBlock.line~()[0], "")
+        const newFunction Function = subBlock.toFunction(functionAttributes)
+        if !functions.put(newFunction.name~().text~(), newFunction).nothing?()
+            errorAlreadyExist(newFunction.name~(), "function")
+    return attachment(typeName, groupName, functions)

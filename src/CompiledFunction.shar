@@ -1,0 +1,349 @@
+module Main
+
+// Compiled function.
+type CFunction
+    // export? Bool
+    // fullName String
+    // finalFunction SimpleFunction | GroupFunctions
+
+attach CFunction to FieldExport
+    #alwaysinline
+    def export?(function CFunction) Bool
+        return function.typeGetItem(0)
+
+    #alwaysinline
+    def export`(write function CFunction, new Bool) Bool
+        return function.typePut(0, new)
+
+attach CFunction to FieldFullName
+    #alwaysinline
+    def fullName~(function CFunction) String
+        return function.typeGetItem(1)
+
+    #alwaysinline
+    def fullName`(write function CFunction, new String) String
+        return function.typePut(1, new)
+
+attach CFunction to FieldFinalFunction
+    #alwaysinline
+    def finalFunction~(function CFunction) $Any
+        return function.typeGetItem(2)
+
+    #alwaysinline
+    def finalFunction`(write function CFunction, new $Any) $Any
+        return function.typePut(2, new)
+
+#alwaysinline
+def cFunction(isExport Bool, fullName String, finalFunction $Any) CFunction
+    return CFunction.fromList({isExport, fullName, finalFunction})
+
+#alwaysinline
+def addFunctionToFunctionWithGroupsFunctions(write functionWithGroupFunctions CFunction, type String, function SimpleFunction)
+    var groupFunctions GroupFunctions = functionWithGroupFunctions.finalFunction`(nothing)
+    var functions Map = groupFunctions.functions`(nothing)
+    functions.put(type, function)
+    groupFunctions.functions`(functions)
+    functionWithGroupFunctions.finalFunction`(groupFunctions)
+
+// The function calls the function with the specified name and arguments.
+#noinline
+def callFunction(functionName Token, arguments Array, write codeData CodeData, compiledData CData, freedOnError Array, needFreeArguments Bool, write llvmIR String) Operand
+    const function CFunction = compiledData.getFunction(functionName, false)
+    var argumentsFromSignature Array = []
+    var resultType OType = OType.fromList({})
+    var functionThisType OType = OType.fromList({})
+    var functionIsNoThrow Bool = false
+    var typedFunction Bool = false
+    var haveFinalSignature Bool = false
+    tSwitch function.finalFunction~()
+    case GroupFunctions
+        const groupFunctions GroupFunctions = function.finalFunction~()
+        var simpleFunction <>SimpleFunction = groupFunctions.functions~()["-"]
+        if simpleFunction.nothing?()
+            simpleFunction = groupFunctions.functions~()["+"]
+        const signature FSignature = simpleFunction.signature~()
+        argumentsFromSignature = signature.arguments~()
+        resultType = signature.resultType~()
+        if arguments.length~() != argumentsFromSignature.length~()
+            errorWrongNumberOfArguments(functionName)
+        var argumentsWithThisTypeIndexes Array = []
+        parse index, argument = argumentsFromSignature
+            if argument.type~().this?()
+                argumentsWithThisTypeIndexes.addItem(index)
+        var thisIndexInArguments Int = -1
+        parse :(parse) _, index = argumentsWithThisTypeIndexes
+            const argument Operand = arguments[index]
+            if argument.type~().simple?() && !(argument.type~().nothingType?() && argumentsFromSignature[index].type~().optional?())
+                thisIndexInArguments = index
+                functionThisType = argument.type~()
+                end parse
+        if thisIndexInArguments == -1
+            var groupsArray Array = [const::emptyToken.replaceText(groupFunctions.group~())]
+            parse _, group = compiledData.getGroup(const::emptyToken.replaceText(groupFunctions.group~()), true).subGroups~()
+                groupsArray.addItem(const::emptyToken.replaceText(group))
+            groupsArray.sort(true)
+            functionThisType = oType(groupsArray, false)
+        else
+            typedFunction = true
+            haveFinalSignature = true
+            if !functionThisType.this?()
+                const thisType CType = compiledData.getType(functionThisType.type~(), true)
+                if !thisType.groups~()[groupFunctions.group~()]
+                    errorTypeNotInGroup(arguments[thisIndexInArguments].code~().replaceText(oTypeToToken(functionThisType, true).text~()), groupFunctions.group~())
+                const overridedFunction <>SimpleFunction = groupFunctions.functions~()[thisType.fullName~()]
+                if !overridedFunction.nothing?()
+                    const overridedSignature FSignature = overridedFunction.signature~()
+                    argumentsFromSignature = overridedSignature.arguments~()
+                    resultType = overridedSignature.resultType~()
+                    functionIsNoThrow = overridedFunction.attributes~().nothrow?()
+    case SimpleFunction
+        haveFinalSignature = true
+        const simpleFunction SimpleFunction = function.finalFunction~()
+        const signature FSignature = simpleFunction.signature~()
+        functionIsNoThrow = simpleFunction.attributes~().nothrow?()
+        argumentsFromSignature = signature.arguments~()
+        resultType = signature.resultType~()
+        if arguments.length~() != argumentsFromSignature.length~()
+            errorWrongNumberOfArguments(functionName)
+    default
+        unreachable()
+    if resultType.this?()
+        resultType.type`(functionThisType.type~())
+        if resultType.anyType?() || resultType.nothingType?()
+            resultType.optional`(false)
+    var memoryManagerFunction Bool = false
+    switch function.fullName~()
+    case "STD::shar__rc_free", "STD::shar__rc_use", "STD::shar__to_const"
+        memoryManagerFunction = true
+        typedFunction = typedFunction && !functionThisType.optional?()
+    var functionCallIRCode String = function.fullName~()
+    if typedFunction
+        functionCallIRCode += "." + functionThisType.type~().text~()
+    functionCallIRCode += "##("
+    var code Token = functionName
+    code.addChar('(')
+    var assumes String = ""
+    var notCheckArguments Bool = true
+    if !arguments.empty?()
+        parse index, argument = arguments
+            code.addString(argument.code~().text~() + ", ")
+            var argumentFromSignature FSArgument = argumentsFromSignature[index]
+            if argumentFromSignature.type~().this?()
+                var argumentFromSignatureType OType = argumentFromSignature.type`(nothing)
+                argumentFromSignatureType.type`(functionThisType.type~())
+                if argumentFromSignatureType.anyType?() || argumentFromSignatureType.nothingType?()
+                    argumentFromSignatureType.optional`(false)
+                argumentFromSignature.type`(argumentFromSignatureType)
+            var argumentWithCorrectAccess Operand = Operand.fromList({})
+            eSwitch argumentFromSignature.access~()
+            case access_noread
+                argumentWithCorrectAccess = argument.toNoRead(codeData, llvmIR)
+            case access_read
+                argumentWithCorrectAccess = argument.toReadOnly(codeData, llvmIR)
+            case access_write
+                if argument.access~() != enum::access_write
+                    if argument.access~() == enum::access_read
+                        errorWrongAccess(argument.code~(), "write", "noread")
+                    else
+                        errorWrongAccess(argument.code~(), "write", "read only")
+                if argumentFromSignature.type~().optional?() && !(argument.type~().optional?() || argument.type~().anyType?() || argument.type~().nothingType?())
+                    errorWrongAccess(argument.code~(), "optional write", "write")
+                argumentWithCorrectAccess = argument
+                parse anotherIndex, anotherArgument = arguments
+                    if anotherIndex != index
+                        if anotherArgument.named?() && anotherArgument.code~().text~() == argument.code~().text~() && argumentsFromSignature[anotherIndex].access~() != enum::access_noread
+                            errorSameArgumentsInCall(anotherArgument.code~())
+            default
+                unreachable()
+            if notCheckArguments
+                const argumentFromSignatureType OType = argumentFromSignature.type~()
+                const argumentType OType = argument.type~()
+                if argumentFromSignatureType.simple?()
+                    notCheckArguments = {
+                        ((argumentFromSignatureType.typeEq?(argumentType, false) && (argumentFromSignatureType.optional?() || !argumentType.optional?())) ||
+                        (argumentFromSignatureType.optional?() && argumentType.nothingType?()))
+                    }
+                elif haveFinalSignature
+                    if argumentType.simple?()
+                        if argumentType.this?()
+                            notCheckArguments = argumentFromSignatureType.this?() && (argumentFromSignatureType.optional?() || !argumentType.optional?())
+                        else
+                            const argumentTypeGroups Set = compiledData.getType(argumentType.type~(), true).groups~()
+                            parse :(parse) _, groupFromSignature = argumentFromSignatureType.type~()
+                                notCheckArguments = argumentTypeGroups[groupFromSignature.text~()]
+                                if !notCheckArguments
+                                    end parse
+                    else
+                        parse :(signatureParse) _, groupFromSignature = argumentFromSignatureType.type~()
+                            parse _, groupFromArgument = argumentType.type~()
+                                if groupFromArgument == groupFromSignature
+                                    next signatureParse
+                                notCheckArguments = false
+                                end signatureParse
+                else
+                    notCheckArguments = false
+            argument.typesCompatibleCheck(argumentFromSignature.type~(), codeData, compiledData)
+            if argumentWithCorrectAccess.type~().simple?() && !(argumentWithCorrectAccess.type~().optional?() || argumentWithCorrectAccess.Main::constant?())
+                var typeRegister String = ""
+                if argumentWithCorrectAccess.access~() == enum::access_write
+                    const typePointerRegister String = codeData.createRegister("getelementptr [2 x i64], [2 x i64]* " + argumentWithCorrectAccess.value~() + ", i64 0, i32 0", assumes)
+                    typeRegister = codeData.createRegister("load i64, i64* " + typePointerRegister + ", align 8", assumes)
+                else
+                    typeRegister = codeData.createRegister("extractvalue [2 x i64] " + argumentWithCorrectAccess.value~() + ", 0", assumes)
+                const trueRegister String = codeData.createRegister("icmp eq i64 " + typeRegister + ", ##tnum##" + oTypeToToken(argumentWithCorrectAccess.type~(), false).text~() + "##", assumes)
+                assumes += "\tcall void @llvm.assume(i1 " + trueRegister + ")\n"
+            functionCallIRCode += (argumentFromSignature.access~() == enum::access_write).select("[2 x i64]* ", "[2 x i64] ") + argumentWithCorrectAccess.value~() + ", "
+        functionCallIRCode.delete(functionCallIRCode.length~() - 2, 2)
+        var codeText String = code.text`("")
+        codeText.delete(codeText.length~() - 2, 2)
+        code.text`(codeText)
+    var functionCallPrefix String = ""
+    if (codeData.ownerNoThrow~() && codeData.catchLabels~().empty?()) || (functionIsNoThrow && notCheckArguments) || memoryManagerFunction
+        functionCallPrefix = "ancntfunc##"
+    elif notCheckArguments
+        functionCallPrefix = "ancfunc##"
+    elif functionIsNoThrow
+        functionCallPrefix = "ntfunc##"
+    else
+        functionCallPrefix = "func##"
+    functionCallIRCode = "call [2 x i64] ##" + functionCallPrefix + functionCallIRCode + ")"
+    code.addChar(')')
+    llvmIR += assumes
+    const callRegister String = codeData.createRegister(functionCallIRCode, llvmIR)
+    const result Operand = operand(code, enum::access_read, callRegister, resultType, false, true, false, false)
+    if needFreeArguments
+        parse index, argument = arguments
+            if !argument.named?()
+                var mutArgument Operand = argument
+                var argumentFromSignatureType OType = argumentsFromSignature[index].type~()
+                if argumentFromSignatureType.this?()
+                    argumentFromSignatureType = functionThisType
+                if argumentFromSignatureType.simple?() && !mutArgument.type~().simple?()
+                    var type OType = mutArgument.type`(nothing)
+                    type.type`(argumentFromSignatureType.type~())
+                    mutArgument.type`(type)
+                mutArgument.freeOperand(codeData, compiledData, llvmIR)
+    if !memoryManagerFunction
+        result.checkOperandForError(codeData, compiledData, freedOnError, llvmIR)
+    return result
+
+// The function generates code that checks the type of function arguments.
+def runtimeCheckFunctionArguments(arguments Array, write codeData CodeData, write llvmIR String)
+    var resultI1 String = ""
+    parse index, argument = arguments
+        if !argument.type~().anyType?()
+            var argumentTypeRegister String = ""
+            const indexAsString String = index.toString()
+            if argument.access~() == enum::access_write
+                const pointerRegister String = codeData.createRegister("getelementptr [2 x i64], [2 x i64]* %" + indexAsString + ", i64 0, i32 0", llvmIR)
+                argumentTypeRegister = codeData.createRegister("load i64, i64* " + pointerRegister + ", align 8", llvmIR)
+            else
+                const typeRegister String = codeData.createRegister("extractvalue [2 x i64] %" + indexAsString + ", 0", llvmIR)
+                argumentTypeRegister = typeRegister
+            const typeAsString String = oTypeToToken(argument.type~(), false).text~()
+            const typeIsCorrectRegisterValue String = argument.type~().simple?().select{
+                ("icmp eq i64 " + argumentTypeRegister + ", ##tnum##" + typeAsString + "##",
+                "call i1 ##ingroups##" + typeAsString[2 : typeAsString.length~() - 1] + "##(i64 " + argumentTypeRegister + ")")
+            }
+            var typeIsCorrectRegister String = codeData.createRegister(typeIsCorrectRegisterValue, llvmIR)
+            if argument.type~().optional?()
+                const typeIsNothingRegister String = codeData.createRegister("icmp eq i64 " + argumentTypeRegister + ", 0", llvmIR)
+                typeIsCorrectRegister = codeData.createRegister("or i1 " + typeIsCorrectRegister + ", " + typeIsNothingRegister, llvmIR)
+            resultI1 = resultI1.empty?().select(typeIsCorrectRegister, codeData.createRegister("and i1 " + resultI1 + ", " + typeIsCorrectRegister, llvmIR))
+    if !resultI1.empty?()
+        const allOkRegister String = resultI1.likelyI1Register(codeData, llvmIR)
+        const allOkLabel String = codeData.createLabel()
+        const invalidTypeErrorLabel String = codeData.createLabel()
+        const checkLabel String = codeData.createLabel()
+        llvmIR = {
+            "\tbr i1 ##flag##arguments!##, label %##reg##" + checkLabel + "##, label %##reg##" + allOkLabel + "##\n"
+            "\t##nreg##" + checkLabel + "##:\n" +
+            llvmIR +
+            "\tbr i1 " + allOkRegister + ", label %##reg##" + allOkLabel + "##, label %##reg##" + invalidTypeErrorLabel + "##\n"
+            "\t##nreg##" + invalidTypeErrorLabel + "##:\n"
+        }
+        llvmIR += "\tret [2 x i64] " + createError("0", "Invalid type.\\n<- " + codeData.functionNameForErrorMessage~()) + "\n\t##nreg##" + allOkLabel + "##:\n"
+
+// The function generates llvm ir code for a function.
+def functionToFinalLLVMIR(compiledData CData, functionAndTypeName Token, write compilingConstants, write compilingFunctions Set, write usedData UsedData)
+    if !usedData.functions~()[functionAndTypeName.text~()].nothing?()
+        return
+    if !functionAndTypeName.text~().containPart?("::")
+        errorNotFound(functionAndTypeName, "function")
+    const separatorIndex <>Int = functionAndTypeName.text~().look('.')
+    const functionName Token = functionAndTypeName.replaceText{
+        (separatorIndex.nothing?().select(
+            functionAndTypeName.text~()[0 : functionAndTypeName.text~().length~() - 2],
+            functionAndTypeName.text~()[0 : separatorIndex]
+        ))
+    }
+    const typeName Token = separatorIndex.nothing?().select{
+        (const::emptyToken,
+        functionAndTypeName.replaceText(functionAndTypeName.text~()[separatorIndex + 1 : functionAndTypeName.text~().length~() - 2]))
+    }
+    const functionVariant String = functionAndTypeName.text~()[functionAndTypeName.text~().length~() - 2 : functionAndTypeName.text~().length~()]
+    const function CFunction = compiledData.getFunction(functionName, true)
+    var simpleFunction SimpleFunction = SimpleFunction.fromList({})
+    tSwitch function.finalFunction~()
+    case SimpleFunction
+        if !typeName.empty?()
+            errorNotFound(functionAndTypeName, "function")
+        simpleFunction = function.finalFunction~()
+    case GroupFunctions
+        const groupFunctions GroupFunctions = function.finalFunction~()
+        if typeName.empty?()
+            var usedGroupsFunctions Map = usedData.groupsFunctions`(nothing)
+            usedGroupsFunctions.put(functionName.text~() + functionVariant, groupFunctions.group~())
+            usedData.groupsFunctions`(usedGroupsFunctions)
+            parse _, typeInGroup = usedData.groupsTypes~()[groupFunctions.group~()]
+                const fullFunctionName String = functionName.text~() + "." + typeInGroup + functionVariant
+                compilingFunctions.add(const::emptyToken.replaceText(fullFunctionName))
+            const maybeSimpleFunction <>SimpleFunction = groupFunctions.functions~()["-"]
+            simpleFunction = maybeSimpleFunction.nothing?().select(groupFunctions.functions~()["+"], maybeSimpleFunction)
+            var llvmFunctionSignature String = "define private [2 x i64] " + createFunctionLLVMName(functionName.text~(), "", functionVariant[0] == '1', functionVariant[1] == '1') + "("
+            var llvmFunctionType String = "[2 x i64] ("
+            var thisTypeArgumentIndex Int = -1
+            parse index, argument = simpleFunction.signature~().arguments~()
+                if argument.type~().this?() && !argument.type~().optional?()
+                    if thisTypeArgumentIndex == -1
+                        thisTypeArgumentIndex = index
+                    elif argument.access~() != enum::access_write && simpleFunction.signature~().arguments~()[thisTypeArgumentIndex].access~() == enum::access_write
+                        thisTypeArgumentIndex = index
+                llvmFunctionType += (argument.access~() == enum::access_write).select("[2 x i64]*, ", "[2 x i64], ")
+            const thisTypeArgumentIsMutable String = (simpleFunction.signature~().arguments~()[thisTypeArgumentIndex].access~() == enum::access_write).select("1", "0")
+            llvmFunctionType.delete(llvmFunctionType.length~() - 2, 2)
+            llvmFunctionSignature += llvmFunctionType[11 : llvmFunctionType.length~()]
+            var usedFunctions Map = usedData.functions`(nothing)
+            usedFunctions.put(functionAndTypeName.text~(), "|" + thisTypeArgumentIndex.toString() + "|" + (simpleFunction.signature~().arguments~().length~() + 1).toString() + "|" + groupFunctions.group~() + "|" + llvmFunctionType + ")*|" + llvmFunctionSignature + ") {\n|" + thisTypeArgumentIsMutable)
+            usedData.functions`(usedFunctions)
+            return
+        if !typeName.text~().containPart?("::")
+            errorNotFound(typeName, "type")
+        compiledData.getType(typeName, true)
+        var maybeSimpleFunction <>SimpleFunction = groupFunctions.functions~()[typeName.text~()]
+        if maybeSimpleFunction.nothing?()
+            maybeSimpleFunction = groupFunctions.functions~()["+"]
+            if maybeSimpleFunction.nothing?()
+                errorNotFound(functionAndTypeName, "function")
+        simpleFunction = maybeSimpleFunction
+    var llvmFunction String = "define private [2 x i64] " + createFunctionLLVMName(functionName.text~(), typeName.text~(), functionVariant[0] == '1', functionVariant[1] == '1') + "("
+    if !simpleFunction.signature~().arguments~().empty?()
+        parse _, argument = simpleFunction.signature~().arguments~()
+            llvmFunction += (argument.access~() == enum::access_write).select("[2 x i64]*, ", "[2 x i64], ")
+        llvmFunction.delete(llvmFunction.length~() - 2, 2)
+    var inlineAttribute String = ""
+    const attributes FAttributes = simpleFunction.attributes~()
+    if attributes.alwaysInline?()
+        inlineAttribute = ") alwaysinline nounwind{\n"
+    elif attributes.inline?()
+        inlineAttribute = ") inlinehint nounwind{\n"
+    elif attributes.noInline?()
+        inlineAttribute = ") noinline nounwind{\n"
+    elif attributes.cold?()
+        inlineAttribute = ") cold nounwind{\n"
+    else
+        inlineAttribute = ") nounwind{\n"
+    llvmFunction += inlineAttribute + toFinalLLVMIR(simpleFunction.llvmIR~(), functionAndTypeName, compiledData, typeName.text~(), compilingConstants, compilingFunctions, usedData, functionVariant[0] == '1', functionVariant[1] == '1') + "}\n\n"
+    var usedFunctions Map = usedData.functions`(nothing)
+    usedFunctions.put(functionAndTypeName.text~(), llvmFunction)
+    usedData.functions`(usedFunctions)

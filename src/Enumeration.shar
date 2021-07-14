@@ -1,0 +1,27 @@
+module Main
+
+type Enumeration
+    // export?    Bool
+    // elements   [Token]
+
+attach Enumeration to FieldExport
+    #alwaysinline
+    def export?(enumeration Enumeration) Bool
+        return enumeration.typeGetItem(0)
+
+    #alwaysinline
+    def export`(write enumeration Enumeration, new Bool) Bool
+        return enumeration.typePut(0, new)
+
+attach Enumeration to FieldElements
+    #alwaysinline
+    def elements~(enumeration Enumeration) Array
+        return enumeration.typeGetItem(1)
+
+    #alwaysinline
+    def elements`(write enumeration Enumeration, new Array) Array
+        return enumeration.typePut(1, new)
+
+#alwaysinline
+def enumeration(isExport Bool, elements Array) Enumeration
+    return Enumeration.fromList({isExport, elements})

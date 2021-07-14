@@ -1,0 +1,7 @@
+module Main
+
+def warningVarSetItself(name Token)
+    (name.coordinatesToString() + "Assigning a variable its own value doesn't make sense.").println()
+
+def warningDeclaredButNotUsed(name Token, whatNotUsed String)
+    (name.coordinatesToString() + whatNotUsed + " \q" + name.text~() + "\q declared but not used.").println()

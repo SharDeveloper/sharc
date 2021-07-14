@@ -1,0 +1,18 @@
+module Main
+
+enum
+    access_noread
+    access_read
+    access_write
+
+// The function turns the access level into a string.
+#alwaysinline
+def accessToString(access Int) String
+    eSwitch access
+    case access_noread
+        return "noread"
+    case access_read
+        return ""
+    case access_write
+        return "write"
+    unreachable()

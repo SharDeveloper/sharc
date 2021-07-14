@@ -1,0 +1,616 @@
+module Main
+
+// Expressions in the source code.
+type Expression
+    // variant enum::exp_*
+    // data ...
+
+enum
+    exp_array
+        // firstChar Token
+        // items     [Expression]
+    exp_bool
+        // Token
+    exp_char
+        // Token
+    exp_const
+        // Token
+    exp_enum
+        // Token
+    exp_expression
+        // Expression
+    exp_function
+        // name         Token
+        // optional     Bool
+        // arguments    [Expression]
+    exp_inGroups
+        // operand  Expression
+        // optional Bool
+        // groups   [Token]
+    exp_int
+        // Token
+    exp_lazyAnd
+        // left  Expression
+        // right Expression
+    exp_lazyOr
+        // left  Expression
+        // right Expression
+    exp_list
+        // firstChar Token
+        // items     [Expression]
+    exp_noReadOperand
+        // Token
+    exp_nothing
+        // Token
+    exp_real
+        // Token
+    exp_select
+        // predicate Expression
+        // optional  Bool
+        // first     Expression
+        // second    Expression
+    exp_string
+        // Token
+    exp_var
+        // Token
+
+attach Expression to FieldVariant
+    #alwaysinline
+    def variant~(expression Expression) Int
+        return expression.typeGetItem(0)
+
+    #alwaysinline
+    def variant`(write expression Expression, new Int) Int
+        return expression.typePut(0, new)
+
+#alwaysinline
+def expression(arguments List) Expression
+    return Expression.fromList(arguments)
+
+// The function turns an array from an expression into a tree of expressions.
+#noinline
+def expressionArrayToTree(expressionArray List) Expression
+    for :(priority Int = 11) priority >= 0; priority--
+        if priority == 2
+            parse index, item = expressionArray
+                if item.typeNumber~() == Token.typeNumber~()
+                    const operator Token = item
+                    if operator.text~() == "!"
+                        if index != 0
+                            errorNotExpectedToken(operator, "")
+                        return expression({enum::exp_function, operator.replaceText("STD::shar__sugar__neg"), false, [expressionArrayToTree(expressionArray[1 : expressionArray.length~()])]})
+        else
+            for :(index Int = expressionArray.length~() - 1) index >= 0; index--
+                const item $Any = expressionArray[index]
+                if item.typeNumber~() == Token.typeNumber~()
+                    const operator Token = item
+                    if operator.getOperatorPriority() == priority
+                        var result Expression = Expression.fromList({})
+                        const functionName Token = operator.operatorToFunctionName()
+                        switch operator.text~()
+                        case ".", "->"
+                            const left Expression = expressionArrayToTree(expressionArray[0 : index])
+                            var right List = expressionArray[index + 1]
+                            eSwitch right[0]
+                            case exp_select, exp_inGroups
+                                right.setItem(1, left)
+                            case exp_function
+                                var arguments Array = right.put(3, [])
+                                arguments.insert(0, left)
+                                right.put(3, arguments)
+                            result = expression(right)
+                        case "++", "--"
+                            if index != expressionArray.length~() - 1
+                                errorNotExpectedToken(operator, "")
+                            result = expression({enum::exp_function, functionName, false, [expressionArrayToTree(expressionArray[0 : expressionArray.length~() - 1])]})
+                        case "&&"
+                            result = expression({enum::exp_lazyAnd, expressionArrayToTree(expressionArray[0 : index]), expressionArrayToTree(expressionArray[index + 1 : expressionArray.length~()])})
+                        case "||"
+                            result = expression({enum::exp_lazyOr, expressionArrayToTree(expressionArray[0 : index]), expressionArrayToTree(expressionArray[index + 1 : expressionArray.length~()])})
+                        default
+                            result = expression{
+                                ({enum::exp_function,
+                                functionName, false,
+                                [expressionArrayToTree(expressionArray[0 : index]),
+                                expressionArrayToTree(expressionArray[index + 1 : expressionArray.length~()])]
+                                })
+                            }
+                        return result
+    return expression(expressionArray[0])
+
+// Functions recognizes the priority of the operator.
+#alwaysinline
+def getOperatorPriority(operator Token) Int
+    var result Int = 0
+    switch operator.text~()
+    case ".", "->"
+        result = 0
+    case "++", "--"
+        result = 1
+    case "!"
+        result = 2
+    case "*", "/", "%"
+        result = 3
+    case "+", "-"
+        result = 4
+    case "<<", ">>"
+        result = 5
+    case "<", ">", "<=", ">="
+        result = 6
+    case "==", "!="
+        result = 7
+    case "&", "&&"
+        result = 8
+    case "^"
+        result = 9
+    case "|", "||"
+        result = 10
+    case "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>="
+        result = 11
+    default
+        errorNotExpectedToken(operator, "")
+    return result
+
+// The function recognizes the name of the function that the specified operator calls.
+#alwaysinline
+def operatorToFunctionName(operator Token) Token
+    var functionName String = ""
+    switch operator.text~()
+    case "++"
+        functionName = "STD::shar__sugar__inc"
+    case "--"
+        functionName = "STD::shar__sugar__dec"
+    case "*"
+        functionName = "STD::shar__sugar__mul"
+    case "/"
+        functionName = "STD::shar__sugar__div"
+    case "%"
+        functionName = "STD::shar__sugar__mod"
+    case "+"
+        functionName = "STD::shar__sugar__add"
+    case "-"
+        functionName = "STD::shar__sugar__sub"
+    case "<<"
+        functionName = "STD::shar__sugar__shl"
+    case ">>"
+        functionName = "STD::shar__sugar__shr"
+    case "<"
+        functionName = "STD::shar__sugar__less"
+    case ">"
+        functionName = "STD::shar__sugar__great"
+    case "<="
+        functionName = "STD::shar__sugar__lessOrEqual"
+    case ">="
+        functionName = "STD::shar__sugar__greatOrEqual"
+    case "=="
+        functionName = "STD::shar__sugar__equal"
+    case "!="
+        functionName = "STD::shar__sugar__notEqual"
+    case "&"
+        functionName = "STD::shar__sugar__and"
+    case "^"
+        functionName = "STD::shar__sugar__xor"
+    case "|"
+        functionName = "STD::shar__sugar__or"
+    case "+="
+        functionName = "STD::shar__sugar__addSet"
+    case "-="
+        functionName = "STD::shar__sugar__subSet"
+    case "*="
+        functionName = "STD::shar__sugar__mulSet"
+    case "/="
+        functionName = "STD::shar__sugar__divSet"
+    case "%="
+        functionName = "STD::shar__sugar__modSet"
+    case "&="
+        functionName = "STD::shar__sugar__andSet"
+    case "|="
+        functionName = "STD::shar__sugar__orSet"
+    case "^="
+        functionName = "STD::shar__sugar__xorSet"
+    case "<<="
+        functionName = "STD::shar__sugar__shlSet"
+    case ">>="
+        functionName = "STD::shar__sugar__shrSet"
+    return operator.replaceText(functionName)
+
+// The function compiles the expression.
+#noinline
+def compileExpression(expression Expression, expectType OType, write codeData CodeData, compiledData CData, freedOnError Array, write llvmIR String) Operand
+    var result Operand = Operand.fromList({})
+    const expressionAsList List = expression.toList()
+    eSwitch expressionAsList[0]
+    case exp_expression
+        result = expressionAsList[1].compileExpression(expectType, codeData, compiledData, freedOnError, llvmIR)
+        return result
+    case exp_array
+        var code Token = expressionAsList[1]
+        var value String = ""
+        var isConstant Bool = true
+        const items Array = expressionAsList[2]
+        if items.empty?()
+            code.text`("[]")
+            value = "[i64 ##tnum##STD::Array##, i64 ptrtoint ([3 x i64]* @empty.array to i64)]"
+        else
+            var itemsOperands Array = []
+            var allFreedOnError  Array = freedOnError
+            parse _, itemExpression = items
+                const oneItem Operand = itemExpression.compileExpression(const::anyType, codeData, compiledData, allFreedOnError, llvmIR).toReadOnly(codeData, llvmIR)
+                if oneItem.named?()
+                    oneItem.useOperand(codeData, compiledData, llvmIR)
+                itemsOperands.addItem(oneItem)
+                allFreedOnError.addItem(oneItem)
+                code.addString(oneItem.code~().text~() + ", ")
+                isConstant = isConstant && oneItem.Main::constant?()
+            var text String = code.text`("")
+            text.setItem(text.length~() - 2, ']')
+            text.delete(text.length~() - 1, 1)
+            code.text`(text)
+            const itemsCount String = items.length~().toString()
+            const itemsType OType = itemsOperands[0].type~()
+            if itemsType.nothingType?()
+                errorNotExpectedToken(itemsOperands[0].code~(), "")
+            if isConstant
+                const llvmArrayDataType String = "[" + (itemsOperands.length~() + 3).toString() + " x i64]"
+                for :(index Int = 1) index < itemsOperands.length~(); index++
+                    const itemOperand Operand = itemsOperands[index]
+                    itemOperand.type~().typeEq!(itemsType, itemOperand.code~(), false)
+                var llvmArrayData String = "##llvmconst##>private unnamed_addr constant " + llvmArrayDataType + " [i64 0, i64 " + itemsCount + ", i64 ##tnum##" + oTypeToToken(itemsType, false).text~() + "##"
+                parse _, itemOperand = itemsOperands
+                    const itemOperandValue String = itemOperand.value~()
+                    llvmArrayData += ", " + itemOperandValue[itemOperandValue.look(',') + 2 : itemOperandValue.length~() - 1]
+                llvmArrayData += "], align 8<##"
+                value = "[i64 ##tnum##STD::Array##, i64 ptrtoint (" + llvmArrayDataType + "* " + llvmArrayData + " to i64)]"
+            else
+                const itemsTypeNumberRegister String = codeData.createRegister("extractvalue [2 x i64] " + itemsOperands[0].value~() + ", 0", llvmIR)
+                if itemsType.optional?() || itemsType.anyType?()
+                    const checkLabel String = codeData.createLabel()
+                    const throwLabel String = codeData.createLabel()
+                    const okLabel String = codeData.createLabel()
+                    llvmIR += "\tbr i1 ##flag##nothrow##, label %##reg##" + okLabel + "##, label %##reg##" + checkLabel + "##\n\t##nreg##" + checkLabel + "##:\n"
+                    const notNothingRegister String = codeData.createRegister("icmp ne i64 " + itemsTypeNumberRegister + ", 0", llvmIR).likelyI1Register(codeData, llvmIR)
+                    llvmIR += "\tbr i1 " + notNothingRegister + ", label %##reg##" + okLabel + "##, label %##reg##" + throwLabel + "##\n\t##nreg##" + throwLabel + "##:\n"
+                    createInvalidTypeThrow(codeData, compiledData, allFreedOnError, llvmIR)
+                    llvmIR += "\t##nreg##" + okLabel + "##:\n"
+                for :(index Int = 1) index < itemsOperands.length~(); index++
+                    const itemOperand Operand = itemsOperands[index]
+                    itemOperand.runtimeTypeCheck(itemsType, itemsTypeNumberRegister, codeData, compiledData, allFreedOnError, llvmIR)
+                value = createArrayInLLVMIR(codeData, itemsTypeNumberRegister, itemsOperands, llvmIR)
+        result = operand(code, enum::access_read, value, oType(code.replaceText("STD::Array"), false), isConstant, true, false, false)
+    case exp_bool
+        const boolToken Token = expressionAsList[1]
+        const value String = (boolToken.text~() == "true").select("[i64 ##tnum##STD::Bool##, i64 1]", "[i64 ##tnum##STD::Bool##, i64 0]")
+        result = operand(boolToken, enum::access_read, value, oType(boolToken.replaceText("STD::Bool"), false), true, true, false, false)
+    case exp_char
+        const charToken Token = expressionAsList[1]
+        result = operand(charToken, enum::access_read, "[i64 ##tnum##STD::Char##, i64 " + charToken.charToLLVMI64() + "]", oType(charToken.replaceText("STD::Char"), false), true, true, false, false)
+    case exp_const
+        const constantToken Token = expressionAsList[1]
+        const constant CConstant = compiledData.getConstant(constantToken, false)
+        const value String = codeData.createRegister("call [2 x i64] ##const##" + constant.fullName~() + "##()", llvmIR)
+        result = operand(constantToken, enum::access_read, value, constant.type~(), false, true, false, false)
+    case exp_enum
+        const elementToken Token = expressionAsList[1]
+        const elementFullName String = compiledData.getEnumElementFullName(elementToken, false)
+        const value String = "[i64 ##tnum##STD::Int##, i64 ##enum##" + elementFullName + "##]"
+        result = operand(elementToken, enum::access_read, value, oType(elementToken.replaceText("STD::Int"), false), true, true, false, false)
+    case exp_function
+        const name Token = expressionAsList[1]
+        const isOptional Bool = expressionAsList[2]
+        const argumentsExpressions Array = expressionAsList[3]
+        var arguments Array = []
+        var allFreedOnError Array = freedOnError
+        var index Int = 0
+        var nothingLabel String = ""
+        var functionLabel String = ""
+        var functionEndLabel String = ""
+        var endLabel String = ""
+        if isOptional
+            var firstArgument Operand = argumentsExpressions[0].compileExpression(const::anyType, codeData, compiledData, allFreedOnError, llvmIR)
+            if !(firstArgument.type~().optional?() || firstArgument.type~().anyType?())
+                errorNoPosibleNothingType(firstArgument.code~())
+            var firstArgumentTypeRegister String = ""
+            if firstArgument.access~() == enum::access_write
+                var typePointerRegister String = codeData.createRegister("getelementptr [2 x i64], [2 x i64]* " + firstArgument.value~() + ", i64 0, i32 0", llvmIR)
+                firstArgumentTypeRegister = codeData.createRegister("load i64, i64* " + typePointerRegister + ", align 8", llvmIR)
+            else
+                firstArgumentTypeRegister = codeData.createRegister("extractvalue [2 x i64] " + firstArgument.value~() + ", 0", llvmIR)
+            nothingLabel = codeData.createLabel()
+            functionLabel = codeData.createLabel()
+            functionEndLabel = codeData.createLabel()
+            endLabel = codeData.createLabel()
+            const firstArgumentIsNothingRegister String = codeData.createRegister("icmp eq i64 " + firstArgumentTypeRegister + ", 0", llvmIR)
+            llvmIR += "\tbr i1 " + firstArgumentIsNothingRegister + ", label %##reg##" + nothingLabel + "##, label %##reg##" + functionLabel + "##\n\t##nreg##" + functionLabel + "##:\n"
+            var firstArgumentType OType = firstArgument.type`(nothing)
+            firstArgumentType.optional`(false)
+            firstArgument.type`(firstArgumentType)
+            arguments.addItem(firstArgument)
+            if !firstArgument.named?()
+                allFreedOnError.addItem(firstArgument)
+            index = 1
+        for index < argumentsExpressions.length~(); index++
+            const argument Operand = argumentsExpressions[index].compileExpression(const::anyType, codeData, compiledData, allFreedOnError, llvmIR)
+            arguments.addItem(argument)
+            if !argument.named?()
+                allFreedOnError.addItem(argument)
+        result = callFunction(name, arguments, codeData, compiledData, freedOnError, true, llvmIR)
+        if isOptional
+            llvmIR += {
+                "\tbr label %##reg##" + functionEndLabel + "##\n"
+                "\t##nreg##" + functionEndLabel + "##:\n"
+                "\tbr label %##reg##" + endLabel + "##\n"
+                "\t##nreg##" + nothingLabel + "##:\n"
+                "\tbr label %##reg##" + endLabel + "##\n"
+                "\t##nreg##" + endLabel + "##:\n"
+            }
+            result.value`(codeData.createRegister("phi [2 x i64] [" + result.value~() + ", %##reg##" + functionEndLabel + "##], [zeroinitializer, %##reg##" + nothingLabel + "##]", llvmIR))
+            if !(result.type~().anyType?() || result.type~().nothingType?() || result.type~().optional?())
+                var type OType = result.type`(nothing)
+                type.optional`(true)
+                result.type`(type)
+    case exp_inGroups
+        const operandExpression Expression = expressionAsList[1]
+        const isOptional Bool = expressionAsList[2]
+        const groups Array = expressionAsList[3]
+        var operand Operand = operandExpression.compileExpression(const::anyType, codeData, compiledData, freedOnError, llvmIR)
+        var typeRegister String = ""
+        if operand.access~() == enum::access_write
+            var typePointerRegister String = codeData.createRegister("getelementptr [2 x i64], [2 x i64]* " + operand.value~() + ", i64 0, i32 0", llvmIR)
+            typeRegister = codeData.createRegister("load i64, i64* " + typePointerRegister + ", align 8", llvmIR)
+        else
+            typeRegister = codeData.createRegister("extractvalue [2 x i64] " + operand.value~() + ", 0", llvmIR)
+        var nothingLabel String = ""
+        var inGroupLabel String = ""
+        var inGroupEndLabel String = ""
+        var endLabel String = ""
+        if isOptional
+            if !(operand.type~().optional?() || operand.type~().anyType?())
+                errorNoPosibleNothingType(operand.code~())
+            nothingLabel = codeData.createLabel()
+            inGroupLabel = codeData.createLabel()
+            inGroupEndLabel = codeData.createLabel()
+            endLabel = codeData.createLabel()
+            const operandIsNothingRegister String = codeData.createRegister("icmp eq i64 " + typeRegister + ", 0", llvmIR)
+            llvmIR += "\tbr i1 " + operandIsNothingRegister + ", label %##reg##" + nothingLabel + "##, label %##reg##" + inGroupLabel + "##\n\t##nreg##" + inGroupLabel + "##:\n"
+            var operandType OType = operand.type`(nothing)
+            operandType.optional`(false)
+            operand.type`(operandType)
+        if !operand.named?()
+            operand.freeOperand(codeData, compiledData, llvmIR)
+        var groupsFullSet Set = Set.createEmpty()
+        var code Token = operand.code~().replaceText("inGroup?(" + operand.code~().text~())
+        parse _, groupName = groups
+            code.addString(", " + groupName.text~())
+            const group CGroup = compiledData.getGroup(groupName, false)
+            parse _, subGroupName = group.subGroups~()
+                groupsFullSet.add(subGroupName)
+            groupsFullSet.add(group.fullName~())
+        code.addChar(')')
+        var groupsFullArray Array = []
+        parse _, group = groupsFullSet
+            groupsFullArray.addItem(group)
+        groupsFullArray.sort(true)
+        var value String = ""
+        var isConstant Bool = false
+        if operand.type~().simple?() && !(operand.type~().this?() || operand.type~().optional?() || isOptional)
+            isConstant = true
+            var inGroups Bool = true
+            const operandType CType = compiledData.getType(code.replaceText(operand.type~().type~().text~()), false)
+            parse :(parse) _, groupName = groupsFullArray
+                inGroups = operandType.groups~()[groupName]
+                if !inGroups
+                    end parse
+            value = inGroups.select("[i64 ##tnum##STD::Bool##, i64 1]", "[i64 ##tnum##STD::Bool##, i64 0]")
+        else
+            var groupListAsOneString String = ""
+            parse _, groupName = groupsFullArray
+                groupListAsOneString += groupName + ","
+            groupListAsOneString.delete(groupListAsOneString.length~() - 1, 1)
+            value = codeData.createRegister("call i1 ##ingroups##" + groupListAsOneString + "##(i64 " + typeRegister + ")", llvmIR)
+            value = codeData.createRegister("zext i1 " + value + " to i64", llvmIR)
+            value = codeData.createRegister("insertvalue [2 x i64] [i64 ##tnum##STD::Bool##, i64 0], i64 " + value + ", 1", llvmIR)
+        result = operand(code, enum::access_read, value, oType(code.replaceText("STD::Bool"), isOptional), isConstant, true, false, false)
+        if isOptional
+            llvmIR += {
+                "\tbr label %##reg##" + inGroupEndLabel + "##\n"
+                "\t##nreg##" + inGroupEndLabel + "##:\n"
+                "\tbr label %##reg##" + endLabel + "##\n"
+                "\t##nreg##" + nothingLabel + "##:\n"
+                "\tbr label %##reg##" + endLabel + "##\n"
+                "\t##nreg##" + endLabel + "##:\n"
+            }
+            result.value`(codeData.createRegister("phi [2 x i64] [" + result.value~() + ", %##reg##" + inGroupEndLabel + "##], [zeroinitializer, %##reg##" + nothingLabel + "##]", llvmIR))
+    case exp_int
+        const intToken Token = expressionAsList[1]
+        result = operand(intToken, enum::access_read, "[i64 ##tnum##STD::Int##, i64 " + integerToLLVMI64(intToken) + "]", oType(intToken.replaceText("STD::Int"), false), true, true, false, false)
+    case exp_lazyAnd
+        const leftExpression Expression = expressionAsList[1]
+        const rightExpression Expression = expressionAsList[2]
+        const leftOperand Operand = leftExpression.compileExpression(const::boolType, codeData, compiledData, freedOnError, llvmIR).toReadOnly(codeData, llvmIR)
+        const leftAsI64Register String = codeData.createRegister("extractvalue [2 x i64] " + leftOperand.value~() + ", 1", llvmIR)
+        const leftAsI1Register String = codeData.createRegister("trunc i64 " + leftAsI64Register + " to i1", llvmIR)
+        const maybeTrueLabel String = codeData.createLabel()
+        const falseLabel String = codeData.createLabel()
+        const trueLabel String = codeData.createLabel()
+        const endLabel String = codeData.createLabel()
+        llvmIR += "\tbr i1 " + leftAsI1Register + ", label %##reg##" + maybeTrueLabel + "##, label %##reg##" + falseLabel + "##\n\t##nreg##" + maybeTrueLabel + "##:\n"
+        const rightOperand Operand = rightExpression.compileExpression(const::boolType, codeData, compiledData, freedOnError, llvmIR).toReadOnly(codeData, llvmIR)
+        const rightAsI64Register String = codeData.createRegister("extractvalue [2 x i64] " + rightOperand.value~() + ", 1", llvmIR)
+        const rightAsI1Register String = codeData.createRegister("trunc i64 " + rightAsI64Register + " to i1", llvmIR)
+        llvmIR += {
+            "\tbr i1 " + rightAsI1Register + ", label %##reg##" + trueLabel + "##, label %##reg##" + falseLabel + "##\n"
+            "\t##nreg##" + falseLabel + "##:\n"
+            "\tbr label %##reg##" + endLabel + "##\n"
+            "\t##nreg##" + trueLabel + "##:\n"
+            "\tbr label %##reg##" + endLabel + "##\n"
+            "\t##nreg##" + endLabel + "##:\n"
+        }
+        const value String = codeData.createRegister("phi [2 x i64] [[i64 ##tnum##STD::Bool##, i64 0], %##reg##" + falseLabel + "##], [[i64 ##tnum##STD::Bool##, i64 1], %##reg##" + trueLabel + "##]", llvmIR)
+        result = operand{
+            (leftOperand.code~().replaceText("((" + leftOperand.code~().text~() + ") && (" + rightOperand.code~().text~() + "))"),
+            enum::access_read,
+            value,
+            oType(leftOperand.code~().replaceText("STD::Bool"), false),
+            false, true, false, false)
+        }
+    case exp_lazyOr
+        const leftExpression Expression = expressionAsList[1]
+        const rightExpression Expression = expressionAsList[2]
+        const leftOperand Operand = leftExpression.compileExpression(const::boolType, codeData, compiledData, freedOnError, llvmIR).toReadOnly(codeData, llvmIR)
+        const leftAsI64Register String = codeData.createRegister("extractvalue [2 x i64] " + leftOperand.value~() + ", 1", llvmIR)
+        const leftAsI1Register String = codeData.createRegister("trunc i64 " + leftAsI64Register + " to i1", llvmIR)
+        const maybeFalseLabel String = codeData.createLabel()
+        const falseLabel String = codeData.createLabel()
+        const trueLabel String = codeData.createLabel()
+        const endLabel String = codeData.createLabel()
+        llvmIR += "\tbr i1 " + leftAsI1Register + ", label %##reg##" + trueLabel + "##, label %##reg##" + maybeFalseLabel + "##\n\t##nreg##" + maybeFalseLabel + "##:\n"
+        const rightOperand Operand = rightExpression.compileExpression(const::boolType, codeData, compiledData, freedOnError, llvmIR).toReadOnly(codeData, llvmIR)
+        const rightAsI64Register String = codeData.createRegister("extractvalue [2 x i64] " + rightOperand.value~() + ", 1", llvmIR)
+        const rightAsI1Register String = codeData.createRegister("trunc i64 " + rightAsI64Register + " to i1", llvmIR)
+        llvmIR += {
+            "\tbr i1 " + rightAsI1Register + ", label %##reg##" + trueLabel + "##, label %##reg##" + falseLabel + "##\n"
+            "\t##nreg##" + falseLabel + "##:\n"
+            "\tbr label %##reg##" + endLabel + "##\n"
+            "\t##nreg##" + trueLabel + "##:\n"
+            "\tbr label %##reg##" + endLabel + "##\n"
+            "\t##nreg##" + endLabel + "##:\n"
+        }
+        const value String = codeData.createRegister("phi [2 x i64] [[i64 ##tnum##STD::Bool##, i64 0], %##reg##" + falseLabel + "##], [[i64 ##tnum##STD::Bool##, i64 1], %##reg##" + trueLabel + "##]", llvmIR)
+        result = operand{
+            (leftOperand.code~().replaceText("((" + leftOperand.code~().text~() + ") || (" + rightOperand.code~().text~() + "))"),
+            enum::access_read,
+            value,
+            oType(leftOperand.code~().replaceText("STD::Bool"), false),
+            false, true, false, false)
+        }
+    case exp_list
+        var code Token = expressionAsList[1]
+        var value String = ""
+        var isConstant Bool = true
+        const items Array = expressionAsList[2]
+        if items.empty?()
+            code.text`("{}")
+            value = "[i64 ##tnum##STD::List##, i64 ptrtoint ([2 x i64]* @empty.list to i64)]"
+        else
+            var itemsOperands Array = []
+            var allFreedOnError  Array = freedOnError
+            parse _, itemExpression = items
+                const oneItem Operand = itemExpression.compileExpression(const::anyType, codeData, compiledData, allFreedOnError, llvmIR).toReadOnly(codeData, llvmIR)
+                if oneItem.named?()
+                    oneItem.useOperand(codeData, compiledData, llvmIR)
+                itemsOperands.addItem(oneItem)
+                allFreedOnError.addItem(oneItem)
+                code.addString(oneItem.code~().text~() + ", ")
+                isConstant = isConstant && oneItem.Main::constant?()
+            var text String = code.text`("")
+            text.setItem(text.length~() - 2, '}')
+            text.delete(text.length~() - 1, 1)
+            code.text`(text)
+            const itemsCount String = items.length~().toString()
+            if isConstant
+                const llvmListDataType String = "[" + (itemsOperands.length~() * 2 + 2).toString() + " x i64]"
+                var llvmListData String = "##llvmconst##>private unnamed_addr constant " + llvmListDataType + " [i64 0, i64 " + itemsCount
+                parse _, itemOperand = itemsOperands
+                    llvmListData += ", i64 ##tnum##" + oTypeToToken(itemOperand.type~(), false).text~() + "##, " + itemOperand.value~()[itemOperand.value~().look(',') + 2 : itemOperand.value~().length~() - 1]
+                llvmListData += "], align 8<##"
+                value = "[i64 ##tnum##STD::List##, i64 ptrtoint (" + llvmListDataType + "* " + llvmListData + " to i64)]"
+            else
+                value = codeData.createListInLLVMIR(itemsOperands, llvmIR)
+        result = operand(code, enum::access_read, value, oType(code.replaceText("STD::List"), false), isConstant, true, false, false)
+    case exp_noReadOperand
+        const noReadToken Token = expressionAsList[1]
+        const typeFullName String = (noReadToken.text~() == "This").select("This", compiledData.getType(noReadToken, false).fullName~())
+        result = operand(noReadToken, enum::access_noread, "[i64 ##tnum##" + typeFullName + "##, i64 0]", oType(noReadToken.replaceText(typeFullName), false), true, true, false, false)
+    case exp_nothing
+        const nothingToken Token = expressionAsList[1]
+        result = operand(nothingToken, enum::access_read, "[i64 0, i64 0]", oType(nothingToken.replaceText("STD::Nothing"), false), true, true, false, false)
+    case exp_real
+        const realToken Token = expressionAsList[1]
+        result = operand(realToken, enum::access_read, "[i64 ##tnum##STD::Real##, i64 bitcast (double " + realToken.realToLLVMDouble() + " to i64)]", oType(realToken.replaceText("STD::Real"), false), true, true, false, false)
+    case exp_select
+        var predicateExpression Expression = expressionAsList[1]
+        var isOptional Bool = expressionAsList[2]
+        var firstExpression Expression = expressionAsList[3]
+        var secondExpression Expression = expressionAsList[4]
+        var predicate Operand = predicateExpression.compileExpression(const::boolType, codeData, compiledData, freedOnError, llvmIR)
+        const trueLabel String = codeData.createLabel()
+        const falseLabel String = codeData.createLabel()
+        const firstEndLabel String = codeData.createLabel()
+        const secondEndLabel String = codeData.createLabel()
+        const endLabel String = codeData.createLabel()
+        var selectLabel String = ""
+        var nothingLabel String = ""
+        if isOptional
+            if !(predicate.type~().optional?() || predicate.type~().anyType?())
+                errorNoPosibleNothingType(predicate.code~())
+            selectLabel = codeData.createLabel()
+            nothingLabel = codeData.createLabel()
+            var typeRegister String = ""
+            if predicate.access~() == enum::access_write
+                var typePointerRegister String = codeData.createRegister("getelementptr [2 x i64], [2 x i64]* " + predicate.value~() + ", i64 0, i32 0", llvmIR)
+                typeRegister = codeData.createRegister("load i64, i64* " + typePointerRegister + ", align 8", llvmIR)
+            else
+                typeRegister = codeData.createRegister("extractvalue [2 x i64] " + predicate.value~() + ", 0", llvmIR)
+            const predicateIsNothingRegister String = codeData.createRegister("icmp eq i64 " + typeRegister + ", 0", llvmIR)
+            llvmIR += "\tbr i1 " + predicateIsNothingRegister + ", label %##reg##" + nothingLabel + "##, label %##reg##" + selectLabel + "##\n\t##nreg##" + selectLabel + "##:\n"
+            var predicateType OType = predicate.type`(nothing)
+            predicateType.optional`(false)
+            predicate.type`(predicateType)
+        predicate = predicate.toReadOnly(codeData, llvmIR)
+        const predicateAsI64Register String = codeData.createRegister("extractvalue [2 x i64] " + predicate.value~() + ", 1", llvmIR)
+        const predicateAsI1Register String = codeData.createRegister("trunc i64 " + predicateAsI64Register + " to i1", llvmIR)
+        llvmIR += "\tbr i1 " + predicateAsI1Register + ", label %##reg##" + trueLabel + "##, label %##reg##" + falseLabel + "##\n\t##nreg##" + trueLabel + "##:\n"
+        const first Operand = firstExpression.compileExpression(const::anyType, codeData, compiledData, freedOnError, llvmIR).toReadOnly(codeData, llvmIR)
+        if first.named?()
+            first.useOperand(codeData, compiledData, llvmIR)
+        llvmIR += "\tbr label %##reg##" + firstEndLabel + "##\n\t##nreg##" + falseLabel + "##:\n"
+        const second Operand = secondExpression.compileExpression(const::anyType, codeData, compiledData, freedOnError, llvmIR).toReadOnly(codeData, llvmIR)
+        if second.named?()
+            second.useOperand(codeData, compiledData, llvmIR)
+        llvmIR += {
+            "\tbr label %##reg##" + secondEndLabel + "##\n"
+            "\t##nreg##" + firstEndLabel + "##:\n"
+            "\tbr label %##reg##" + endLabel + "##\n"
+            "\t##nreg##" + secondEndLabel + "##:\n"
+            "\tbr label %##reg##" + endLabel + "##\n"
+        }
+        if isOptional
+            llvmIR += "\t##nreg##" + nothingLabel + "##:\n\tbr label %##reg##" + endLabel + "##\n"
+        llvmIR += "\t##nreg##" + endLabel + "##:\n"
+        var value String = "phi [2 x i64] [" + first.value~() + ", %##reg##" + firstEndLabel + "##], [" + second.value~() + ", %##reg##" + secondEndLabel + "##]"
+        if isOptional
+            value += ", [zeroinitializer,  %##reg##" + nothingLabel + "##]"
+        value = codeData.createRegister(value, llvmIR)
+        var type OType = OType.fromList({})
+        if first.type~().typeEq?(second.type~(), false)
+            type = first.type~()
+            type.optional`(first.type~().optional?() || second.type~().optional?() || isOptional)
+        else
+            type = const::anyType
+        result = operand{
+            (predicate.code~().replaceText("select(" + predicate.code~().text~() + ", " + first.code~().text~() + ", " + second.code~().text~() + ")"),
+            enum::access_read,
+            value,
+            type,
+            false, true, false, false)
+        }
+    case exp_string
+        result = expressionAsList[1].stringToOperand()
+    case exp_var
+        const varName Token = expressionAsList[1]
+        var namedOperands Map = codeData.namedOperands`(nothing)
+        var existedVar <>NamedOperand = namedOperands.put(varName.text~(), NamedOperand.fromList({}))
+        if existedVar.nothing?()
+            errorNotFound(varName, "variable")
+        result = existedVar.operand`(nothing)
+        result.used`(true)
+        existedVar.operand`(result)
+        namedOperands.put(varName.text~(), existedVar)
+        codeData.namedOperands`(namedOperands)
+        result.code`(varName)
+    default
+        unreachable()
+    result.runtimeTypesCompatibleCheck(expectType, codeData, compiledData, freedOnError, llvmIR)
+    if expectType.simple?() && (!result.type~().simple?() || (!expectType.optional?() && result.type~().optional?()))
+        result.type`(expectType)
+    return result

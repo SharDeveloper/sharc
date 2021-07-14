@@ -1,0 +1,144 @@
+module Main
+
+// The token along with the coordinates of the place where it is located in the source code.
+type Token
+    // text        String
+    // fileName    String
+    // fileID      Int
+    // lineIndex   Int
+    // columnIndex Int
+
+const emptyToken Token = token("", "", 0, 0, 0)
+const llvmToken  Token = token("llvm", "", 0, 0, 0)
+
+attach Token to FieldText
+    #alwaysinline
+    def text~(token Token) String
+        return token.typeGetItem(0)
+
+    #alwaysinline
+    def text`(write token Token, new String) String
+        return token.typePut(0, new)
+
+attach Token to FieldFileName
+    #alwaysinline
+    def fileName~(token Token) String
+        return token.typeGetItem(1)
+
+    #alwaysinline
+    def fileName`(write token Token, new String) String
+        return token.typePut(1, new)
+
+attach Token to FieldFileID
+    #alwaysinline
+    def fileID~(token Token) Int
+        return token.typeGetItem(2)
+
+    #alwaysinline
+    def fileID`(write token Token, new Int) Int
+        return token.typePut(2, new)
+
+attach Token to FieldLineIndex
+    #alwaysinline
+    def lineIndex~(token Token) Int
+        return token.typeGetItem(3)
+
+    #alwaysinline
+    def lineIndex`(write token Token, new Int) Int
+        return token.typePut(3, new)
+
+attach Token to FieldColumnIndex
+    #alwaysinline
+    def columnIndex~(token Token) Int
+        return token.typeGetItem(4)
+
+    #alwaysinline
+    def columnIndex`(write token Token, new Int) Int
+        return token.typePut(4, new)
+
+#alwaysinline
+def token(text, fileName String, fileID, lineIndex, columnIndex Int) Token
+    return Token.fromList({text, fileName, fileID, lineIndex, columnIndex})
+
+#alwaysinline
+def addString(write token Token, string String)
+    var text String = token.text`("")
+    text += string
+    token.text`(text)
+
+#alwaysinline
+def addChar(write token Token, char Char)
+    var text String = token.text`("")
+    text.addItem(char)
+    token.text`(text)
+
+#alwaysinline
+def replaceText(token Token, newText String) Token
+    var result Token = token
+    result.text`(newText)
+    return result
+
+#alwaysinline
+def coordinatesToString(token Token) String
+    return "File: " + token.fileName~() + ", line: " + (token.lineIndex~() + 1).toString() + ", column: " + (token.columnIndex~() + 1).toString() + ". "
+
+#alwaysinline
+def addToColumnIndex(write token Token, addValue Int)
+    token.columnIndex`(token.columnIndex~() + addValue)
+
+attach Token to Equal
+
+attach Token to Shar__sugar__equal
+    #alwaysinline
+    def shar__sugar__equal(token1, token2 Token) Bool
+        return token1.text~() == token2.text~()
+
+attach Token to Shar__sugar__notEqual
+    #alwaysinline
+    def shar__sugar__notEqual(token1, token2 Token) Bool
+        return !(token1 == token2)
+
+attach Token to Ordered
+
+attach Token to Shar__sugar__less
+    #alwaysinline
+    def shar__sugar__less(token1, token2 Token) Bool
+        return token1.text~() < token2.text~()
+
+attach Token to Shar__sugar__great
+    #alwaysinline
+    def shar__sugar__great(token1, token2 Token) Bool
+        return token1.text~() > token2.text~()
+
+attach Token to Shar__sugar__lessOrEqual
+    #alwaysinline
+    def shar__sugar__lessOrEqual(token1, token2 Token) Bool
+        return token1.text~() <= token2.text~()
+
+attach Token to Shar__sugar__greatOrEqual
+    #alwaysinline
+    def shar__sugar__greatOrEqual(token1, token2 Token) Bool
+        return token1.text~() >= token2.text~()
+
+attach Token to Shar__sugar__getItem
+    #alwaysinline
+    def shar__sugar__getItem(token Token, index $Any) $Any
+        return token.text~()[index]
+
+attach Token to Long
+    #alwaysinline
+    def length~(token Token) Int
+        return token.text~().length~()
+
+attach Token to Hashable
+    #alwaysinline
+    def getHash(token Token) Int
+        return token.text~().getHash()
+
+    def getRandomizedHash(token Token) Int
+        return token.text~().getRandomizedHash()
+
+// The function returns a unique identifier for the token.
+#alwaysinline
+def getUniqID(token Token) String
+    return token.fileID~().toString() + "." + token.lineIndex~().toString() + "." + token.columnIndex~().toString()

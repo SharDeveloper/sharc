@@ -1,0 +1,225 @@
+module Main
+
+// Data obtained from source code.
+type Data
+    // currentModule        Token
+    // enumerationsElements Map(String, isExport Bool)
+    // constants            Map(String, Constant)
+    // types                Map(String, Type)
+    // groups               Map(String, Group)
+    // functions            [Function]
+    // attachments          [Attachment]
+
+attach Data to FieldCurrentModule
+    #alwaysinline
+    def currentModule~(data Data) Token
+        return data.typeGetItem(0)
+
+    #alwaysinline
+    def currentModule`(write data Data, new <>Token) <>Token
+        return data.typePut(0, new)
+
+attach Data to FieldEnumerationsElements
+    #alwaysinline
+    def enumerationsElements~(data Data) Map
+        return data.typeGetItem(1)
+
+    #alwaysinline
+    def enumerationsElements`(write data Data, new <>Map) <>Map
+        return data.typePut(1, new)
+
+attach Data to FieldConstants
+    #alwaysinline
+    def constants~(data Data) Map
+        return data.typeGetItem(2)
+
+    #alwaysinline
+    def constants`(write data Data, new <>Map) <>Map
+        return data.typePut(2, new)
+
+attach Data to FieldTypes
+    #alwaysinline
+    def types~(data Data) Map
+        return data.typeGetItem(3)
+
+    #alwaysinline
+    def types`(write data Data, new <>Map) <>Map
+        return data.typePut(3, new)
+
+attach Data to FieldGroups
+    #alwaysinline
+    def groups~(data Data) Map
+        return data.typeGetItem(4)
+
+    #alwaysinline
+    def groups`(write data Data, new <>Map) <>Map
+        return data.typePut(4, new)
+
+attach Data to FieldFunctions
+    #alwaysinline
+    def functions~(data Data) Array
+        return data.typeGetItem(5)
+
+    #alwaysinline
+    def functions`(write data Data, new Array) Array
+        return data.typePut(5, new)
+
+attach Data to FieldAttachments
+    #alwaysinline
+    def attachments~(data Data) Array
+        return data.typeGetItem(6)
+
+    #alwaysinline
+    def attachments`(write data Data, new Array) Array
+        return data.typePut(6, new)
+
+#alwaysinline
+def initData() Data
+    return Data.fromList({const::emptyToken, Map.createEmpty(), Map.createEmpty(), Map.createEmpty(), Map.createEmpty(), [], []})
+
+// The function loads data from blocks.
+def loadData(blocks Array) Data
+    var data Data = initData()
+    for :(blockIndex Int = 0) blockIndex < blocks.length~(); blockIndex++
+        var block Block = blocks[blockIndex]
+        var tokenIndex Int = 0
+        block.next?(tokenIndex, ["export"])
+        const token Token = block.next(tokenIndex)
+        switch token.text~()
+        case "const"
+            data.addConstant(block.toConstant())
+        case "type", "primitive"
+            data.addType(block.toType())
+        case "enum"
+            data.addEnumElements(block.toEnum())
+        case "group"
+            data.addGroup(block.toGroup())
+        case "def", "#"
+            var functionAttributes FAttributes = const::defaultFAttributes
+            if token[0] == '#'
+                functionAttributes = block.toFunctionAttributes()
+                blockIndex++
+                if blockIndex == blocks.length~()
+                    errorNotExpectedToken(token, "")
+                block  = blocks[blockIndex]
+            data.addFunction(block.toFunction(functionAttributes))
+        case "attach"
+            data.addAttachment(block.toAttachment())
+        case "module"
+            data.setModuleName(block.getUppercaseName(tokenIndex, "module"))
+            block.eol!(tokenIndex)
+        default
+            errorNotExpectedToken(token, "")
+    return data
+
+// The function writes to the data the name of the module.
+def setModuleName(write data Data, name Token)
+    const oldName Token = data.currentModule`(name)
+    if !oldName.empty?() && oldName != name
+        errorVariousModuleNames(oldName, name)
+
+// The function adds a constant to existing constants.
+#alwaysinline
+def addConstant(write data Data, constant Constant)
+    var constants Map = data.constants`(nothing)
+    if !constants.put(constant.name~().text~(), constant).nothing?()
+        errorAlreadyExist(constant.name~(), "constant")
+    data.constants`(constants)
+
+// The function adds a type to existing types.
+#alwaysinline
+def addType(write data Data, type Type)
+    var types Map = data.types`(nothing)
+    if !types.put(type.name~().text~(), type).nothing?()
+        errorAlreadyExist(type.name~(), "type")
+    data.types`(types)
+
+// The function adds enumeration elements to existing enumeration elements.
+#alwaysinline
+def addEnumElements(write data Data, enumeration Enumeration)
+    const isExport Bool = enumeration.export?()
+    const elements Array = enumeration.elements~()
+    var allElements Map = data.enumerationsElements`(nothing)
+    parse _, element = elements
+        if !allElements.put(element.text~(), isExport).nothing?()
+            errorAlreadyExist(element, "enumeration element")
+    data.enumerationsElements`(allElements)
+
+// The function adds a group to existing groups.
+#alwaysinline
+def addGroup(write data Data, group Group)
+    var groups Map = data.groups`(nothing)
+    if !groups.put(group.name~().text~(), group).nothing?()
+        errorAlreadyExist(group.name~(), "group")
+    data.groups`(groups)
+
+// The function adds a function to existing functions.
+#alwaysinline
+def addFunction(write data Data, function Function)
+    var functions Array = data.functions`([])
+    functions.addItem(function)
+    data.functions`(functions)
+
+// The function adds a attachment to existing attachments.
+#alwaysinline
+def addAttachment(write data Data, attachment Attachment)
+    var attachments Array = data.attachments`([])
+    attachments.addItem(attachment)
+    data.attachments`(attachments)
+
+// The function compiles the data.
+def compileData(data Data, write compiledData CData)
+    var allElements Map = compiledData.enumerationsElements`(nothing)
+    parse enumElement, isExport = data.enumerationsElements~()
+        var elementsWithSameName <>Map = allElements.put(enumElement, nothing)
+        if elementsWithSameName.nothing?()
+            elementsWithSameName = Map.createEmpty()
+        elementsWithSameName.put(compiledData.currentModule~(), isExport)
+        allElements.put(enumElement, elementsWithSameName)
+    compiledData.enumerationsElements`(allElements)
+    var compilingGroups Map = data.groups~()
+    for !compilingGroups.empty?()
+        var oneCompilingGroup Group = Group.fromList({})
+        parse :(parse) _, oneCompilingGroupFromParse = compilingGroups
+            oneCompilingGroup = oneCompilingGroupFromParse
+            end parse
+        oneCompilingGroup.compileGroup(compiledData, compilingGroups)
+    parse _, type = data.types~()
+        type.compileType(compiledData)
+    data.attachments~().addTypesToGroups(compiledData)
+    parse _, group = data.groups~()
+        parse _, function = group.functions~()
+            compiledData.addRequiredFunction(group, function)
+    parse _, attachment = data.attachments~()
+        const type CType = compiledData.getType(attachment.type~(), false)
+        const group CGroup = compiledData.getGroup(attachment.group~(), false)
+        parse _, function = attachment.functions~()
+            function.precompileAttachmentFunction(compiledData, type, group)
+        parse functionName, _ = group.functions~()
+            if attachment.functions~()[functionName].nothing?()
+                errorCantAttach(attachment.type~().replaceText(type.fullName~()), group.fullName~(), functionName)
+    parse _, function = data.functions~()
+        if !function.attributes~().this~().empty?()
+            function.precompileDefaultFunction(compiledData)
+    parse _, function = data.functions~()
+        if !function.attributes~().override~().empty?()
+            function.precompileOverrideFunction(compiledData)
+        elif function.attributes~().this~().empty?()
+            function.precompileSimpleFunction(compiledData)
+    parse _, constant = data.constants~()
+        constant.precompileConstant(compiledData)
+    parse _, constant = data.constants~()
+        constant.compileConstant(compiledData)
+    parse _, attachment = data.attachments~()
+        const type CType = compiledData.getType(attachment.type~(), false)
+        const group CGroup = compiledData.getGroup(attachment.group~(), false)
+        parse _, function = attachment.functions~()
+            function.compileAttachmentFunction(compiledData, type, group)
+    parse _, function = data.functions~()
+        if !function.attributes~().this~().empty?()
+            function.compileDefaultFunction(compiledData)
+    parse _, function = data.functions~()
+        if !function.attributes~().override~().empty?()
+            function.compileOverrideFunction(compiledData)
+        elif function.attributes~().this~().empty?()
+            function.compileSimpleFunction(compiledData)

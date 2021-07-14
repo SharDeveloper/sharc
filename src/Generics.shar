@@ -1,0 +1,269 @@
+module Main
+
+group FieldCMD
+    cmd~(This) $Any
+    cmd`(write This, $Any) $Any
+
+group FieldSources
+    sources~(This) $Any
+    sources`(write This, $Any) $Any
+
+group FieldModules
+    modules~(This) $Any
+    modules`(write This, $Any) $Any
+
+group FieldOutFile
+    outFile~(This) $Any
+    outFile`(write This, $Any) $Any
+
+group FieldIgnoreNoThrow
+    ignoreNoThrow~(This) $Any
+    ignoreNoThrow`(write This, $Any) $Any
+
+group FieldType
+    type~(This) $Any
+    type`(write This, $Any) $Any
+
+group FieldGroup
+    group~(This) $Any
+    group`(write This, $Any) $Any
+
+group FieldFunctions
+    functions~(This) $Any
+    functions`(write This, $Any) $Any
+
+group FieldTypes
+    types~(This) $Any
+    types`(write This, $Any) $Any
+
+group FieldAttachments
+    attachments~(This) $Any
+    attachments`(write This, $Any) $Any
+
+group FieldLine
+    line~(This) $Any
+    line`(write This, $Any) $Any
+
+group FieldSubBlocks
+    subBlocks~(This) $Any
+    subBlocks`(write This, $Any) $Any
+
+group FieldExport
+    export?(This) Bool
+    export`(write This, Bool) Bool
+
+group FieldFullName
+    fullName~(This) $Any
+    fullName`(write This, $Any) $Any
+
+group FieldLLVMIR
+    llvmIR~(This) $Any
+    llvmIR`(write This, $Any) $Any
+
+group FieldCurrentModule
+    currentModule~(This) $Any
+    currentModule`(write This, $Any) $Any
+
+group FieldEnumerationsElements
+    enumerationsElements~(This) $Any
+    enumerationsElements`(write This, $Any) $Any
+
+group FieldConstants
+    constants~(This) $Any
+    constants`(write This, $Any) $Any
+
+group FieldGroups
+    groups~(This) $Any
+    groups`(write This, $Any) $Any
+
+group FieldFinalFunction
+    finalFunction~(This) $Any
+    finalFunction`(write This, $Any) $Any
+
+group FieldSubGroups
+    subGroups~(This) $Any
+    subGroups`(write This, $Any) $Any
+
+group FieldPrimitive
+    primitive?(This) Bool
+    primitive`(write This, Bool) Bool
+
+group FieldName
+    name~(This) $Any
+    name`(write This, $Any) $Any
+
+group FieldValue
+    value~(This) $Any
+    value`(write This, $Any) $Any
+
+group FieldElements
+    elements~(This) $Any
+    elements`(write This, $Any) $Any
+
+group FieldVariant
+    variant~(This) $Any
+    variant`(write This, $Any) $Any
+
+group FieldAttributes
+    attributes~(This) $Any
+    attributes`(write This, $Any) $Any
+
+group FieldSignature
+    signature~(This) $Any
+    signature`(write This, $Any) $Any
+
+group FieldArguments
+    arguments~(This) $Any
+    arguments`(write This, $Any) $Any
+
+group FieldResultType
+    resultType~(This) $Any
+    resultType`(write This, $Any) $Any
+
+group FieldCode
+    code~(This) $Any
+    code`(write This, $Any) $Any
+
+group FieldAccess
+    access~(This) $Any
+    access`(write This, $Any) $Any
+
+group FieldCoordinates
+    coordinates~(This) $Any
+    coordinates`(write This, $Any) $Any
+
+group FieldModule
+    module~(This) $Any
+    module`(write This, $Any) $Any
+
+group FieldOwningGroup
+    owningGroup~(This) $Any
+    owningGroup`(write This, $Any) $Any
+
+group FieldThisType
+    thisType~(This) $Any
+    thisType`(write This, $Any) $Any
+
+group FieldOptional
+    optional?(This) Bool
+    optional`(write This, Bool) Bool
+
+group FieldFromCurrentModule
+    fromCurrentModule?(This) Bool
+    fromCurrentModule`(write This, Bool) Bool
+
+group FieldText
+    text~(This) $Any
+    text`(write This, $Any) $Any
+
+group FieldFileName
+    fileName~(This) $Any
+    fileName`(write This, $Any) $Any
+
+group FieldFileID
+    fileID~(This) $Any
+    fileID`(write This, $Any) $Any
+
+group FieldLineIndex
+    lineIndex~(This) $Any
+    lineIndex`(write This, $Any) $Any
+
+group FieldColumnIndex
+    columnIndex~(This) $Any
+    columnIndex`(write This, $Any) $Any
+
+group ToFull
+    // The function returns its first argument, in which all names are prefixed with the owning module.
+    toFull(This, CData) This
+
+group FieldFunctionNameForErrorMessage
+    functionNameForErrorMessage~(This) $Any
+    functionNameForErrorMessage`(write This, $Any) $Any
+
+group FieldThisGroup
+    thisGroup~(This) $Any
+    thisGroup`(write This, $Any) $Any
+
+group FieldNamedOperands
+    namedOperands~(This) $Any
+    namedOperands`(write This, $Any) $Any
+
+group FieldLevel
+    level~(This) $Any
+    level`(write This, $Any) $Any
+
+group FieldRegisterCounter
+    registerCounter~(This) $Any
+    registerCounter`(write This, $Any) $Any
+
+group FieldEndLabels
+    endLabels~(This) $Any
+    endLabels`(write This, $Any) $Any
+
+group FieldNextLabels
+    nextLabels~(This) $Any
+    nextLabels`(write This, $Any) $Any
+
+group FieldFallthroughLabels
+    fallthroughLabels~(This) $Any
+    fallthroughLabels`(write This, $Any) $Any
+
+group FieldCatchLabels
+    catchLabels~(This) $Any
+    catchLabels`(write This, $Any) $Any
+
+group FieldAllocs
+    allocs~(This) $Any
+    allocs`(write This, $Any) $Any
+
+group FieldUnneededAllocs
+    unneededAllocs~(This) $Any
+    unneededAllocs`(write This, $Any) $Any
+
+group FieldOwnerNoThrow
+    ownerNoThrow~(This) $Any
+    ownerNoThrow`(write This, $Any) $Any
+
+group FieldConstant
+    constant?(This) Bool
+    constant`(write This, Bool) Bool
+
+group FieldUsed
+    used?(This) Bool
+    used`(write This, Bool) Bool
+
+group FieldNamed
+    named?(This) Bool
+    named`(write This, Bool) Bool
+
+group FieldArgument
+    argument?(This) Bool
+    argument`(write This, Bool) Bool
+
+group FieldOperand
+    operand~(This) $Any
+    operand`(write This, $Any) $Any
+
+group FieldLabel
+    label~(This) $Any
+    label`(write This, $Any) $Any
+
+group FieldInGroups
+    inGroups~(This) $Any
+    inGroups`(write This, $Any) $Any
+
+group FieldLLVMConstants
+    llvmConstants~(This) $Any
+    llvmConstants`(write This, $Any) $Any
+
+group FieldLLVMDeclares
+    llvmDeclares~(This) $Any
+    llvmDeclares`(write This, $Any) $Any
+
+group FieldGroupsFunctions
+    groupsFunctions~(This) $Any
+    groupsFunctions`(write This, $Any) $Any
+
+group FieldGroupsTypes
+    groupsTypes~(This) $Any
+    groupsTypes`(write This, $Any) $Any

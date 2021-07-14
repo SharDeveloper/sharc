@@ -1,0 +1,1045 @@
+module Main
+
+// A function compiles code into a function.
+#noinline
+def compileCode(code Array, write codeData CodeData, compiledData CData, write llvmIR String) Bool // lastIsTerminator
+    var lastIsTerminator Bool = false
+    for :(codeIndex Int = 0) codeIndex < code.length~(); codeIndex++
+        var currentBlock Block = code[codeIndex]
+        if lastIsTerminator
+            errorUnreachableCode(currentBlock.line~()[0])
+        if currentBlock.line~().length~() > 1 && {
+            ((currentBlock.line~()[1].text~() == "::" || currentBlock.line~()[1].text~() == ".") ||
+            currentBlock.line~()[1].text~() == "(" &&
+            !(currentBlock.line~()[0].text~() == "if" ||
+                currentBlock.line~()[0].text~() == "return" ||
+                currentBlock.line~()[0].text~() == "for" ||
+                currentBlock.line~()[0].text~() == "parse" ||
+                currentBlock.line~()[0].text~() == "switch" ||
+                currentBlock.line~()[0].text~() == "eSwitch" ||
+                currentBlock.line~()[0].text~() == "tSwitch" ||
+                currentBlock.line~()[0].text~() == "test"))
+        }
+            compileExpressionFromBlock(currentBlock, codeData, compiledData, llvmIR).freeOperand(codeData, compiledData, llvmIR)
+        else
+            switch currentBlock.line~()[0].text~()
+            case "const"
+                compileConstantDefine(currentBlock, codeData, compiledData, llvmIR)
+            case "end"
+                compileEnd(currentBlock, codeData, compiledData, llvmIR)
+                lastIsTerminator = true
+            case "fallthrough"
+                compileFallthrough(currentBlock, codeData, compiledData, llvmIR)
+                lastIsTerminator = true
+            case "for"
+                compileFor(currentBlock, codeData, compiledData, llvmIR)
+            case "parse"
+                compileParse(currentBlock, codeData, compiledData, llvmIR)
+            case "if"
+                var ifBlocks Array = []
+                for :(loop)
+                    ifBlocks.addItem(currentBlock)
+                    codeIndex++
+                    if codeIndex == code.length~()
+                        end loop
+                    currentBlock = code[codeIndex]
+                    const firstToken Token = currentBlock.line~()[0]
+                    if !(firstToken.text~() == "elif" || firstToken.text~() == "else")
+                        end loop
+                codeIndex--
+                compileIf(ifBlocks, codeData, compiledData, llvmIR)
+            case "next"
+                compileNext(currentBlock, codeData, compiledData, llvmIR)
+                lastIsTerminator = true
+            case "return"
+                compileReturn(currentBlock, codeData, compiledData, llvmIR)
+                lastIsTerminator = true
+            case "switch", "eSwitch", "tSwitch"
+                var switchBlocks Array = []
+                currentBlock.noSubBlocks!()
+                var haveDefault Bool = false
+                for :(loop)
+                    switchBlocks.addItem(currentBlock)
+                    codeIndex++
+                    if codeIndex == code.length~()
+                        end loop
+                    currentBlock = code[codeIndex]
+                    const firstToken Token = currentBlock.line~()[0]
+                    switch firstToken.text~()
+                    case "case"
+                        if haveDefault
+                            errorNotExpectedToken(firstToken, "")
+                        currentBlock.subBlocks!()
+                    case "default"
+                        if haveDefault || switchBlocks.length~() == 1
+                            errorNotExpectedToken(firstToken, "case")
+                        currentBlock.subBlocks!()
+                        currentBlock.eol!(1)
+                        haveDefault = true
+                    default
+                        end loop
+                if switchBlocks.length~() == 1
+                    errorNoCase(switchBlocks[0].line~()[0])
+                codeIndex--
+                switch switchBlocks[0].line~()[0].text~()
+                case "switch"
+                    compileSwitch(switchBlocks, haveDefault, codeData, compiledData, llvmIR)
+                case "tSwitch"
+                    compileTypeSwitch(switchBlocks, haveDefault, codeData, compiledData, llvmIR)
+                case "eSwitch"
+                    compileEnumSwitch(switchBlocks, haveDefault, codeData, compiledData, llvmIR)
+            case "test"
+                compileTest(currentBlock, codeData, compiledData, llvmIR)
+            case "try"
+                const tryBlock Block = currentBlock
+                codeIndex++
+                if codeIndex == code.length~()
+                    errorNoCatch(tryBlock.line~()[0])
+                const catchBlock Block = code[codeIndex]
+                compileTryCatch(tryBlock, catchBlock, codeData, compiledData, llvmIR)
+            case "var"
+                compileVariableDefine(currentBlock, codeData, compiledData, llvmIR)
+            case "inthrow"
+                compileInThrow(currentBlock, codeData, compiledData, llvmIR)
+            default
+                if currentBlock.line~().length~() > 1 && currentBlock.line~()[1].text~() == "="
+                    compileVariableSet(currentBlock, codeData, compiledData, llvmIR)
+                else
+                    const operand Operand = compileExpressionFromBlock(currentBlock, codeData, compiledData, llvmIR)
+                    if operand.named?()
+                        errorNotExpectedToken(operand.code~(), "")
+                    operand.freeOperand(codeData, compiledData, llvmIR)
+    return lastIsTerminator
+
+// The function compiles the expression contained in the block.
+def compileExpressionFromBlock(blockWithExpression Block, write codeData CodeData, compiledData CData, write llvmIR String) Operand
+    blockWithExpression.noSubBlocks!()
+    var tokenIndex Int = 0
+    const result Operand = blockWithExpression.getExpression(tokenIndex).compileExpression(const::anyType, codeData, compiledData, [], llvmIR)
+    blockWithExpression.eol!(tokenIndex)
+    return result
+
+// The function creates a new constant in the function.
+def compileConstantDefine(block Block, write codeData CodeData, compiledData CData, write llvmIR String)
+    block.noSubBlocks!()
+    var tokenIndex Int = 1
+    const constantName Token = block.getLowercaseName(tokenIndex, "constant")
+    switch constantName.text~()
+    case "var", "const", "enum", "for", "parse", "if", "elif", "select", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough"
+        errorInvalidName(constantName, "constant")
+    const type OType = block.getOperandType(tokenIndex, !codeData.thisGroup~().empty?()).toFull(compiledData)
+    block.next!(tokenIndex, ["="])
+    var constantValue Operand = block.getExpression(tokenIndex).compileExpression(type, codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
+    block.eol!(tokenIndex)
+    if constantValue.named?()
+        constantValue.useOperand(codeData, compiledData, llvmIR)
+    if constantValue.Main::constant?() && constantValue.type~().typeEq?(type, true)
+        constantValue.code`(constantName)
+        constantValue.named`(true)
+        constantValue.used`(false)
+    else
+        constantValue = operand{
+            (constantName,
+            enum::access_read,
+            constantValue.value~(),
+            type,
+            false, false, true, false)
+        }
+    var namedOperands Map = codeData.namedOperands`(nothing)
+    if !namedOperands.put(constantName.text~(), namedOperand(codeData.level~(), constantValue)).nothing?()
+        errorAlreadyExist(constantName, "constant")
+    namedOperands.put(constantName.text~(), namedOperand(codeData.level~(), constantValue))
+    codeData.namedOperands`(namedOperands)
+
+// The function creates a new variable in the function.
+def compileVariableDefine(block Block, write codeData CodeData, compiledData CData, write llvmIR String)
+    block.noSubBlocks!()
+    var tokenIndex Int = 1
+    const variableName Token = block.getLowercaseName(tokenIndex, "variable")
+    switch variableName.text~()
+    case "var", "const", "enum", "for", "parse", "if", "elif", "select", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough"
+        errorInvalidName(variableName, "variable")
+    const type OType = block.getOperandType(tokenIndex, !codeData.thisGroup~().empty?()).toFull(compiledData)
+    block.next!(tokenIndex, ["="])
+    var variableValue Operand = block.getExpression(tokenIndex).compileExpression(type, codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
+    block.eol!(tokenIndex)
+    if variableValue.named?()
+        variableValue.useOperand(codeData, compiledData, llvmIR)
+    const mutableRegister String = codeData.newAlloc()
+    llvmIR += "\tstore [2 x i64] " + variableValue.value~() + ", [2 x i64]* " + mutableRegister + ", align 8\n"
+    var namedOperands Map = codeData.namedOperands`(nothing)
+    if !namedOperands.put{
+        (variableName.text~(),
+        namedOperand(codeData.level~(),
+        operand(
+            variableName,
+            enum::access_write,
+            mutableRegister,
+            type,
+            false, false, true, false
+        ))).nothing?()
+    }
+        errorAlreadyExist(variableName, "variable")
+    codeData.namedOperands`(namedOperands)
+
+// The function compiles the 'end' statement.
+def compileEnd(block Block, write codeData CodeData, compiledData CData, write llvmIR String)
+    block.noSubBlocks!()
+    var tokenIndex Int = 1
+    const name Token = block.next(tokenIndex)
+    block.eol!(tokenIndex)
+    const label <>Label = codeData.endLabels~()[name.text~()]
+    if label.nothing?()
+        errorNotFound(name, "operator")
+    codeData.freeLevel(label.level~(), compiledData, llvmIR)
+    llvmIR += "\tbr label %##reg##" + label.label~() + "##\n"
+
+// The function compiles the 'fallthrough' statement.
+def compileFallthrough(block Block, write codeData CodeData, compiledData CData, write llvmIR String)
+    block.noSubBlocks!()
+    var tokenIndex Int = 1
+    const name Token = block.next(tokenIndex)
+    block.eol!(tokenIndex)
+    const label <>Label = codeData.fallthroughLabels~()[name.text~()]
+    if label.nothing?()
+        errorNotFound(name, "operator")
+    codeData.freeLevel(label.level~(), compiledData, llvmIR)
+    llvmIR += "\tbr label %##reg##" + label.label~() + "##\n"
+
+// The function compiles the 'next' statement.
+def compileNext(block Block, write codeData CodeData, compiledData CData, write llvmIR String)
+    block.noSubBlocks!()
+    var tokenIndex Int = 1
+    const name Token = block.next(tokenIndex)
+    block.eol!(tokenIndex)
+    const label <>Label = codeData.nextLabels~()[name.text~()]
+    if label.nothing?()
+        errorNotFound(name, "operator")
+    codeData.freeLevel(label.level~(), compiledData, llvmIR)
+    llvmIR += "\tbr label %##reg##" + label.label~() + "##\n"
+
+// The function compiles the 'for' statement.
+def compileFor(block Block, write codeData CodeData, compiledData CData, write llvmIR String)
+    var tokenIndex Int = 1
+    var forName Token = const::emptyToken
+    codeData.level`(codeData.level~() + 1)
+    var haveVariable Bool = false
+    if block.next?(tokenIndex, [":"])
+        block.next!(tokenIndex, ["("])
+        forName = block.getLowercaseName(tokenIndex, "for")
+        haveVariable = !block.next?(tokenIndex, [")"])
+        if haveVariable
+            const type OType = block.getOperandType(tokenIndex, !codeData.thisGroup~().empty?()).toFull(compiledData)
+            block.next!(tokenIndex, ["="])
+            const value Operand = block.getExpression(tokenIndex).compileExpression(type, codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
+            block.next!(tokenIndex, [")"])
+            if value.named?()
+                value.useOperand(codeData, compiledData, llvmIR)
+            const mutableRegister String = codeData.newAlloc()
+            llvmIR += "\tstore [2 x i64] " + value.value~() + ", [2 x i64]* " + mutableRegister + ", align 8\n"
+            var namedOperands Map = codeData.namedOperands`(nothing)
+            if !namedOperands.put{
+                (forName.text~(),
+                namedOperand(codeData.level~(),
+                operand(
+                    forName,
+                    enum::access_write,
+                    mutableRegister,
+                    type,
+                    false, false, true, false
+                ))).nothing?()
+            }
+                errorAlreadyExist(forName, "variable")
+            codeData.namedOperands`(namedOperands)
+            codeData.level`(codeData.level~() + 1)
+    const forStartLabel String = codeData.createLabel()
+    const codeStartLabel String = codeData.createLabel()
+    const nextLabel String = codeData.createLabel()
+    const endLabel String = codeData.createLabel()
+    if !forName.empty?()
+        var endLabels Map = codeData.endLabels`(nothing)
+        if !endLabels.put(forName.text~(), label(endLabel, codeData.level~())).nothing?()
+            errorAlreadyExist(forName, "operator")
+        codeData.endLabels`(endLabels)
+        var nextLabels Map = codeData.nextLabels`(nothing)
+        if !nextLabels.put(forName.text~(), label(nextLabel, codeData.level~())).nothing?()
+            errorAlreadyExist(forName, "operator")
+        codeData.nextLabels`(nextLabels)
+    llvmIR += "\tbr label %##reg##" + forStartLabel + "##\n\t##nreg##" + forStartLabel + "##:\n"
+    if block.eol?(tokenIndex)
+        llvmIR += "\tbr label %##reg##" + codeStartLabel + "##\n"
+    else
+        const predicate Operand = block.getExpression(tokenIndex).compileExpression(const::boolType, codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
+        const predicateI64Register String = codeData.createRegister("extractvalue [2 x i64] " + predicate.value~() + ", 1", llvmIR)
+        const predicateI1Register String = codeData.createRegister("trunc i64 " + predicateI64Register + " to i1", llvmIR)
+        llvmIR += "\tbr i1 " + predicateI1Register + ", label %##reg##" + codeStartLabel + "##, label %##reg##" + endLabel + "##\n"
+    llvmIR += "\t##nreg##" + codeStartLabel + "##:\n"
+    var lastIsTerminator Bool = false
+    if !block.subBlocks~().empty?()
+        lastIsTerminator = compileCode(block.subBlocks~(), codeData, compiledData, llvmIR)
+    if !forName.empty?()
+        var endLabels Map = codeData.endLabels`(nothing)
+        endLabels.put(forName.text~(), nothing)
+        codeData.endLabels`(endLabels)
+        var nextLabels Map = codeData.nextLabels`(nothing)
+        nextLabels.put(forName.text~(), nothing)
+        codeData.nextLabels`(nextLabels)
+    if !lastIsTerminator
+        codeData.freeLevel(codeData.level~(), compiledData, llvmIR)
+        llvmIR += "\tbr label %##reg##" + nextLabel + "##\n"
+    codeData.deleteLevel(codeData.level~())
+    llvmIR += "\t##nreg##" + nextLabel + "##:\n"
+    if block.next?(tokenIndex, [";"])
+        block.getExpression(tokenIndex).compileExpression(const::anyType, codeData, compiledData, [], llvmIR).freeOperand(codeData, compiledData, llvmIR)
+    block.eol!(tokenIndex)
+    llvmIR += "\tbr label %##reg##" + forStartLabel + "##\n\t##nreg##" + endLabel + "##:\n"
+    if haveVariable
+        codeData.freeLevel(codeData.level~(), compiledData, llvmIR)
+        codeData.deleteLevel(codeData.level~())
+
+// The function compiles the 'parse' statement.
+def compileParse(block Block, write codeData CodeData, compiledData CData, write llvmIR String)
+    block.subBlocks!()
+    var tokenIndex Int = 1
+    var parseName Token = const::emptyToken
+    if block.next?(tokenIndex, [":"])
+        block.next!(tokenIndex, ["("])
+        parseName = block.getLowercaseName(tokenIndex, "parse")
+        block.next!(tokenIndex, [")"])
+    const keyName Token = block.next?(tokenIndex, ["_"]).select(const::emptyToken, block.getLowercaseName(tokenIndex, "constant"))
+    block.next!(tokenIndex, [","])
+    const itemName Token = block.next?(tokenIndex, ["_"]).select(const::emptyToken, block.getLowercaseName(tokenIndex, "constant"))
+    block.next!(tokenIndex, ["="])
+    codeData.level`(codeData.level~() + 1)
+    var parsedOperand Operand = block.getExpression(tokenIndex).compileExpression(oType([const::emptyToken.replaceText("STD::Any"), const::emptyToken.replaceText("STD::Iterable")], false), codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
+    if parsedOperand.named?()
+        parsedOperand.useOperand(codeData, compiledData, llvmIR)
+    else
+        parsedOperand.named`(true)
+    parsedOperand.used`(true)
+    block.eol!(tokenIndex)
+    const parsedHideName String = parsedOperand.code~().getUniqID()
+    var namedOperands Map = codeData.namedOperands`(nothing)
+    namedOperands.put(parsedHideName, namedOperand(codeData.level~(), parsedOperand))
+    codeData.namedOperands`(namedOperands)
+    var hiddenIndex Operand = callFunction(const::emptyToken.replaceText("STD::parse__init"), [parsedOperand], codeData, compiledData, [], false, llvmIR)
+    const hiddenIndexVariableName String = parsedHideName + ".index"
+    const indexMutableRegister String = codeData.newAlloc()
+    llvmIR += "\tstore [2 x i64] " + hiddenIndex.value~() + ", [2 x i64]* " + indexMutableRegister + ", align 8\n"
+    hiddenIndex = operand{
+        (const::emptyToken.replaceText(hiddenIndexVariableName),
+        enum::access_write,
+        indexMutableRegister,
+        hiddenIndex.type~(),
+        false, true, true, false)
+    }
+    namedOperands = codeData.namedOperands`(nothing)
+    namedOperands.put(hiddenIndexVariableName, namedOperand(codeData.level~(), hiddenIndex))
+    codeData.namedOperands`(namedOperands)
+    codeData.level`(codeData.level~() + 1)
+    const parseStartLabel String = codeData.createLabel()
+    const codeStartLabel String = codeData.createLabel()
+    const nextLabel String = codeData.createLabel()
+    const endLabel String = codeData.createLabel()
+    if !parseName.empty?()
+        var endLabels Map = codeData.endLabels`(nothing)
+        if !endLabels.put(parseName.text~(), label(endLabel, codeData.level~())).nothing?()
+            errorAlreadyExist(parseName, "operator")
+        codeData.endLabels`(endLabels)
+        var nextLabels Map = codeData.nextLabels`(nothing)
+        if !nextLabels.put(parseName.text~(), label(nextLabel, codeData.level~())).nothing?()
+            errorAlreadyExist(parseName, "operator")
+        codeData.nextLabels`(nextLabels)
+    llvmIR += "\tbr label %##reg##" + parseStartLabel + "##\n\t##nreg##" + parseStartLabel + "##:\n"
+    const predicate Operand = callFunction(const::emptyToken.replaceText("STD::parse__predicate"), [parsedOperand, hiddenIndex], codeData, compiledData, [], false, llvmIR)
+    const predicateI64Register String = codeData.createRegister("extractvalue [2 x i64] " + predicate.value~() + ", 1", llvmIR)
+    const predicateI1Register String = codeData.createRegister("trunc i64 " + predicateI64Register + " to i1", llvmIR)
+    llvmIR += "\tbr i1 " + predicateI1Register + ", label %##reg##" + codeStartLabel + "##, label %##reg##" + endLabel + "##\n\t##nreg##" + codeStartLabel + "##:\n"
+    if !keyName.empty?()
+        var key Operand = callFunction(const::emptyToken.replaceText("STD::parse__get__key"), [parsedOperand, hiddenIndex], codeData, compiledData, [], false, llvmIR)
+        key.code`(keyName)
+        key.named`(true)
+        key.used`(false)
+        namedOperands = codeData.namedOperands`(nothing)
+        namedOperands.put(keyName.text~(), namedOperand(codeData.level~(), key))
+        codeData.namedOperands`(namedOperands)
+    if !itemName.empty?()
+        var item Operand = callFunction(const::emptyToken.replaceText("STD::parse__get__item"), [parsedOperand, hiddenIndex], codeData, compiledData, [], false, llvmIR)
+        item.code`(keyName)
+        item.named`(true)
+        item.used`(false)
+        namedOperands = codeData.namedOperands`(nothing)
+        namedOperands.put(itemName.text~(), namedOperand(codeData.level~(), item))
+        codeData.namedOperands`(namedOperands)
+    const lastIsTerminator Bool = compileCode(block.subBlocks~(), codeData, compiledData, llvmIR)
+    if !parseName.empty?()
+        var endLabels Map = codeData.endLabels`(nothing)
+        endLabels.put(parseName.text~(), nothing)
+        codeData.endLabels`(endLabels)
+        var nextLabels Map = codeData.nextLabels`(nothing)
+        nextLabels.put(parseName.text~(), nothing)
+        codeData.nextLabels`(nextLabels)
+    if !lastIsTerminator
+        codeData.freeLevel(codeData.level~(), compiledData, llvmIR)
+        llvmIR += "\tbr label %##reg##" + nextLabel + "##\n"
+    codeData.deleteLevel(codeData.level~())
+    llvmIR += "\t##nreg##" + nextLabel + "##:\n"
+    callFunction(const::emptyToken.replaceText("STD::parse__next"), [parsedOperand, hiddenIndex], codeData, compiledData, [], false, llvmIR)
+    llvmIR += "\tbr label %##reg##" + parseStartLabel + "##\n\t##nreg##" + endLabel + "##:\n"
+    codeData.freeLevel(codeData.level~(), compiledData, llvmIR)
+    codeData.deleteLevel(codeData.level~())
+
+// The function compiles the 'if' statement.
+def compileIf(ifBlocks Array, write codeData CodeData, compiledData CData, write llvmIR String)
+    var trueLabel String = ""
+    var falseLabel String = ""
+    const endLabel String = codeData.createLabel()
+    parse blockIndex, block = ifBlocks
+        block.subBlocks!()
+        var tokenIndex Int = 1
+        var predicate String = ""
+        const firstToken Token = block.line~()[0]
+        switch firstToken.text~()
+        case "if", "elif"
+            if firstToken.text~() == "if" && blockIndex != 0
+                errorNotExpectedToken(firstToken, "else")
+            const predicateOperand Operand = block.getExpression(tokenIndex).compileExpression(const::boolType, codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
+            block.eol!(tokenIndex)
+            predicate = predicateOperand.value~()
+            trueLabel = codeData.createLabel()
+            falseLabel = (blockIndex + 1 == ifBlocks.length~()).select(endLabel, codeData.createLabel())
+        case "else"
+            if blockIndex + 1 != ifBlocks.length~()
+                errorNotExpectedToken(firstToken, "elif")
+            block.eol!(1)
+            falseLabel = endLabel
+        default
+            errorNotExpectedToken(firstToken, "else")
+        if !predicate.empty?()
+            predicate = codeData.createRegister("extractvalue [2 x i64] " + predicate + ", 1", llvmIR)
+            predicate = codeData.createRegister("trunc i64 " + predicate + " to i1", llvmIR)
+            llvmIR += "\tbr i1 " + predicate + ", label %##reg##" + trueLabel + "##, label %##reg##" + falseLabel + "##\n\t##nreg##" + trueLabel + "##:\n"
+        codeData.level`(codeData.level~() + 1)
+        const lastIsTerminator Bool = compileCode(block.subBlocks~(), codeData, compiledData, llvmIR)
+        if !lastIsTerminator
+            codeData.freeLevel(codeData.level~(), compiledData, llvmIR)
+            llvmIR += "\tbr label %##reg##" + endLabel + "##\n"
+        codeData.deleteLevel(codeData.level~())
+        llvmIR += "\t##nreg##" + falseLabel + "##:\n"
+
+// The function compiles the 'return' statement.
+def compileReturn(block Block, write codeData CodeData, compiledData CData, write llvmIR String)
+    block.noSubBlocks!()
+    var tokenIndex Int = 1
+    var returnLLVMValue String = ""
+    var enslavedOperand NamedOperand = NamedOperand.fromList({})
+    if block.eol?(tokenIndex) && codeData.resultType~().nothingType?()
+        returnLLVMValue = "zeroinitializer"
+    else
+        const returnValue Operand = block.getExpression(tokenIndex).compileExpression(codeData.resultType~(), codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
+        block.eol!(tokenIndex)
+        if returnValue.named?()
+            if returnValue.argument?()
+                returnValue.useOperand(codeData, compiledData, llvmIR)
+            else
+                var namedOperands Map = codeData.namedOperands`(nothing)
+                enslavedOperand = namedOperands.put(returnValue.code~().text~(), nothing)
+                codeData.namedOperands`(namedOperands)
+        returnLLVMValue = returnValue.value~()
+    codeData.freeLevel(1, compiledData, llvmIR)
+    llvmIR += "\tret [2 x i64] " + returnLLVMValue + "\n"
+    if !enslavedOperand.toList().empty?()
+        var namedOperands Map = codeData.namedOperands`(nothing)
+        namedOperands.put(enslavedOperand.operand~().code~().text~(), enslavedOperand)
+        codeData.namedOperands`(namedOperands)
+
+// The function compiles the 'switch' statement.
+def compileSwitch(switchBlocks Array, haveDefault Bool, write codeData CodeData, compiledData CData, write llvmIR String)
+    const switchBlock Block = switchBlocks[0]
+    var tokenIndex Int = 1
+    var switchName Token = const::emptyToken
+    if switchBlock.next?(tokenIndex, [":"])
+        switchBlock.next!(tokenIndex, ["("])
+        switchName = switchBlock.getLowercaseName(tokenIndex, "switch")
+        switchBlock.next!(tokenIndex, [")"])
+    switchBlocks[1].notEOL!(1)
+    var expectedType OType = OType.fromList({})
+    // 1 - int
+    // 2 - string
+    // 3 - char
+    var expectedTypeAsInt Int = 0
+    switch switchBlocks[1].line~()[1][0]
+    case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '+'
+        expectedType = const::intType
+        expectedTypeAsInt = 1
+    case '\q'
+        expectedType = const::stringType
+        expectedTypeAsInt = 2
+    case '\p'
+        expectedType = const::charType
+        expectedTypeAsInt = 3
+    default
+        errorNotExpectedToken(switchBlocks[1].line~()[1], "")
+    const operand Operand = switchBlock.getExpression(tokenIndex).compileExpression(expectedType, codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
+    switchBlock.eol!(tokenIndex)
+    const endLabel String = codeData.createLabel()
+    var labels Array = []
+    const casesBlocks Array = switchBlocks[1 : switchBlocks.length~()]
+    parse _, _ = casesBlocks
+        labels.addItem(codeData.createLabel())
+    switch expectedTypeAsInt
+    case 1
+        createIntSwitch(casesBlocks, operand, haveDefault, labels, endLabel, codeData, llvmIR)
+    case 2
+        createStringSwitch(casesBlocks, operand, haveDefault, labels, endLabel, codeData, llvmIR)
+        if !operand.named?()
+            codeData.level`(codeData.level~() + 1)
+            const stringUniqName String = operand.code~().getUniqID()
+            var namedOperands Map = codeData.namedOperands`(nothing)
+            namedOperands.put(stringUniqName, namedOperand(codeData.level~(), operand))
+            codeData.namedOperands`(namedOperands)
+    case 3
+        createCharSwitch(casesBlocks, operand, haveDefault, labels, endLabel, codeData, llvmIR)
+    if !switchName.empty?()
+        var endLabels Map = codeData.endLabels`(nothing)
+        if !endLabels.put(switchName.text~(), label(endLabel, codeData.level~() + 1)).nothing?()
+            errorAlreadyExist(switchName, "operator")
+        codeData.endLabels`(endLabels)
+    parse caseIndex, caseBlock = casesBlocks
+        codeData.level`(codeData.level~() + 1)
+        const allowFallthrough Bool = !switchName.empty?() && caseIndex + 1 != casesBlocks.length~()
+        if allowFallthrough
+            var fallthroughLabels Map = codeData.fallthroughLabels`(nothing)
+            fallthroughLabels.put(switchName.text~(), label(labels[caseIndex + 1], codeData.level~()))
+            codeData.fallthroughLabels`(fallthroughLabels)
+        llvmIR += "\t##nreg##" + labels[caseIndex] + "##:\n"
+        const lastIsTerminator Bool = compileCode(caseBlock.subBlocks~(), codeData, compiledData, llvmIR)
+        if !lastIsTerminator
+            codeData.freeLevel(codeData.level~(), compiledData, llvmIR)
+            llvmIR += "\tbr label %##reg##" + endLabel + "##\n"
+        codeData.deleteLevel(codeData.level~())
+        if allowFallthrough
+            var fallthroughLabels Map = codeData.fallthroughLabels`(nothing)
+            fallthroughLabels.put(switchName.text~(), nothing)
+            codeData.fallthroughLabels`(fallthroughLabels)
+    llvmIR += "\t##nreg##" + endLabel + "##:\n"
+    if !switchName.empty?()
+        var endLabels Map = codeData.endLabels`(nothing)
+        endLabels.put(switchName.text~(), nothing)
+        codeData.endLabels`(endLabels)
+    if expectedTypeAsInt == 2 && !operand.named?()
+        codeData.freeLevel(codeData.level~(), compiledData, llvmIR)
+        codeData.deleteLevel(codeData.level~())
+
+// The function compiles the 'tSwitch' statement.
+def compileTypeSwitch(switchBlocks Array, haveDefault Bool, write codeData CodeData, compiledData CData, write llvmIR String)
+    const switchBlock Block = switchBlocks[0]
+    var tokenIndex Int = 1
+    var switchName Token = const::emptyToken
+    if switchBlock.next?(tokenIndex, [":"])
+        switchBlock.next!(tokenIndex, ["("])
+        switchName = switchBlock.getLowercaseName(tokenIndex, "switch")
+        switchBlock.next!(tokenIndex, [")"])
+    const operand Operand = switchBlock.getExpression(tokenIndex).compileExpression(const::anyType, codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
+    switchBlock.eol!(tokenIndex)
+    if !operand.named?()
+        operand.freeOperand(codeData, compiledData, llvmIR)
+    const endLabel String = codeData.createLabel()
+    if !switchName.empty?()
+        var endLabels Map = codeData.endLabels`(nothing)
+        if !endLabels.put(switchName.text~(), label(endLabel, codeData.level~() + 1)).nothing?()
+            errorAlreadyExist(switchName, "operator")
+        codeData.endLabels`(endLabels)
+    var labels Array = []
+    var allTypes Array = []
+    const casesBlocks Array = switchBlocks[1 : switchBlocks.length~()]
+    var casesLabelsIndexes Array = []
+    parse caseIndex, caseBlock = casesBlocks
+        labels.addItem(codeData.createLabel())
+        if !(caseIndex + 1 == casesBlocks.length~() && haveDefault)
+            tokenIndex = 1
+            for :(loop)
+                if caseBlock.next?(tokenIndex, ["<>", "$"])
+                    errorNotExpectedToken(caseBlock.line~()[tokenIndex - 1], "")
+                const typeToken Token = caseBlock.getOperandType(tokenIndex, false).toFull(compiledData).oTypeToToken(false)
+                parse _, existedType = allTypes
+                    if existedType == typeToken.text~()
+                        errorAlreadyExist(typeToken, "case")
+                allTypes.addItem(typeToken.text~())
+                casesLabelsIndexes.addItem(caseIndex)
+                if caseBlock.eol?(tokenIndex)
+                    end loop
+                caseBlock.next!(tokenIndex, [","])
+    const operandTypeNumber String = codeData.createRegister("extractvalue [2 x i64] " + operand.value~() + ", 0", llvmIR)
+    llvmIR += "\tswitch i64 " + operandTypeNumber + ", label %##reg##" + haveDefault.select(labels[labels.length~() - 1], endLabel) + "## [\n"
+    parse caseIndex, caseType = allTypes
+        llvmIR += "\t\ti64 ##tnum##" + caseType + "##, label %##reg##" + labels[casesLabelsIndexes[caseIndex]] + "##\n"
+    llvmIR += "\t]\n"
+    parse caseIndex, caseBlock = casesBlocks
+        codeData.level`(codeData.level~() + 1)
+        const allowFallthrough Bool = !switchName.empty?() && caseIndex + 1 != casesBlocks.length~()
+        if allowFallthrough
+            var fallthroughLabels Map = codeData.fallthroughLabels`(nothing)
+            fallthroughLabels.put(switchName.text~(), label(labels[caseIndex + 1], codeData.level~()))
+            codeData.fallthroughLabels`(fallthroughLabels)
+        llvmIR += "\t##nreg##" + labels[caseIndex] + "##:\n"
+        const lastIsTerminator Bool = compileCode(caseBlock.subBlocks~(), codeData, compiledData, llvmIR)
+        if !lastIsTerminator
+            codeData.freeLevel(codeData.level~(), compiledData, llvmIR)
+            llvmIR += "\tbr label %##reg##" + endLabel + "##\n"
+        codeData.deleteLevel(codeData.level~())
+        if allowFallthrough
+            var fallthroughLabels Map = codeData.fallthroughLabels`(nothing)
+            fallthroughLabels.put(switchName.text~(), nothing)
+            codeData.fallthroughLabels`(fallthroughLabels)
+    llvmIR += "\t##nreg##" + endLabel + "##:\n"
+    if !switchName.empty?()
+        var endLabels Map = codeData.endLabels`(nothing)
+        endLabels.put(switchName.text~(), nothing)
+        codeData.endLabels`(endLabels)
+
+// The function compiles the 'eSwitch' statement.
+def compileEnumSwitch(switchBlocks Array, haveDefault Bool, write codeData CodeData, compiledData CData, write llvmIR String)
+    const switchBlock Block = switchBlocks[0]
+    var tokenIndex Int = 1
+    var switchName Token = const::emptyToken
+    if switchBlock.next?(tokenIndex, [":"])
+        switchBlock.next!(tokenIndex, ["("])
+        switchName = switchBlock.getLowercaseName(tokenIndex, "switch")
+        switchBlock.next!(tokenIndex, [")"])
+    const operand Operand = switchBlock.getExpression(tokenIndex).compileExpression(oType(const::emptyToken.replaceText("STD::Int"), false), codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
+    switchBlock.eol!(tokenIndex)
+    const endLabel String = codeData.createLabel()
+    if !switchName.empty?()
+        var endLabels Map = codeData.endLabels`(nothing)
+        if !endLabels.put(switchName.text~(), label(endLabel, codeData.level~() + 1)).nothing?()
+            errorAlreadyExist(switchName, "operator")
+        codeData.endLabels`(endLabels)
+    var labels Array = []
+    var enumElements Array = []
+    const casesBlocks Array = switchBlocks[1 : switchBlocks.length~()]
+    var casesLabelsIndexes Array = []
+    parse caseIndex, caseBlock = casesBlocks
+        labels.addItem(codeData.createLabel())
+        if !(caseIndex + 1 == casesBlocks.length~() && haveDefault)
+            tokenIndex = 1
+            for :(loop)
+                const elementNameToken Token = caseBlock.getFullLowercaseName(tokenIndex, "enumeration element")
+                const fullElementName String = compiledData.getEnumElementFullName(elementNameToken, false)
+                if enumElements.contain?(fullElementName)
+                    errorAlreadyExist(elementNameToken, "case")
+                enumElements.addItem(fullElementName)
+                casesLabelsIndexes.addItem(caseIndex)
+                if caseBlock.eol?(tokenIndex)
+                    end loop
+                caseBlock.next!(tokenIndex, [","])
+    const operandAsI64 String = codeData.createRegister("extractvalue [2 x i64] " + operand.value~() + ", 1", llvmIR)
+    llvmIR += "\tswitch i64 " + operandAsI64 + ", label %##reg##" + haveDefault.select(labels[labels.length~() - 1], endLabel) + "## [\n"
+    parse caseIndex, element = enumElements
+        llvmIR += "\t\ti64 ##enum##" + element + "##, label %##reg##" + labels[casesLabelsIndexes[caseIndex]] + "##\n"
+    llvmIR += "\t]\n"
+    parse caseIndex, caseBlock = casesBlocks
+        codeData.level`(codeData.level~() + 1)
+        const allowFallthrough Bool = !switchName.empty?() && caseIndex + 1 != casesBlocks.length~()
+        if allowFallthrough
+            var fallthroughLabels Map = codeData.fallthroughLabels`(nothing)
+            fallthroughLabels.put(switchName.text~(), label(labels[caseIndex + 1], codeData.level~()))
+            codeData.fallthroughLabels`(fallthroughLabels)
+        llvmIR += "\t##nreg##" + labels[caseIndex] + "##:\n"
+        const lastIsTerminator Bool = compileCode(caseBlock.subBlocks~(), codeData, compiledData, llvmIR)
+        if !lastIsTerminator
+            codeData.freeLevel(codeData.level~(), compiledData, llvmIR)
+            llvmIR += "\tbr label %##reg##" + endLabel + "##\n"
+        codeData.deleteLevel(codeData.level~())
+        if allowFallthrough
+            var fallthroughLabels Map = codeData.fallthroughLabels`(nothing)
+            fallthroughLabels.put(switchName.text~(), nothing)
+            codeData.fallthroughLabels`(fallthroughLabels)
+    llvmIR += "\t##nreg##" + endLabel + "##:\n"
+    if !switchName.empty?()
+        var endLabels Map = codeData.endLabels`(nothing)
+        endLabels.put(switchName.text~(), nothing)
+        codeData.endLabels`(endLabels)
+
+// The function compiles the 'test' statement.
+def compileTest(testBlock Block, write codeData CodeData, compiledData CData, write llvmIR String)
+    testBlock.subBlocks!()
+    var tokenIndex Int = 1
+    testBlock.next!(tokenIndex, [":"])
+    const successCounter Operand = testBlock.getExpression(tokenIndex).compileExpression(const::intType, codeData, compiledData, [], llvmIR)
+    if successCounter.access~() != enum::access_write
+        errorWrongAccess(successCounter.code~(), "write", successCounter.access~().accessToString())
+    testBlock.next!(tokenIndex, [","])
+    const errorsCoordinates Operand = testBlock.getExpression(tokenIndex).compileExpression(const::listType, codeData, compiledData, [], llvmIR)
+    if errorsCoordinates.access~() != enum::access_write
+        errorWrongAccess(errorsCoordinates.code~(), "write", errorsCoordinates.access~().accessToString())
+    testBlock.eol!(tokenIndex)
+    parse _, testedExpressionBlock = testBlock.subBlocks~()
+        testedExpressionBlock.noSubBlocks!()
+        tokenIndex = 0
+        const testedExpression Expression = testedExpressionBlock.getExpression(tokenIndex)
+        var expectedErrorCode Token = const::emptyToken
+        if !testedExpressionBlock.eol?(tokenIndex)
+            testedExpressionBlock.next!(tokenIndex, [":"])
+            expectedErrorCode = testedExpressionBlock.next(tokenIndex)
+            testedExpressionBlock.eol!(tokenIndex)
+        const okLabel String = codeData.createLabel()
+        const errorLabel String = codeData.createLabel()
+        const notErrorLabel String = codeData.createLabel()
+        var catchLabels Array = codeData.catchLabels`([])
+        catchLabels.addItem(label(errorLabel, codeData.level~() + 1))
+        codeData.catchLabels`(catchLabels)
+        const expectedType OType = expectedErrorCode.empty?().select(const::boolType, const::anyType)
+        const testedResultOperand Operand = testedExpression.compileExpression(expectedType, codeData, compiledData, [], llvmIR)
+        llvmIR += "\tbr label %##reg##" + okLabel + "##\n\t##nreg##" + okLabel + "##:\n"
+        var testedResultValueI1 String = ""
+        if expectedErrorCode.empty?()
+            var testedResultValueI64 String = ""
+            eSwitch testedResultOperand.access~()
+            case access_write
+                const testedResultValueI64Pointer String = codeData.createRegister("getelementptr [2 x i64], [2 x i64]* " + testedResultOperand.value~() + ", i64 0, i32 1", llvmIR)
+                testedResultValueI64 = codeData.createRegister("load i64, i64* " + testedResultValueI64Pointer + ", align 8", llvmIR)
+            case access_read
+                testedResultValueI64 = codeData.createRegister("extractvalue [2 x i64] " + testedResultOperand.value~() + ", 1", llvmIR)
+            case access_noread
+                errorWrongAccess(testedResultOperand.code~(), "read", "no read")
+            default
+                unreachable()
+            testedResultValueI1 = codeData.createRegister("trunc i64 " + testedResultValueI64 + " to i1", llvmIR)
+        else
+            testedResultOperand.freeOperand(codeData, compiledData, llvmIR)
+        llvmIR += "\tbr label %##reg##" + notErrorLabel + "##\n"
+        catchLabels = codeData.catchLabels`([])
+        catchLabels.delete(catchLabels.length~() - 1, 1)
+        codeData.catchLabels`(catchLabels)
+        llvmIR += "\t##nreg##" + errorLabel + "##:\n"
+        const errorRegister String = codeData.createRegister("load [2 x i64], [2 x i64]* %##reg##0##, align 8", llvmIR)
+        var isExpectedErrorRegister String = ""
+        if !expectedErrorCode.empty?()
+            const errorID String = codeData.createRegister("call [2 x i64] @shar.error.get.id([2 x i64] " + errorRegister + ")", llvmIR)
+            const errorIDRegister String = codeData.createRegister("extractvalue [2 x i64] " + errorID + ", 1", llvmIR)
+            const expectedErrorEnumFullName String = compiledData.getEnumElementFullName(expectedErrorCode, false)
+            isExpectedErrorRegister = codeData.createRegister("icmp eq i64 " + errorIDRegister + ", ##enum##" + expectedErrorEnumFullName + "##", llvmIR)
+        llvmIR += {
+            "\tcall void @shar.error.free([2 x i64] " + errorRegister + ")\n"
+            "\tbr label %##reg##" + notErrorLabel + "##\n"
+            "\t##nreg##" + notErrorLabel + "##:\n"
+        }
+        const testResultOkRegisterValue String = expectedErrorCode.empty?().select{
+            ("phi i1 [" + testedResultValueI1 + ", %##reg##" + okLabel + "##], [0, %##reg##" + errorLabel + "##]",
+            "phi i1 [0, %##reg##" + okLabel + "##], [" + isExpectedErrorRegister + ", %##reg##" + errorLabel + "##]")
+        }
+        const testResultOkRegister String = codeData.createRegister(testResultOkRegisterValue, llvmIR)
+        const successLabel String = codeData.createLabel()
+        const failLabel String = codeData.createLabel()
+        const endLabel String = codeData.createLabel()
+        llvmIR += "\tbr i1 " + testResultOkRegister + ", label %##reg##" + successLabel + "##, label %##reg##" + failLabel + "##\n\t##nreg##" + successLabel + "##:\n"
+        callFunction(const::emptyToken.replaceText("STD::shar__sugar__inc"), [successCounter], codeData, compiledData, [], false, llvmIR)
+        llvmIR += "\tbr label %##reg##" + endLabel + "##\n\t##nreg##" + failLabel + "##:\n"
+        const failCoordinates Token = testedResultOperand.code~()
+        const failFileOperand Operand = stringToOperand(failCoordinates.replaceText(failCoordinates.fileName~()))
+        const lineToken Token = failCoordinates.replaceText((failCoordinates.lineIndex~() + 1).toString())
+        const failLineOperand Operand = operand{
+            (lineToken,
+            enum::access_read,
+            "[i64 ##tnum##STD::Int##, i64 " + integerToLLVMI64(lineToken) + "]",
+            const::intType,
+            true, true, false, false)
+        }
+        callFunction(const::emptyToken.replaceText("STD::addItem"), [errorsCoordinates, failFileOperand], codeData, compiledData, [], false, llvmIR)
+        callFunction(const::emptyToken.replaceText("STD::addItem"), [errorsCoordinates, failLineOperand], codeData, compiledData, [], false, llvmIR)
+        llvmIR += "\tbr label %##reg##" + endLabel + "##\n\t##nreg##" + endLabel + "##:\n"
+
+// The function compiles the 'try' statement.
+def compileTryCatch(tryBlock, catchBlock Block, write codeData CodeData, compiledData CData, write llvmIR String)
+    tryBlock.subBlocks!()
+    catchBlock.subBlocks!()
+    tryBlock.eol!(1)
+    const catchLabel String = codeData.createLabel()
+    const endLabel String = codeData.createLabel()
+    codeData.level`(codeData.level~() + 1)
+    var catchLabels Array = codeData.catchLabels`([])
+    catchLabels.addItem(label(catchLabel, codeData.level~()))
+    codeData.catchLabels`(catchLabels)
+    var lastIsTerminator Bool = compileCode(tryBlock.subBlocks~(), codeData, compiledData, llvmIR)
+    if !lastIsTerminator
+        codeData.freeLevel(codeData.level~(), compiledData, llvmIR)
+        llvmIR += "\tbr label %##reg##" + endLabel + "##\n"
+    codeData.deleteLevel(codeData.level~())
+    catchLabels = codeData.catchLabels`([])
+    catchLabels.delete(catchLabels.length~() - 1, 1)
+    codeData.catchLabels`(catchLabels)
+    llvmIR += "\t##nreg##" + catchLabel + "##:\n"
+    var tokenIndex Int = 0
+    catchBlock.next!(tokenIndex, ["catch"])
+    const errorRegister String = codeData.createRegister("load [2 x i64], [2 x i64]* %##reg##0##, align 8", llvmIR)
+    var idName Token = const::emptyToken
+    var messageName Token = const::emptyToken
+    if !catchBlock.eol?(1)
+        if !catchBlock.next?(tokenIndex, ["_"])
+            idName = catchBlock.getLowercaseName(tokenIndex, "constant")
+        catchBlock.next!(tokenIndex, [","])
+        if !catchBlock.next?(tokenIndex, ["_"])
+            messageName = catchBlock.getLowercaseName(tokenIndex, "constant")
+        catchBlock.eol!(tokenIndex)
+    codeData.level`(codeData.level~() + 1)
+    if !idName.empty?()
+        const idRegister String = codeData.createRegister("call [2 x i64] @shar.error.get.id([2 x i64] " + errorRegister + ")", llvmIR)
+        var namedOperands Map = codeData.namedOperands`(nothing)
+        if !namedOperands.put{
+            (idName.text~(), namedOperand(codeData.level~(), operand(
+                idName,
+                enum::access_read,
+                idRegister,
+                const::intType,
+                false, false, true, false
+            ))).nothing?()
+        }
+            errorAlreadyExist(idName, "constant")
+        codeData.namedOperands`(namedOperands)
+    if !messageName.empty?()
+        const idRegister String = codeData.createRegister("call [2 x i64] @shar.error.get.message([2 x i64] " + errorRegister + ")", llvmIR)
+        const messageOperand Operand = operand{
+            (messageName,
+            enum::access_read,
+            idRegister,
+            const::stringType,
+            false, false, true, false)
+        }
+        messageOperand.useOperand(codeData, compiledData, llvmIR)
+        var namedOperands Map = codeData.namedOperands`(nothing)
+        if !namedOperands.put(messageName.text~(), namedOperand(codeData.level~(), messageOperand)).nothing?()
+            errorAlreadyExist(messageName, "constant")
+        codeData.namedOperands`(namedOperands)
+    llvmIR += "\tcall void @shar.error.free([2 x i64] " + errorRegister + ")\n"
+    lastIsTerminator = compileCode(catchBlock.subBlocks~(), codeData, compiledData, llvmIR)
+    if !lastIsTerminator
+        codeData.freeLevel(codeData.level~(), compiledData, llvmIR)
+        llvmIR += "\tbr label %##reg##" + endLabel + "##\n"
+    codeData.deleteLevel(codeData.level~())
+    llvmIR += "\t##nreg##" + endLabel + "##:\n"
+
+// The function compiles the code that is executed if the function can return an error.
+def compileInThrow(block Block, write codeData CodeData, compiledData CData, write llvmIR String)
+    block.subBlocks~()
+    block.eol!(1)
+    const runLabel String = codeData.createLabel()
+    const endLabel String = codeData.createLabel()
+    llvmIR += "\tbr i1 ##flag##nothrow##, label %##reg##" + endLabel + "##, label %##reg##" + runLabel + "##\n\t##nreg##" + runLabel + "##:\n"
+    codeData.level`(codeData.level~() + 1)
+    const lastIsTerminator Bool = compileCode(block.subBlocks~(), codeData, compiledData, llvmIR)
+    if !lastIsTerminator
+        codeData.freeLevel(codeData.level~(), compiledData, llvmIR)
+        llvmIR += "\tbr label %##reg##" + endLabel + "##\n"
+    codeData.deleteLevel(codeData.level~())
+    llvmIR += "\t##nreg##" + endLabel + "##:\n"
+
+// The function assigns a new value to an existing variable.
+def compileVariableSet(block Block, write codeData CodeData, compiledData CData, write llvmIR String)
+    block.noSubBlocks!()
+    var tokenIndex Int = 0
+    const variableName Token = block.getLowercaseName(tokenIndex, "variable")
+    const variableOperand <>NamedOperand = codeData.namedOperands~()[variableName.text~()]
+    if variableOperand.nothing?() || variableOperand.operand~().access~() != enum::access_write
+        errorNotFound(variableName, "variable")
+    tokenIndex++
+    const variableValue Operand = block.getExpression(tokenIndex).compileExpression(variableOperand.operand~().type~(), codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
+    block.eol!(tokenIndex)
+    if variableValue.code~() == variableName
+        warningVarSetItself(variableName)
+        return
+    if variableValue.named?()
+        variableValue.useOperand(codeData, compiledData, llvmIR)
+    variableOperand.operand~().freeOperand(codeData, compiledData, llvmIR)
+    llvmIR += "\tstore [2 x i64] " + variableValue.value~() + ", [2 x i64]* " + variableOperand.operand~().value~() + ", align 8\n"
+
+// The function creates a llvm ir "switch" statement for the type "STD::Int".
+def createIntSwitch(casesBlocks Array, operand Operand, haveDefault Bool, labels Array, endLabel String, write codeData CodeData, write llvmIR String)
+    const operandValue String = codeData.createRegister("extractvalue [2 x i64] " + operand.value~() + ", 1", llvmIR)
+    llvmIR += "\tswitch i64 " + operandValue + ", label "
+    const caseIndexEdge Int = casesBlocks.length~() + haveDefault.select(-1, 0)
+    llvmIR += "%##reg##" + haveDefault.select(labels[labels.length~() - 1], endLabel) + "## [\n"
+    var casesNumbers Array = []
+    var casesLabelsIndexes Array = []
+    for :(caseIndex Int = 0) caseIndex < caseIndexEdge; caseIndex++
+        const caseBlock Block = casesBlocks[caseIndex]
+        var tokenIndex Int = 1
+        for :(loop)
+            const numberToken Token = caseBlock.next(tokenIndex)
+            var number Int = 0
+            try
+                if numberToken.text~().contain?('x')
+                    number = hexToInt(numberToken.text~())
+                else
+                    number = Int.fromString(numberToken.text~())
+            catch
+                errorNotExpectedToken(numberToken, "")
+            if casesNumbers.contain?(number)
+                errorAlreadyExist(numberToken, "case")
+            casesNumbers.addItem(number)
+            casesLabelsIndexes.addItem(caseIndex)
+            if caseBlock.eol?(tokenIndex)
+                end loop
+            caseBlock.next!(tokenIndex, [","])
+    parse index, number = casesNumbers
+        llvmIR += "\t\ti64 " + number.toString() + ", label %##reg##" + labels[casesLabelsIndexes[index]] + "##\n"
+    llvmIR += "\t]\n"
+
+// The function creates a llvm ir "switch" statement for the type "STD::String".
+def createStringSwitch(casesBlocks Array, operand Operand, haveDefault Bool, labels Array, endLabel String, write codeData CodeData, write llvmIR String)
+    const caseIndexEdge Int = casesBlocks.length~() + haveDefault.select(-1, 0)
+    const defaultOrEndLabel String = haveDefault.select(labels[labels.length~() - 1], endLabel)
+    var casesStrings Array = []
+    var casesLabelsIndexes Array = []
+    for :(caseIndex Int = 0) caseIndex < caseIndexEdge; caseIndex++
+        const caseBlock Block = casesBlocks[caseIndex]
+        var tokenIndex Int = 1
+        for :(loop)
+            const stringToken Token = caseBlock.next(tokenIndex)
+            if stringToken[0] != '\q'
+                errorNotExpectedToken(stringToken, "")
+            const rawString String = stringToken.toRawString()
+            if casesStrings.contain?(rawString)
+                errorAlreadyExist(stringToken, "case")
+            casesStrings.addItem(rawString)
+            casesLabelsIndexes.addItem(caseIndex)
+            if caseBlock.eol?(tokenIndex)
+                end loop
+            caseBlock.next!(tokenIndex, [","])
+    // Map(Int, [label switch of one length, |string, label of case code |...])
+    var casesByLength Map = Map.createEmpty()
+    var lengths Array = []
+    parse caseIndex, rawString = casesStrings
+        const currentLabel String = labels[casesLabelsIndexes[caseIndex]]
+        const currentLength Int = rawString.length~()
+        var allCasesWithSameLength <>Array = casesByLength.put(currentLength, [])
+        if allCasesWithSameLength.nothing?()
+            lengths.addItem(currentLength)
+            allCasesWithSameLength = [codeData.createLabel(), rawString, currentLabel]
+        else
+            allCasesWithSameLength += [rawString, currentLabel]
+        casesByLength.put(currentLength, allCasesWithSameLength)
+    lengths.sort(true)
+    const stringPointerAsI64Register String = codeData.createRegister("extractvalue [2 x i64] " + operand.value~() + ", 1", llvmIR)
+    const stringPointerI64Register String = codeData.createRegister("inttoptr i64 " + stringPointerAsI64Register + " to i64*", llvmIR)
+    const stringLengthPointerRegister String = codeData.createRegister("getelementptr i64, i64* " + stringPointerI64Register + ", i64 1", llvmIR)
+    const stringLengthRegister String = codeData.createRegister("load i64, i64* " + stringLengthPointerRegister + ", align 8", llvmIR)
+    const stringPointerI16Register String = codeData.createRegister("inttoptr i64 " + stringPointerAsI64Register + " to i16*", llvmIR)
+    const charsPointerRegister String = codeData.createRegister("getelementptr i16, i16* " + stringPointerI16Register + ", i64 8", llvmIR)
+    llvmIR += "\tswitch i64 " + stringLengthRegister + ", label %##reg##" + defaultOrEndLabel + "## [\n"
+    parse _, length = lengths
+        const stringsWithSameLength Array = casesByLength[length]
+        llvmIR += "\t\ti64 " + length.toString() + ", label %##reg##" + stringsWithSameLength[0] + "##\n"
+    llvmIR += "\t]\n"
+    parse _, length = lengths
+        const stringsWithSameLength Array = casesByLength[length]
+        createLLVMSwitchesForStrings(stringsWithSameLength, defaultOrEndLabel, charsPointerRegister, codeData, llvmIR)
+
+// The function generates llvm ir code that searches for a string unknown at compile time among the strings known at compile time.
+// All lines known at compile time must be of the same length.
+#noinline
+def createLLVMSwitchesForStrings(stringsWithSameLength Array, defaultOrEndLabel, charsPointerRegister String, write codeData CodeData, write llvmIR String)
+    llvmIR += "\t##nreg##" + stringsWithSameLength[0] + "##:\n"
+    const charRegister String = codeData.createRegister("load i16, i16* " + charsPointerRegister + ", align 2", llvmIR)
+    if stringsWithSameLength[1].length~() == 1
+        llvmIR += "\tswitch i16 " + charRegister + ", label %##reg##" + defaultOrEndLabel + "## [\n"
+        for :(stringIndex Int = 1) stringIndex < stringsWithSameLength.length~(); stringIndex += 2
+            llvmIR += "\t\ti16 " + stringsWithSameLength[stringIndex][0].charToInt().toString() + ", label %##reg##" + stringsWithSameLength[stringIndex + 1] + "##\n"
+        llvmIR += "\t]\n"
+    else
+        const nextCharPointerRegister String = codeData.createRegister("getelementptr i16, i16* " + charsPointerRegister + ", i64 1", llvmIR)
+        llvmIR += "\tswitch i16 " + charRegister + ", label %##reg##" + defaultOrEndLabel + "## [\n"
+        var chars String = ""
+        var stringsTailWithSameLength Array = []
+        for :(stringIndex Int = 1) stringIndex < stringsWithSameLength.length~(); stringIndex += 2
+            const string String = stringsWithSameLength[stringIndex]
+            const label String = stringsWithSameLength[stringIndex + 1]
+            const char Char = string[0]
+            const charIndex <>Int = chars.look(char)
+            const tail String = string[1 : string.length~()]
+            if charIndex.nothing?()
+                chars.addItem(char)
+                const charLabel String = codeData.createLabel()
+                llvmIR += "\t\ti16 " + charToInt(char).toString() + ", label %##reg##" + charLabel + "##\n"
+                stringsTailWithSameLength.addItem([charLabel, tail, label])
+            else
+                var stringsWithSameFirstCurrentChar Array = stringsTailWithSameLength.put(charIndex, [])
+                stringsWithSameFirstCurrentChar.addItem(tail)
+                stringsWithSameFirstCurrentChar.addItem(label)
+                stringsTailWithSameLength.put(charIndex, stringsWithSameFirstCurrentChar)
+        llvmIR += "\t]\n"
+        parse _, tails = stringsTailWithSameLength
+            createLLVMSwitchesForStrings(tails, defaultOrEndLabel, nextCharPointerRegister, codeData, llvmIR)
+
+// The function converts a string with reverse sequences into a string with characters created from the specified sequences.
+def toRawString(string Token) String
+    var rawString String = ""
+    var hexChar String = ""
+    for :(index Int = 1) index < string.text~().length~() - 1; index++
+        const char Char = string.text~()[index]
+        switch hexChar.length~()
+        case 0
+            if char == '\\'
+                hexChar = "\\"
+            else
+                rawString.addItem(char)
+        case 1
+            switch char
+            case 'n'
+                hexChar = ""
+                rawString.addItem('\n')
+            case 't'
+                hexChar = ""
+                rawString.addItem('\t')
+            case '\\'
+                hexChar = ""
+                rawString.addItem('\\')
+            case 'q'
+                hexChar = ""
+                rawString.addItem('\q')
+            case 'p'
+                hexChar = ""
+                rawString.addItem('\p')
+            default
+                hexChar.addItem(char)
+        case 4
+            hexChar.copySelf(1, 0, 3)
+            hexChar.setItem(3, char)
+            try
+                rawString.addItem(intToChar(hexToInt(hexChar)))
+            catch
+                errorInvalidString(string)
+            hexChar = ""
+        default
+            hexChar.addItem(char)
+    if !hexChar.empty?()
+        errorInvalidString(string)
+    return rawString
+
+// The function creates a llvm ir "switch" statement for the type "STD::Char".
+def createCharSwitch(casesBlocks Array, operand Operand, haveDefault Bool, labels Array, endLabel String, write codeData CodeData, write llvmIR String)
+    const operandValue String = codeData.createRegister("extractvalue [2 x i64] " + operand.value~() + ", 1", llvmIR)
+    const operandValueI16 String = codeData.createRegister("trunc i64 " + operandValue + " to i16", llvmIR)
+    llvmIR += "\tswitch i16 " + operandValueI16 + ", label "
+    const caseIndexEdge Int = casesBlocks.length~() + haveDefault.select(-1, 0)
+    llvmIR += "%##reg##" + haveDefault.select(labels[labels.length~() - 1], endLabel) + "## [\n"
+    var casesChars Array = []
+    var casesLabelsIndexes Array = []
+    for :(caseIndex Int = 0) caseIndex < caseIndexEdge; caseIndex++
+        const caseBlock Block = casesBlocks[caseIndex]
+        var tokenIndex Int = 1
+        for :(loop)
+            const charToken Token = caseBlock.next(tokenIndex)
+            if charToken[0] != '\p'
+                errorNotExpectedToken(charToken, "")
+            const charAsInt String = charToLLVMI64(charToken)
+            if casesChars.contain?(charAsInt)
+                errorAlreadyExist(charToken, "case")
+            casesChars.addItem(charAsInt)
+            casesLabelsIndexes.addItem(caseIndex)
+            if caseBlock.eol?(tokenIndex)
+                end loop
+            caseBlock.next!(tokenIndex, [","])
+    parse index, char = casesChars
+        llvmIR += "\t\ti16 " + char + ", label %##reg##" + labels[casesLabelsIndexes[index]] + "##\n"
+    llvmIR += "\t]\n"

@@ -1,0 +1,89 @@
+module Main
+
+type Group
+    // export?   Bool
+    // name      Token
+    // subGroups [Token]
+    // functions Map(name String, function GFunction)
+
+attach Group to FieldExport
+    #alwaysinline
+    def export?(group Group) Bool
+        return group.typeGetItem(0)
+
+    #alwaysinline
+    def export`(write group Group, new Bool) Bool
+        return group.typePut(0, new)
+
+attach Group to FieldName
+    #alwaysinline
+    def name~(group Group) Token
+        return group.typeGetItem(1)
+
+    #alwaysinline
+    def name`(write group Group, new <>Token) <>Token
+        return group.typePut(1, new)
+
+attach Group to FieldSubGroups
+    #alwaysinline
+    def subGroups~(group Group) Array
+        return group.typeGetItem(2)
+
+    #alwaysinline
+    def subGroups`(write group Group, new Array) Array
+        return group.typePut(2, new)
+
+attach Group to FieldFunctions
+    #alwaysinline
+    def functions~(group Group) Map
+        return group.typeGetItem(3)
+
+    #alwaysinline
+    def functions`(write group Group, new <>Map) <>Map
+        return group.typePut(3, new)
+
+#alwaysinline
+def group(isExport Bool, name Token, subGroups Array, functions Map) Group
+    return Group.fromList({isExport, name, subGroups, functions})
+
+// A function adds a function to existing functions in a group.
+#alwaysinline
+def addGroupFunction(write group Group, function GFunction)
+    var functions Map = group.functions`(nothing)
+    if !functions.put(function.name~().text~(), function).nothing?()
+        errorAlreadyExist(function.name~(), "function")
+    group.functions`(functions)
+
+// The function compiles the group.
+#alwaysinline
+def compileGroup(group Group, write compiledData CData, write compilingGroups Map)
+    var inProcess Set = Set.createEmpty()
+    compileGroup_helpFunction(group, compiledData, compilingGroups, inProcess, group.name~().replaceText(compiledData.currentModule~() + "::" + group.name~().text~()))
+
+def compileGroup_helpFunction(group Group, write compiledData CData, write compilingGroups Map, write inProcess Set, mainGroupName Token)
+    const groupName String = group.name~().text~()
+    const fullName String = compiledData.currentModule~() + "::" + groupName
+    if compiledData.groupIsExist?(fullName)
+        return
+    if inProcess.add(groupName)
+        errorRecursiveGroup(mainGroupName, fullName)
+    var compiledGroupFunctions Set = Set.createEmpty()
+    parse functionName, _ = group.functions~()
+        compiledGroupFunctions.add(functionName)
+    var compiledGroup CGroup = cGroup(group.export?(), fullName, Set.createEmpty(), compiledGroupFunctions)
+    parse _, subGroupName = group.subGroups~()
+        const subGroup <>Group = compilingGroups[subGroupName.text~()]
+        if !subGroup.nothing?()
+            compileGroup_helpFunction(subGroup, compiledData, compilingGroups, inProcess, mainGroupName)
+        const compiledSubGroup CGroup = compiledData.getGroup(subGroupName, false)
+        if group.export?() && !compiledSubGroup.export?()
+            errorExportGroupRequireNotExportGroup(group.name~(), compiledSubGroup.fullName~())
+        importDataFromGroup(compiledGroup, compiledSubGroup)
+        if compiledGroup.subGroups~()[fullName]
+            errorRecursiveGroup(mainGroupName, compiledSubGroup.fullName~())
+    var allSubGroups Set = compiledGroup.subGroups`(nothing)
+    allSubGroups.add("STD::Any")
+    compiledGroup.subGroups`(allSubGroups)
+    compilingGroups.put(groupName, nothing)
+    inProcess.remove(groupName)
+    compiledData.addCGroup(compiledGroup)

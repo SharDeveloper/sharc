@@ -1,0 +1,181 @@
+module Main
+
+const helpMessage String = {
+    "sharc - compiler for shar programming language.\n"
+    "\t-s FILE_NAMES or --sources FILE_NAMES - specify a list of files with source code. (file names are separated by a space)\n"
+    "\t-m FILE_NAMES or --modules FILE_NAMES - specify a list of files with modules.(file names are separated by a space)\n"
+    "\t-o FILE_NAME or --out FILE_NAME - specify the file with the built project.\n"
+    "\t-t or --throw - compilation is performed ignoring the \qnothrow\q function attribute.\n"
+    "\t-h or --help - show help\n"
+    "\t-v or --version - show version\n\n"
+}
+
+const versionMessage String = "sharc 0.1.0\n"
+
+const command CMDData = getCMDAndData()
+const ignoreNoThrow Bool = const::command.ignoreNoThrow~()
+
+// The command passed by the user to the compiler, as well as the data necessary to execute this command.
+type CMDData
+    // cmd           enum::cmd_*
+    // sources       [String]
+    // modules       [String]
+    // outFile       String
+    // ignoreNoThrow Bool
+
+// Compiler commands.
+enum
+    cmd_noCMD
+    cmd_showHelp
+    cmd_showVersion
+    cmd_compile
+
+// Information about what data is currently being received from the command line.
+enum
+    cr_nothing
+    cr_sources
+    cr_modules
+    cr_out
+
+attach CMDData to FieldCMD
+    #alwaysinline
+    def cmd~(command CMDData) Int
+        return command.typeGetItem(0)
+
+    #alwaysinline
+    def cmd`(write command CMDData, new Int) Int
+        return command.typePut(0, new)
+
+attach CMDData to FieldSources
+    #alwaysinline
+    def sources~(command CMDData) Array
+        return command.typeGetItem(1)
+
+    #alwaysinline
+    def sources`(write command CMDData, new Array) Array
+        return command.typePut(1, new)
+
+attach CMDData to FieldModules
+    #alwaysinline
+    def modules~(command CMDData) Array
+        return command.typeGetItem(2)
+
+    #alwaysinline
+    def modules`(write command CMDData, new Array) Array
+        return command.typePut(2, new)
+
+attach CMDData to FieldOutFile
+    #alwaysinline
+    def outFile~(command CMDData) String
+        return command.typeGetItem(3)
+
+    #alwaysinline
+    def outFile`(write command CMDData, new String) String
+        return command.typePut(3, new)
+
+attach CMDData to FieldIgnoreNoThrow
+    #alwaysinline
+    def ignoreNoThrow~(command CMDData) Bool
+        return command.typeGetItem(4)
+
+    #alwaysinline
+    def ignoreNoThrow`(write command CMDData, new Bool) Bool
+        return command.typePut(4, new)
+
+#alwaysinline
+def cmdData(cmd Int, sources, modules Array, outFile String, ignoreNoThrow Bool) CMDData
+    return CMDData.fromList({cmd, sources, modules, outFile, ignoreNoThrow})
+
+// The function receives the command and data that the user passed to the compiler.
+def getCMDAndData() CMDData
+    var cmd Int = enum::cmd_noCMD
+    var sources Array = []
+    var modules Array = []
+    var outFile String = ""
+    var ignoreNoThrow Bool = false
+    const argumentsCount Int = getCMDLineArgumentsCount() - 1
+    if argumentsCount == 0
+        cmd = enum::cmd_showHelp
+    else
+        var currentlyReceived Int = enum::cr_nothing
+        for :(index Int = 1) index <= argumentsCount; index++
+            const argument String = getCMDLineArgument(index)
+            switch argument
+            case "-h", "--help"
+                if cmd == enum::cmd_noCMD
+                    cmd = enum::cmd_showHelp
+                else
+                    errorArgNotAlone(argument)
+            case "-v", "--version"
+                if cmd == enum::cmd_noCMD
+                    cmd = enum::cmd_showVersion
+                else
+                    errorArgNotAlone(argument)
+            case "-s", "--sources"
+                currentlyReceived = enum::cr_sources
+            case "-m", "--modules"
+                currentlyReceived = enum::cr_modules
+            case "-o", "--out"
+                if !outFile.empty?()
+                    errorArgumentSetTwice(argument)
+                currentlyReceived = enum::cr_out
+            case "-t", "--throw"
+                if ignoreNoThrow
+                    errorArgumentSetTwice(argument)
+                ignoreNoThrow = true
+                currentlyReceived = enum::cr_nothing
+            default
+                if argument[0] == '-' || currentlyReceived == enum::cr_nothing
+                    errorUnknownCMDLineArgument(argument)
+                else
+                    eSwitch currentlyReceived
+                    case cr_sources
+                        sources.addItem(argument)
+                    case cr_modules
+                        modules.addItem(argument)
+                    case cr_out
+                        outFile = argument
+                        currentlyReceived = enum::cr_nothing
+        if cmd == enum::cmd_noCMD
+            if sources.empty?()
+                errorNoSources()
+            if outFile.empty?()
+                errorNoOutputFile()
+            cmd = enum::cmd_compile
+    return cmdData(cmd, sources, modules, outFile, ignoreNoThrow)
+
+// The function executes the command that the user gave to the compiler.
+def runCommand(command CMDData)
+    eSwitch command.cmd~()
+    case cmd_showHelp
+        showHelp()
+    case cmd_showVersion
+        showVersion()
+    case cmd_compile
+        compileProject(command.sources~(), command.modules~(), command.outFile~())
+    default
+        unreachable()
+
+// The function displays help.
+def showHelp()
+    const::helpMessage.print()
+    exit()
+
+// The function displays the compiler version.
+def showVersion()
+    const::versionMessage.print()
+    exit()
+
+// The function compiles the project.
+def compileProject(sources, modules Array, outputFile String)
+    const blocks Array = sources.loadBlocks()
+    const data Data = loadData(blocks)
+    const currentModuleName String = data.currentModule~().text~()
+    if const::ignoreNoThrow && currentModuleName != "Main"
+        errorIgnoreNoThrowInModule()
+    var compiledData CData = modules.loadModules(currentModuleName)
+    data.compileData(compiledData)
+    if currentModuleName == "Main"
+        createProgram(compiledData, outputFile)
+    else
+        createModule(compiledData, outputFile)

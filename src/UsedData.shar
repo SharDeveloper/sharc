@@ -1,0 +1,98 @@
+module Main
+
+// Data used in the program.
+type UsedData
+    // enumerationsElements Map(name String, numberAsString String)
+    // constants            Map(name String, llvmIRAndDeclaration String)
+    // types                Map(name String, numberAsString String)
+    // inGroups             Map(groups String, functionName String)
+    // functions            Map(nameWithVariant String, code String)
+    // llvmConstants        Map(llvmValue String, llvmName String)
+    // llvmDeclares         Map(name String, llvmDeclaration String)
+    // groupsFunctions      Map(functionNameWithVariant String, groupName String)
+    // groupsTypes          Map(groupName String, Set(typeInGroups String))
+
+attach UsedData to FieldEnumerationsElements
+    #alwaysinline
+    def enumerationsElements~(usedData UsedData) Map
+        return usedData.typeGetItem(0)
+
+    #alwaysinline
+    def enumerationsElements`(write usedData UsedData, new <>Map) <>Map
+        return usedData.typePut(0, new)
+
+attach UsedData to FieldConstants
+    #alwaysinline
+    def constants~(usedData UsedData) Map
+        return usedData.typeGetItem(1)
+
+    #alwaysinline
+    def constants`(write usedData UsedData, new <>Map) <>Map
+        return usedData.typePut(1, new)
+
+attach UsedData to FieldTypes
+    #alwaysinline
+    def types~(usedData UsedData) Map
+        return usedData.typeGetItem(2)
+
+    #alwaysinline
+    def types`(write usedData UsedData, new <>Map) <>Map
+        return usedData.typePut(2, new)
+
+attach UsedData to FieldInGroups
+    #alwaysinline
+    def inGroups~(usedData UsedData) Map
+        return usedData.typeGetItem(3)
+
+    #alwaysinline
+    def inGroups`(write usedData UsedData, new <>Map) <>Map
+        return usedData.typePut(3, new)
+
+attach UsedData to FieldFunctions
+    #alwaysinline
+    def functions~(usedData UsedData) Map
+        return usedData.typeGetItem(4)
+
+    #alwaysinline
+    def functions`(write usedData UsedData, new <>Map) <>Map
+        return usedData.typePut(4, new)
+
+attach UsedData to FieldLLVMConstants
+    #alwaysinline
+    def llvmConstants~(usedData UsedData) Map
+        return usedData.typeGetItem(5)
+
+    #alwaysinline
+    def llvmConstants`(write usedData UsedData, new <>Map) <>Map
+        return usedData.typePut(5, new)
+
+attach UsedData to FieldLLVMDeclares
+    #alwaysinline
+    def llvmDeclares~(usedData UsedData) Map
+        return usedData.typeGetItem(6)
+
+    #alwaysinline
+    def llvmDeclares`(write usedData UsedData, new <>Map) <>Map
+        return usedData.typePut(6, new)
+
+attach UsedData to FieldGroupsFunctions
+    #alwaysinline
+    def groupsFunctions~(usedData UsedData) Map
+        return usedData.typeGetItem(7)
+
+    #alwaysinline
+    def groupsFunctions`(write usedData UsedData, new <>Map) <>Map
+        return usedData.typePut(7, new)
+
+attach UsedData to FieldGroupsTypes
+    #alwaysinline
+    def groupsTypes~(usedData UsedData) Map
+        return usedData.typeGetItem(8)
+
+    #alwaysinline
+    def groupsTypes`(write usedData UsedData, new <>Map) <>Map
+        return usedData.typePut(8, new)
+
+#alwaysinline
+def usedData(enumerationsElements, constants, types, inGroups, functions, llvmConstants, llvmDeclares, groupsFunctions, groupsTypes Map) UsedData
+    return UsedData.fromList({enumerationsElements, constants, types, inGroups, functions, llvmConstants, llvmDeclares, groupsFunctions, groupsTypes})
