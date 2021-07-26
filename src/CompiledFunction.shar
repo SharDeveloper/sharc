@@ -55,6 +55,7 @@ def callFunction(functionName Token, arguments Array, write codeData CodeData, c
     var functionIsNoThrow Bool = false
     var typedFunction Bool = false
     var haveFinalSignature Bool = false
+    var isWorker Bool = false
     tSwitch function.finalFunction~()
     case GroupFunctions
         const groupFunctions GroupFunctions = function.finalFunction~()
@@ -100,7 +101,9 @@ def callFunction(functionName Token, arguments Array, write codeData CodeData, c
         haveFinalSignature = true
         const simpleFunction SimpleFunction = function.finalFunction~()
         const signature FSignature = simpleFunction.signature~()
-        functionIsNoThrow = simpleFunction.attributes~().nothrow?()
+        const attributes FAttributes = simpleFunction.attributes~()
+        functionIsNoThrow = attributes.nothrow?()
+        isWorker = attributes.worker?()
         argumentsFromSignature = signature.arguments~()
         resultType = signature.resultType~()
         if arguments.length~() != argumentsFromSignature.length~()
@@ -206,11 +209,22 @@ def callFunction(functionName Token, arguments Array, write codeData CodeData, c
         functionCallPrefix = "ntfunc##"
     else
         functionCallPrefix = "func##"
-    functionCallIRCode = "call [2 x i64] ##" + functionCallPrefix + functionCallIRCode + ")"
-    code.addChar(')')
     llvmIR += assumes
-    const callRegister String = codeData.createRegister(functionCallIRCode, llvmIR)
-    const result Operand = operand(code, enum::access_read, callRegister, resultType, false, true, false, false)
+    if isWorker
+        llvmIR += {
+            "\tcall void @shar__create__worker([2 x i64] ([2 x i64], [2 x i64])* ##" + functionCallPrefix + function.fullName~() +
+            "##, [2 x i64] " + arguments[0].toReadOnly(codeData, llvmIR).value~() +
+            ", [2 x i64] " + arguments[1].toReadOnly(codeData, llvmIR).value~() +
+            ", [2 x i64] ([2 x i64])* ##ancntfunc##STD::shar__rc_free##)\n"
+        }
+    code.addChar(')')
+    const result Operand = operand{
+        (code, enum::access_read,
+        isWorker.select
+            ("zeroinitializer",
+            codeData.createRegister("call [2 x i64] ##" + functionCallPrefix + functionCallIRCode + ")", llvmIR)),
+        resultType, false, true, false, false)
+    }
     if needFreeArguments
         parse index, argument = arguments
             if !argument.named?()

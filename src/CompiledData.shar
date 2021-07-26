@@ -803,7 +803,19 @@ def builtinLLVMDeclaredFunctions() Map
         "shar__load__lib", "declare i1 @shar__load__lib(i64, i16* nocapture readonly, i8** nocapture) local_unnamed_addr nounwind",
         "shar__get__from__lib", "declare i1 @shar__get__from__lib(i64, i16* nocapture readonly, i8*, i8** nocapture) local_unnamed_addr nounwind",
         "shar__unload__lib", "declare i1 @shar__unload__lib(i8*) local_unnamed_addr nounwind",
+        "shar__pipeline__use__counter__inc", "declare void @shar__pipeline__use__counter__inc(i64) local_unnamed_addr nounwind",
+        "shar__pipeline__use__counter__dec", "declare i1 @shar__pipeline__use__counter__dec(i64) local_unnamed_addr nounwind",
+        "shar__pipeline__get__data__for__free", "declare i64 @shar__pipeline__get__data__for__free(i64) local_unnamed_addr norecurse nounwind readonly willreturn",
+        "shar__pipeline__get__count__for__free", "declare i64 @shar__pipeline__get__count__for__free(i64) local_unnamed_addr norecurse nounwind readonly willreturn",
+        "shar__create__pipeline", "declare i64 @shar__create__pipeline() local_unnamed_addr nounwind",
+        "shar__pipeline__push", "declare void @shar__pipeline__push(i64, [2 x i64]) local_unnamed_addr nounwind",
+        "shar__pipeline__pop", "declare [2 x i64] @shar__pipeline__pop(i64) local_unnamed_addr nounwind",
+        "shar__destroy__pipeline", "declare void @shar__destroy__pipeline(i64) local_unnamed_addr nounwind",
+        "shar__create__worker", "declare void @shar__create__worker([2 x i64] ([2 x i64], [2 x i64])*, [2 x i64], [2 x i64], [2 x i64] ([2 x i64])*) local_unnamed_addr nounwind",
+        "shar__yield", "declare void @shar__yield() local_unnamed_addr nounwind",
+        "shar__sleep", "declare void @shar__sleep(i64) local_unnamed_addr nounwind",
         "shar__init", "declare void @shar__init(i32, i8**) local_unnamed_addr nounwind",
+        "shar__enable__threads", "declare void @shar__enable__threads() local_unnamed_addr nofree norecurse nounwind willreturn writeonly",
         "shar__end", "declare void @shar__end() local_unnamed_addr nounwind",
         "shar__exit", "declare void @shar__exit() local_unnamed_addr nounwind cold noreturn",
         "llvm.expect.i1", "declare i1 @llvm.expect.i1(i1, i1)",
@@ -832,6 +844,7 @@ def builtinFunctions(mainFunctionMayThrow Bool) String
         "define i32 @main(i32, i8** nocapture readnone) local_unnamed_addr sspstrong nounwind{\n"
         "\tcall void @shar__init(i32 %0, i8** %1)\n"
         "\tcall void @constnants.init()\n"
+        "\tcall void @shar__enable__threads()\n"
         "\t%3 = call [2 x i64] " + createFunctionLLVMName("Main::main", "", false, mainFunctionMayThrow) + "()\n"
         "\t%4 = extractvalue [2 x i64] %3, 0\n"
         "\t%5 = icmp eq i64 %4, 1\n"
