@@ -61,6 +61,7 @@
         <li><a href="#встроенные_функции">Встроенные функции</a></li>
         <li><a href="#обработка_ошибок">Обработка ошибок</a></li>
         <li><a href="#стд_группы">Некоторые группы из стандартного модуля</a></li>
+        <li><a href="#многопоточность">Многопоточность</a></li>
         <li><a href="#другое">Другое</a></li>
     </ul>
     <div id="синтаксис">
@@ -136,8 +137,12 @@
                     Функция разрешает использовать групповые типы с изменяемыми аргументами. (подробности в разделе <a href="#аргументы_функций">аргументы функций</a>)<br>
                     Данный атрибут является небезопасным и при неправильном использовании может приводить к неопределённом поведению программы.
                 </li>
+                <li>
+                    <h3>worker</h3>
+                    Функция будет запущена в новом потоке, подробности в разделе <a href="#многопоточность">многопоточность</a><br>
+                </li>
             </ul>
-            В одной функции может использоваться только один из атрибутов alwaysinline, inline, noinline, cold.
+            В одной функции может использоваться только один из атрибутов alwaysinline, inline, noinline, cold, worker.
         </div>
         <div id="имена_функций">
             <h2>Имена функций</h2>
@@ -163,11 +168,11 @@
         <div id="аргументы_функций">
             <h2>Аргументы функций</h2>
             Для объявления аргументов функции, имена аргументов перечисляются через запятую, а затем через 1 или более пробела тип указанных аргументов, после запятой можно добавить другие аргументы.<br>
-            Перед именем аргумента можно указывать два модификатора: <b>write</b> и <b>noread</b>.
-            Если модификатор не указан - аргумент доступен только для чтения, write - аргумент доступен для чтения и записи, noread - аргумент не доступен для чтения или записи (но можно узнать тип аргумента).<br>
+            Перед именем аргумента можно указывать два модификатора: <b>write</b> и <b><i>noread</i> </b>.
+            Если модификатор не указан - аргумент доступен только для чтения, <i>write</i> - аргумент доступен для чтения и записи, <i>noread</i> - аргумент не доступен для чтения или записи (но можно узнать тип аргумента).<br>
             Пример:
             <pre>
-<b>def</b> f(a1, <b>write</b> a2, a3 Int, a4, <b>noread</b> a5 $Any)</pre>
+<b>def</b> f(a1, <b>write</b> a2, a3 Int, a4, <b><i>noread</i> </b> a5 $Any)</pre>
             a1, a3, a4 - только чтение<br>
             a2         - запись и чтения<br>
             a5         - не доступен для чтения или записи<br><br>
@@ -176,7 +181,7 @@
             Если аргумент доступен для записи, то при вызове функции в качестве данного аргумента можно передавать только изменяемый объект.<br>
             Если аргумент доступен только для чтения, то при вызове функции в качестве данного аргумента можно передавать как изменяемый, так и объект доступный только для чтения.<br>
             Если аргумент не доступен для чтения или записи, то при вызове функции в качестве данного аргумента можно передавать любой объект.<br><br>
-            При вызове функции нельзя передавать один и тот же объект несколько раз, если хотя бы один раз объект передаётся как изменяемый и хотя бы один раз не как <b>noread</b> аргумент.
+            При вызове функции нельзя передавать один и тот же объект несколько раз, если хотя бы один раз объект передаётся как изменяемый и хотя бы один раз не как <b><i>noread</i> </b> аргумент.
             <h3>Имена аргументов</h3>
             Имя аргумента должно соответствовать следующим критериям:
             <ul>
@@ -248,7 +253,7 @@
             Пример:
             <pre>
 <b>group</b> Group: SubGroup1, Module::SubGroup2
-    f1(Int, This, <b>noread</b> String, <b>write</b> String) &lt;&gt;Int
+    f1(Int, This, <b><i>noread</i> </b> String, <b>write</b> String) &lt;&gt;Int
     f2(<b>write</b> This) &lt;&gt;This</pre>
         </div>
         <div id="тип_в_группу">
@@ -263,11 +268,11 @@
             Пример:
             <pre>
 <b>group</b> Group
-    f(noread This, Int, Int) This
+    f(<i>noread</i> This, Int, Int) This
 
 <b>attach</b> Type <b>to</b> Group
     <i>#alwaysinline</i>
-    <b>def</b> f(noread type Type, a, b Int) Type
+    <b>def</b> f(<i>noread</i> type Type, a, b Int) Type
         <b>return</b> Type.fromList({a, b})</pre>
         </div>
     </div>
@@ -310,6 +315,7 @@
                 <li><b>Set</b> - множество в котором все элементы имеют один и тот же тип</li>
                 <li><b>File</b> - тип для работы с файлами.</li>
                 <li><b>Time</b> - тип для работы с временем. Способ хранения - количество секунд прошедших с 1 января 00:00 1970 года</li>
+                <li><b>Pipeline</b>, <b>PipelineOut</b>, <b>PipelineIn</b> - типы для передачи данных между потоками. (подробности в разделе <a href="#многопоточность">многопоточность</a>)</li>
             </ul>
         </div>
         <div id="пользоватьльские_типы">
@@ -328,15 +334,15 @@
             </ul>
             В одном модуле не может быть 2-х типов с одинаковым именем.
             <h3>Функции для работы с пользовательскими типами</h3>
-            <code>fromList(noread type <b>This</b>, list <b>List</b>) <b>This</b></code><br>
+            <code>fromList(<i>noread</i> type <b>This</b>, list <b>List</b>) <b>This</b></code><br>
             Функция возвращает аргумента типа <b>STD::List</b> но уже с пользовательским типом.<br>
             toList(type $<b>Type</b>) <b>List</b><br>
             Функция обратная функции fromList.<br>
             typeGetItem(type $<b>Type</b>, index <b>Int</b>) $<b>Any</b><br>
             Функция получает элемент массива по индексу.<br>
-            typeSetItem(write type $<b>Type</b>, index <b>Int</b>, newItem $<b>Any</b>)<br>
+            typeSetItem(<i>write</i> type $<b>Type</b>, index <b>Int</b>, newItem $<b>Any</b>)<br>
             Функция записывает аргумент в массив по индексу.<br>
-            typePut(write type $<b>Type</b>, index <b>Int</b>, newItem $<b>Any</b>) $<b>Any</b><br>
+            typePut(<i>write</i> type $<b>Type</b>, index <b>Int</b>, newItem $<b>Any</b>) $<b>Any</b><br>
             Функция записывает аргумент в массив по индексу и возвращает элемент массива по индексу до записи.<br>
         </div>
     </div>
@@ -764,9 +770,9 @@
                 <td>STD::shar__sugar__notEqual(a, b)</td>
             </tr>
             <tr>
-                <td>&</td>
+                <td>&amp;</td>
                 <td>8</td>
-                <td>a & b</td>
+                <td>a &amp; b</td>
                 <td>STD::shar__sugar__and(a, b)</td>
             </tr>
             <tr>
@@ -812,9 +818,9 @@
                 <td>STD::shar__sugar__modSet(a, b)</td>
             </tr>
             <tr>
-                <td>&=</td>
+                <td>&amp;=</td>
                 <td>11</td>
-                <td>a &= b</td>
+                <td>a &amp;= b</td>
                 <td>STD::shar__sugar__andSet(a, b)</td>
             </tr>
             <tr>
@@ -908,6 +914,70 @@
         Группа содержит в себе типы, объекты которых можно превращать в строки.
         <h2>Type</h2>
         Группа содержит в себе типы, объявленные с помощью ключевого слова <b>type</b>.
+    </div>
+    <div id="многопоточность">
+        <h1>Многопоточность</h1>
+        Многопоточность в Shar реализована следующим образом:<br>
+        Есть некоторые специальные функции, выполнение кода которых происходит в новом потоке.<br>
+        У таких функции есть вход, из которого приходят объекты от других потоков, и выход, в который функция отправляет объекты другим потокам.<br>
+        Если функция прекращает свою работу, то поток закрывается.<br>
+        Если во время работы такой функции происходит исключение которое никем не ловится, то поток закрывается, а исключение передается на выход функции и выкидывается другим потоком при попытке получить объект из выхода данной функции.<br>
+        <br>
+        Функции код которых запускается в новом потоке, должны иметь атрибут <b>worker</b> и соответствовать следующему шаблоны:
+        <pre>
+<b>def</b> <i>имя_функции</i>(<i>вход_функции</i> STD::PipelineOut, <i>вызод_функции</i> STD::PipelineIn)
+    <i>код</i></pre>
+        Для обмена объектами через поток используются 3 типа:
+        <ul>
+            <li>Pipeline - тип с помощью которого можно как принимать объекты, так и отправлять их. Используется для организации структуры потоков.</li>
+            <li>PipelineOut - тип с помощью которого можно принимать объекты. Является входом функций с атрибутом <b>worker</b></li>
+            <li>PipelineIn - тип с помощью которого можно отправлять объекты. Является выходом функций с атрибутом <b>worker</b></li>
+        </ul>
+        Получать и отправлять можно только объекты, тип которых является членном группы STD::Multithreaded.<br>
+        При вычислении глобальных констант запрещено использование потоков.
+        Полезные функции из стандартного модуля для работы с многопоточностью:
+        <ul>
+            <li><b>createPipeline</b>() - создаёт новый объект с типом STD::Pipeline</li>
+            <li><b>getPipelineOut</b>(Pipeline) PipelineOut - возвращает объект имеющий тип STD::Pipeline, но уже с типом STD::PipelineOut</li>
+            <li><b>getPipelineIn</b>(Pipeline) PipelineIn - возвращает объект имеющий тип STD::Pipeline, но уже с типом STD::PipelineIn</li>
+            <li><b>push</b>(Pipeline, $Multithreaded), <b>push</b>(PipelineIn, $Multithreaded) - передаёт объект другим потокам</li>
+            <li><b>pop</b>(Pipeline) &lt;&gt;$Multithreaded, <b>pop</b>(PipelineOut) &lt;&gt;$Multithreaded - забирает объект из других потоков, объекты забираются по принципу очереди (первый вошёл, первый вышел).
+            Если нечего забирать, то функция возвращает <b>nothing</b>.</li>
+            <li><b>yield</b>() - вызов функции указывает на то, что в данный момент потоку нечего делать</li>
+            <li><b>sleep</b>(Int) - приостанавливает текущий поток на количество миллисекунд, не меньшее чем передаётся первым аргументом. Функция старается приостановить поток на как можно меньшее время.</li>
+        </ul>
+        Пример многопоточного кода:<pre>
+<b>module</b> Main
+
+<b>def</b> main()
+    <b>const</b> mainToWorker Pipeline = createPipeline()
+    <b>const</b> workerToMain Pipeline = createPipeline()
+    println("Random number: " + <i>const</i>::staticRandomNumber.toString())
+    worker(mainToWorker.getPipelineOut(), workerToMain.getPipelineIn())
+    worker(mainToWorker.getPipelineOut(), workerToMain.getPipelineIn())
+    worker(mainToWorker.getPipelineOut(), workerToMain.getPipelineIn())
+    worker(mainToWorker.getPipelineOut(), workerToMain.getPipelineIn())
+    mainToWorker.push(<i>const</i>::staticRandomNumber)
+    <b>for</b> :(counter Int = 0) counter < 4; counter++
+        <b>for</b> :(loop)
+            <b>const</b> number <>Int = workerToMain.pop()
+            <b>if</b> number.nothing?()
+                yield()
+            <b>else</b>
+                println("Main thread: " + number.toString())
+                mainToWorker.push(number * 2)
+                <b>end</b> loop
+
+<i>#worker</i>
+<b>def</b> worker(in PipelineOut, out PipelineIn)
+    <b>for</b> :(loop)
+        <b>const</b> number <>Int = in.pop()
+        <b>if</b> number.nothing?()
+            yield()
+        <b>else</b>
+            println("Worker thread: " + number.toString())
+            out.push(number + 123)
+            <b>end</b> loop</pre>
     </div>
     <div id="другое">
         <h1>Другое</h1>

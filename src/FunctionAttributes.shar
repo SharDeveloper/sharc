@@ -4,7 +4,7 @@ module Main
 // "this" - creates a function that is part of the specified group, becoming the default implementation.
 // "override" - overrides a function with the "this" attribute for a particular type.
 type FAttributes
-    // boolAttributes Int (like array of bit: alwaysinline, inline, noInline, cold, unsafewrite, nothrow)
+    // boolAttributes Int (like array of bit: alwaysinline, inline, noInline, cold, unsafewrite, nothrow, worker)
     // this           Token
     // override       Token
 
@@ -39,6 +39,11 @@ def nothrow?(attributes FAttributes) Bool
 def unsafewrite?(attributes FAttributes) Bool
     const boolAttributes Int = attributes.typeGetItem(0)
     return boolAttributes.getBit(5)
+
+#alwaysinline
+def worker?(attributes FAttributes) Bool
+    const boolAttributes Int = attributes.typeGetItem(0)
+    return boolAttributes.getBit(6)
 
 #alwaysinline
 def this~(attributes FAttributes) Token

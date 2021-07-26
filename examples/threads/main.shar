@@ -1,0 +1,31 @@
+module Main
+
+def main()
+    const mainToWorker Pipeline = createPipeline()
+    const workerToMain Pipeline = createPipeline()
+    println("Random number: " + const::staticRandomNumber.toString())
+    worker(mainToWorker.getPipelineOut(), workerToMain.getPipelineIn())
+    worker(mainToWorker.getPipelineOut(), workerToMain.getPipelineIn())
+    worker(mainToWorker.getPipelineOut(), workerToMain.getPipelineIn())
+    worker(mainToWorker.getPipelineOut(), workerToMain.getPipelineIn())
+    mainToWorker.push(const::staticRandomNumber)
+    for :(counter Int = 0) counter < 4; counter++
+        for :(loop)
+            const number <>Int = workerToMain.pop()
+            if number.nothing?()
+                yield()
+            else
+                println("Main thread: " + number.toString())
+                mainToWorker.push(number * 2)
+                end loop
+
+#worker
+def worker(in PipelineOut, out PipelineIn)
+    for :(loop)
+        const number <>Int = in.pop()
+        if number.nothing?()
+            yield()
+        else
+            println("Worker thread: " + number.toString())
+            out.push(number + 123)
+            end loop

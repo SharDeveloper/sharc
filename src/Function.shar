@@ -69,6 +69,8 @@ def function(attributes FAttributes, isExport Bool, name Token, arguments Array,
 // The function partially compiles the function that is determined when the type is added to the group.
 #alwaysinline
 def precompileAttachmentFunction(function Function, write compiledData CData, type CType, group CGroup)
+    if function.attributes~().worker?()
+        errorFunctionCannotBeAWorker(function.name~())
     if !group.functions~()[function.name~().text~()]
         errorNoFunctionInGroup(function.name~(), group.fullName~())
     const groupModule String = group.fullName~().splitByPart("::")[0]
@@ -92,6 +94,8 @@ def precompileAttachmentFunction(function Function, write compiledData CData, ty
 // A function partially compiles a function that is defined as part of a group but has an implementation.
 #alwaysinline
 def precompileDefaultFunction(function Function, write compiledData CData)
+    if function.attributes~().worker?()
+        errorFunctionCannotBeAWorker(function.name~())
     const functionSignature FSignature = function.getSignature().toFull(compiledData)
     functionSignature.this!()
     var mapWithDefaultFunction Map = Map.createEmpty()
@@ -113,6 +117,8 @@ def precompileDefaultFunction(function Function, write compiledData CData)
 // A function partially compiles a function that overrides, for a particular type, a group-related function.
 #alwaysinline
 def precompileOverrideFunction(function Function, write compiledData CData)
+    if function.attributes~().worker?()
+        errorFunctionCannotBeAWorker(function.name~())
     var defaultFunctionName Token = function.attributes~().override~()
     defaultFunctionName.addString("::" + function.name~().text~())
     var compiledFunction CFunction = compiledData.borrowFunction(defaultFunctionName)
@@ -144,8 +150,25 @@ def precompileOverrideFunction(function Function, write compiledData CData)
 #alwaysinline
 def precompileSimpleFunction(function Function, write compiledData CData)
     const functionSignature FSignature = function.getSignature().toFull(compiledData)
-    if function.attributes~().nothrow?()
-        const arguments Array = functionSignature.arguments~()
+    const functionArguments Array = functionSignature.arguments~()
+    if {
+        function.attributes~().worker?() &&
+        !(
+            functionArguments.length~() == 2 &&
+            functionArguments[0].type~().simple?() &&
+            functionArguments[1].type~().simple?() &&
+            !functionArguments[0].type~().optional?() &&
+            !functionArguments[1].type~().optional?() &&
+            functionArguments[0].type~().type~().text~() == "STD::PipelineOut" &&
+            functionArguments[1].type~().type~().text~() == "STD::PipelineIn" &&
+            functionArguments[0].access~() == enum::access_read &&
+            functionArguments[1].access~() == enum::access_read &&
+            functionSignature.resultType~().nothingType?()
+        )
+    }
+        errorFunctionCannotBeAWorker(function.name~())
+    elif function.attributes~().nothrow?()
+        const arguments Array = functionArguments
         parse _, argument = arguments
             if !(argument.type~().anyType?() || argument.type~().simple?())
                 errorNothrowOnInvalidFunction(function.name~())

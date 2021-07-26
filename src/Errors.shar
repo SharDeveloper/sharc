@@ -263,3 +263,8 @@ def errorUnknownIdentifier(id Token)
 def errorIgnoreNoThrowInModule()
     ("Flags \q-t\q and \q--throw\q can only be used when compiling final programs.").printlnAsError()
     fail()
+
+#cold
+def errorFunctionCannotBeAWorker(function Token)
+    (function.coordinatesToString() + "The worker function must have an input and output, and must not be part of any group.").printlnAsError()
+    fail()

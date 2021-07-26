@@ -566,6 +566,12 @@ def toFunctionAttributes(block Block) FAttributes
             if (boolAttributes & 32) == 32
                 errorAlreadyExist(attribute, "function attribute")
             boolAttributes |= 32
+        case "worker"
+            if (boolAttributes & 64) == 64
+                errorAlreadyExist(attribute, "function attribute")
+            if (boolAttributes & 15) != 0
+                errorNotExpectedToken(attribute, "")
+            boolAttributes |= 64
         case "this"
             if !this.empty?()
                 errorAlreadyExist(attribute, "function attribute")
