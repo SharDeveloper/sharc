@@ -224,6 +224,7 @@ def compileAttachmentFunction(function Function, write compiledData CData, type 
             }
             namedOperands.put(argumentOperand.code~().text~(), namedOperand(0, argumentOperand))
         codeData.namedOperands`(namedOperands)
+        namedOperands = Map.createEmpty()
         const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, llvmIR)
         llvmIR = "\t%##nreg##0## = alloca [2 x i64], align 8\n" + codeData.allocsToIR() + llvmIR
         if !lastIsTerminator
@@ -291,6 +292,7 @@ def compileDefaultFunction(function Function, write compiledData CData)
             }
             namedOperands.put(argumentOperand.code~().text~(), namedOperand(0, argumentOperand))
         codeData.namedOperands`(namedOperands)
+        namedOperands = Map.createEmpty()
         const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, llvmIR)
         llvmIR = "\t%##nreg##0## = alloca [2 x i64], align 8\n" + codeData.allocsToIR() + llvmIR
         if !lastIsTerminator
@@ -360,6 +362,7 @@ def compileOverrideFunction(function Function, write compiledData CData)
             }
             namedOperands.put(argumentOperand.code~().text~(), namedOperand(0, argumentOperand))
         codeData.namedOperands`(namedOperands)
+        namedOperands = Map.createEmpty()
         const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, llvmIR)
         llvmIR = "\t%##nreg##0## = alloca [2 x i64], align 8\n" + codeData.allocsToIR() + llvmIR
         if !lastIsTerminator
@@ -421,6 +424,7 @@ def compileSimpleFunction(function Function, write compiledData CData)
             }
             namedOperands.put(argumentOperand.code~().text~(), namedOperand(0, argumentOperand))
         codeData.namedOperands`(namedOperands)
+        namedOperands = Map.createEmpty()
         const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, llvmIR)
         llvmIR = "\t%##nreg##0## = alloca [2 x i64], align 8\n" + codeData.allocsToIR() + llvmIR
         if !lastIsTerminator
