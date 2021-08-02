@@ -168,8 +168,7 @@ def precompileSimpleFunction(function Function, write compiledData CData)
     }
         errorFunctionCannotBeAWorker(function.name~())
     elif function.attributes~().nothrow?()
-        const arguments Array = functionArguments
-        parse _, argument = arguments
+        parse _, argument = functionArguments
             if !(argument.type~().anyType?() || argument.type~().simple?())
                 errorNothrowOnInvalidFunction(function.name~())
     var allFunctions Map = compiledData.functions`(nothing)
