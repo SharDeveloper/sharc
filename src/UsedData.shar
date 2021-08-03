@@ -11,6 +11,7 @@ type UsedData
     // llvmDeclares         Map(name String, llvmDeclaration String)
     // groupsFunctions      Map(functionNameWithVariant String, groupName String)
     // groupsTypes          Map(groupName String, Set(typeInGroups String))
+    // groupListConstants   Map(groupName String, constantTypeAndName String)
 
 attach UsedData to FieldEnumerationsElements
     #alwaysinline
@@ -93,6 +94,15 @@ attach UsedData to FieldGroupsTypes
     def groupsTypes`(write usedData UsedData, new <>Map) <>Map
         return usedData.typePut(8, new)
 
+attach UsedData to FieldGroupListConstants
+    #alwaysinline
+    def groupListConstants~(usedData UsedData) Map
+        return usedData.typeGetItem(9)
+
+    #alwaysinline
+    def groupListConstants`(write usedData UsedData, new <>Map) <>Map
+        return usedData.typePut(9, new)
+
 #alwaysinline
-def usedData(enumerationsElements, constants, types, inGroups, functions, llvmConstants, llvmDeclares, groupsFunctions, groupsTypes Map) UsedData
-    return UsedData.fromList({enumerationsElements, constants, types, inGroups, functions, llvmConstants, llvmDeclares, groupsFunctions, groupsTypes})
+def usedData(enumerationsElements, constants, types, inGroups, functions, llvmConstants, llvmDeclares, groupsFunctions, groupsTypes, groupListConstants Map) UsedData
+    return UsedData.fromList({enumerationsElements, constants, types, inGroups, functions, llvmConstants, llvmDeclares, groupsFunctions, groupsTypes, groupListConstants})

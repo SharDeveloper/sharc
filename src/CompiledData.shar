@@ -532,7 +532,8 @@ def createProgram(compiledData CData, outputFile String)
         builtinConstantStrings(),
         builtinLLVMDeclaredFunctions(),
         Map.createEmpty(),
-        groupsTypes)
+        groupsTypes,
+        Map.createEmpty())
     }
     var mainFunctionMayThrow Bool = true
     try
