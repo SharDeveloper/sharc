@@ -398,6 +398,51 @@ def toFinalLLVMIR(llvmIR String, errorCoordinates Token, compiledData CData, thi
             default
                 errorUnknownIdentifier(context)
             result += replacement
+        case "glist"
+            const groupName Token = context
+            var constantTypeAndName <>String = usedData.groupListConstants~()[groupName.text~()]
+            if constantTypeAndName.nothing?()
+                if !groupName.text~().containPart?("::")
+                    errorNotFound(context, "group")
+                compiledData.getGroup(groupName, true)
+                var typesNumbers Array = []
+                parse typeName, allTypesWithSameName = compiledData.types~()
+                    parse typeModuleName, type = allTypesWithSameName
+                        const fullTypeName String = typeModuleName + "::" + typeName
+                        if type.groups~()[groupName.text~()]
+                            var typeNumber <>String = usedData.types~()[fullTypeName]
+                            if typeNumber.nothing?()
+                                const typeGroups Set = compiledData.getType(context.replaceText(fullTypeName), true).groups~()
+                                var usedGroupsTypes Map = usedData.groupsTypes`(nothing)
+                                parse _, group = typeGroups
+                                    var usedGroupTypes Set = usedGroupsTypes.put(group, Set.createEmpty())
+                                    usedGroupTypes.add(fullTypeName)
+                                    usedGroupsTypes.put(group, usedGroupTypes)
+                                usedData.groupsTypes`(usedGroupsTypes)
+                                var usedTypes Map = usedData.types`(nothing)
+                                typeNumber = usedTypes.length~().toString()
+                                usedTypes.put(fullTypeName, typeNumber)
+                                usedData.types`(usedTypes)
+                                parse functionName, groupOfFunctionName = usedData.groupsFunctions~()
+                                    if typeGroups[groupOfFunctionName]
+                                        const functionVariant String = functionName[functionName.length~() - 2 : functionName.length~()]
+                                        const fullFunctionName String = functionName[0 : functionName.length~() - 2] + "." + fullTypeName + functionVariant
+                                        compilingFunctions.add(const::emptyToken.replaceText(fullFunctionName))
+                            typesNumbers.addItem(Int.fromString(typeNumber))
+                constantTypeAndName = "[" + (typesNumbers.length~() + 1).toString() + " x i64]"
+                var constantValue String = "private unnamed_addr constant " + constantTypeAndName + " [i64 " + typesNumbers.length~().toString()
+                parse _, typeNumber = typesNumbers
+                    constantValue += ", i64 " + typeNumber.toString()
+                constantValue += "], align 8"
+                var usedLLVMConstants Map = usedData.llvmConstants`(nothing)
+                const constantName String = "@lc." + usedLLVMConstants.length~().toString()
+                usedLLVMConstants.put(constantValue, constantName)
+                usedData.llvmConstants`(usedLLVMConstants)
+                constantTypeAndName += "* " + constantName
+                var groupListConstants Map = usedData.groupListConstants`(nothing)
+                groupListConstants.put(groupName.text~(), constantTypeAndName)
+                usedData.groupListConstants`(groupListConstants)
+            result += constantTypeAndName
         default
             errorUnknownIdentifier(replaceText(errorCoordinates, id))
     result += llvmIR[previousPosition : llvmIR.length~()]

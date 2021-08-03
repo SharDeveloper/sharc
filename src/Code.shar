@@ -35,6 +35,8 @@ def compileCode(code Array, write codeData CodeData, compiledData CData, write l
                 compileFor(currentBlock, codeData, compiledData, llvmIR)
             case "parse"
                 compileParse(currentBlock, codeData, compiledData, llvmIR)
+            case "gParse"
+                compileGroupParse(currentBlock, codeData, compiledData, llvmIR)
             case "if"
                 var ifBlocks Array = []
                 for :(loop)
@@ -393,6 +395,85 @@ def compileParse(block Block, write codeData CodeData, compiledData CData, write
     llvmIR += "\tbr label %##reg##" + parseStartLabel + "##\n\t##nreg##" + endLabel + "##:\n"
     codeData.freeLevel(codeData.level~(), compiledData, llvmIR)
     codeData.deleteLevel(codeData.level~())
+
+// The function compiles the 'parse' statement.
+def compileGroupParse(block Block, write codeData CodeData, compiledData CData, write llvmIR String)
+    block.subBlocks!()
+    var tokenIndex Int = 1
+    var typeConstantName Token = block.getLowercaseName(tokenIndex, "constant")
+    block.next!(tokenIndex, ["="])
+    const groupName Token = block.getFullUppercaseName(tokenIndex, "group")
+    const groupFullName String = compiledData.getGroup(groupName, false).fullName~()
+    block.eol!(tokenIndex)
+    const parseStartLabel String = codeData.createLabel()
+    const loopStartLabel String = codeData.createLabel()
+    const codeStartLabel String = codeData.createLabel()
+    const nextLabel String = codeData.createLabel()
+    const endLabel String = codeData.createLabel()
+    llvmIR += "\tbr label %##reg##" + parseStartLabel + "##\n\t##nreg##" + parseStartLabel + "##:\n"
+    const countAndTypesRegister String = codeData.createRegister("bitcast ##glist##" + groupFullName + "## to i64*", llvmIR)
+    const countRegister String = codeData.createRegister("load i64, i64* " + countAndTypesRegister + ", align 8", llvmIR)
+    llvmIR += "\tbr label %##reg##" + loopStartLabel + "##\n\t##nreg##" + loopStartLabel + "##:\n"
+    const incTypeIndex String = codeData.registerCounter~().toString()
+    codeData.registerCounter`(codeData.registerCounter~() + 1)
+    const typeIndex String = codeData.createRegister("phi i64 [1, %##reg##" + parseStartLabel + "##], [%##reg##" + incTypeIndex + "##, %##reg##" + nextLabel + "##]", llvmIR)
+    const needToStartCode String = codeData.createRegister("icmp ule i64 " + typeIndex + ", " + countRegister, llvmIR)
+    llvmIR += {
+        "\tbr i1 " + needToStartCode + ", label %##reg##" + codeStartLabel + "##, label %##reg##" + endLabel + "##\n"
+        "\t##nreg##" + codeStartLabel + "##:\n"
+    }
+    const typeI64PointerRegister String = codeData.createRegister("getelementptr i64, i64* " + countAndTypesRegister + ", i64 " + typeIndex, llvmIR)
+    const typeI64Register String = codeData.createRegister("load i64, i64* " + typeI64PointerRegister + ", align 8", llvmIR)
+    const typeRegister String = codeData.createRegister("insertvalue [2 x i64] zeroinitializer, i64 " + typeI64Register + ", 0", llvmIR)
+    var namedOperands Map = codeData.namedOperands`(nothing)
+    if !namedOperands.put{
+        (typeConstantName.text~(),
+            namedOperand(0,
+                operand(
+                    typeConstantName,
+                    enum::access_noread,
+                    typeRegister,
+                    const::anyType,
+                    false, false, false, true
+                )
+            )
+        ).nothing?()
+    }
+        errorAlreadyExist(typeConstantName, "constant")
+    codeData.namedOperands`(namedOperands)
+    namedOperands = Map.createEmpty()
+    codeData.level`(codeData.level~() + 1)
+    var endLabels Map = codeData.endLabels`(nothing)
+    if !endLabels.put(typeConstantName.text~(), label(endLabel, codeData.level~())).nothing?()
+        errorAlreadyExist(typeConstantName, "operator")
+    codeData.endLabels`(endLabels)
+    endLabels = Map.createEmpty()
+    var nextLabels Map = codeData.nextLabels`(nothing)
+    if !nextLabels.put(typeConstantName.text~(), label(nextLabel, codeData.level~())).nothing?()
+        errorAlreadyExist(typeConstantName, "operator")
+    codeData.nextLabels`(nextLabels)
+    nextLabels = Map.createEmpty()
+    const lastIsTerminator Bool = compileCode(block.subBlocks~(), codeData, compiledData, llvmIR)
+    endLabels = codeData.endLabels`(nothing)
+    endLabels.put(typeConstantName.text~(), nothing)
+    codeData.endLabels`(endLabels)
+    endLabels = Map.createEmpty()
+    nextLabels = codeData.nextLabels`(nothing)
+    nextLabels.put(typeConstantName.text~(), nothing)
+    codeData.nextLabels`(nextLabels)
+    nextLabels = Map.createEmpty()
+    if !lastIsTerminator
+        codeData.freeLevel(codeData.level~(), compiledData, llvmIR)
+        llvmIR += "\tbr label %##reg##" + nextLabel + "##\n"
+    codeData.deleteLevel(codeData.level~())
+    llvmIR += {
+        "\t##nreg##" + nextLabel + "##:\n"
+        "\t%##nreg##" + incTypeIndex + "## = add i64 1, " + typeIndex + "\n"
+        "\tbr label %##reg##" + loopStartLabel + "##\n\t##nreg##" + endLabel + "##:\n"
+    }
+    namedOperands = codeData.namedOperands`(nothing)
+    namedOperands.put(typeConstantName.text~(), nothing)
+    codeData.namedOperands`(namedOperands)
 
 // The function compiles the 'if' statement.
 def compileIf(ifBlocks Array, write codeData CodeData, compiledData CData, write llvmIR String)

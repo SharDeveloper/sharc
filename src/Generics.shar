@@ -267,3 +267,7 @@ group FieldGroupsFunctions
 group FieldGroupsTypes
     groupsTypes~(This) $Any
     groupsTypes`(write This, $Any) $Any
+
+group FieldGroupListConstants
+    groupListConstants~(This) $Any
+    groupListConstants`(write This, $Any) $Any
