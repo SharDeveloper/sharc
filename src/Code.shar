@@ -764,10 +764,13 @@ def compileTest(testBlock Block, write codeData CodeData, compiledData CData, wr
         testedExpressionBlock.noSubBlocks!()
         tokenIndex = 0
         const testedExpression Expression = testedExpressionBlock.getExpression(tokenIndex)
-        var expectedErrorCode Token = const::emptyToken
+        var expectedErrorCodes Array = []
         if !testedExpressionBlock.eol?(tokenIndex)
             testedExpressionBlock.next!(tokenIndex, [":"])
-            expectedErrorCode = testedExpressionBlock.next(tokenIndex)
+            for :(loop)
+                expectedErrorCodes.addItem(testedExpressionBlock.next(tokenIndex))
+                if !testedExpressionBlock.next?(tokenIndex, [","])
+                    end loop
             testedExpressionBlock.eol!(tokenIndex)
         const okLabel String = codeData.createLabel()
         const errorLabel String = codeData.createLabel()
@@ -775,11 +778,11 @@ def compileTest(testBlock Block, write codeData CodeData, compiledData CData, wr
         var catchLabels Array = codeData.catchLabels`([])
         catchLabels.addItem(label(errorLabel, codeData.level~() + 1))
         codeData.catchLabels`(catchLabels)
-        const expectedType OType = expectedErrorCode.empty?().select(const::boolType, const::anyType)
+        const expectedType OType = expectedErrorCodes.empty?().select(const::boolType, const::anyType)
         const testedResultOperand Operand = testedExpression.compileExpression(expectedType, codeData, compiledData, [], llvmIR)
         llvmIR += "\tbr label %##reg##" + okLabel + "##\n\t##nreg##" + okLabel + "##:\n"
         var testedResultValueI1 String = ""
-        if expectedErrorCode.empty?()
+        if expectedErrorCodes.empty?()
             var testedResultValueI64 String = ""
             eSwitch testedResultOperand.access~()
             case access_write
@@ -801,17 +804,22 @@ def compileTest(testBlock Block, write codeData CodeData, compiledData CData, wr
         llvmIR += "\t##nreg##" + errorLabel + "##:\n"
         const errorRegister String = codeData.createRegister("load [2 x i64], [2 x i64]* %##reg##0##, align 8", llvmIR)
         var isExpectedErrorRegister String = ""
-        if !expectedErrorCode.empty?()
+        if !expectedErrorCodes.empty?()
             const errorID String = codeData.createRegister("call [2 x i64] @shar.error.get.id([2 x i64] " + errorRegister + ")", llvmIR)
             const errorIDRegister String = codeData.createRegister("extractvalue [2 x i64] " + errorID + ", 1", llvmIR)
-            const expectedErrorEnumFullName String = compiledData.getEnumElementFullName(expectedErrorCode, false)
-            isExpectedErrorRegister = codeData.createRegister("icmp eq i64 " + errorIDRegister + ", ##enum##" + expectedErrorEnumFullName + "##", llvmIR)
+            parse _, errorCode = expectedErrorCodes
+                const errorEnumFullName String = compiledData.getEnumElementFullName(errorCode, false)
+                const isErrorRegister String = codeData.createRegister("icmp eq i64 " + errorIDRegister + ", ##enum##" + errorEnumFullName + "##", llvmIR)
+                if isExpectedErrorRegister.empty?()
+                    isExpectedErrorRegister = isErrorRegister
+                else
+                    isExpectedErrorRegister = codeData.createRegister("or i1 " + isExpectedErrorRegister + ", " + isErrorRegister, llvmIR)
         llvmIR += {
             "\tcall void @shar.error.free([2 x i64] " + errorRegister + ")\n"
             "\tbr label %##reg##" + notErrorLabel + "##\n"
             "\t##nreg##" + notErrorLabel + "##:\n"
         }
-        const testResultOkRegisterValue String = expectedErrorCode.empty?().select{
+        const testResultOkRegisterValue String = expectedErrorCodes.empty?().select{
             ("phi i1 [" + testedResultValueI1 + ", %##reg##" + okLabel + "##], [0, %##reg##" + errorLabel + "##]",
             "phi i1 [0, %##reg##" + okLabel + "##], [" + isExpectedErrorRegister + ", %##reg##" + errorLabel + "##]")
         }
