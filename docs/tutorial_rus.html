@@ -44,6 +44,7 @@
                 <li><a href="#const_var">Переменные и константы</a></li>
                 <li><a href="#for">for</a></li>
                 <li><a href="#parse">parse</a></li>
+                <li><a href="#gparse">gParse</a></li>
                 <li><a href="#if">if</a></li>
                 <li><a href="#return">return</a></li>
                 <li><a href="#switch">switch</a></li>
@@ -479,6 +480,15 @@
 <b>parse</b> :(parse) _, _ = [1, 2]
     <b>end</b> parse</pre>
         </div>
+        <div id="gparse">
+            <h2>gParse</h2>
+            Оператор используется для почередного получения <b>noread</b> операндов являющихся членами группы.<br>
+            Шаблон:
+            <pre>
+<b>gParse</b> имя_операнда = имя_группы
+    код</pre>
+            Имя операнда также использовать в операторах <b>end</b> и <b>next</b>.
+        </div>
         <div id="if">
             <h2>if</h2>
             Шаблоны:
@@ -595,13 +605,13 @@
             <h2>end</h2>
             Шаблон:
             <code><b>end</b> имя_оператора</code>
-            Оператор завершает работу оператора с указанным именем (for, parse, switch ...).
+            Оператор завершает работу оператора с указанным именем (for, parse, gParse, switch, eSwitch, tSwitch).
         </div>
         <div id="next">
             <h2>next</h2>
             Шаблон:
             <code><b>next</b> имя_оператора</code>
-            Оператор завершает текущую итерацию цикла с указанным именем (for, parse) и начинает новую итерацию (если она есть).
+            Оператор завершает текущую итерацию цикла с указанным именем (for, parse, gParse) и начинает новую итерацию (если она есть).
         </div>
         <div id="fallthrough">
             <h2>fallthrough</h2>
