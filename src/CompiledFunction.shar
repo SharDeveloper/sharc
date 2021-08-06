@@ -309,6 +309,7 @@ def functionToFinalLLVMIR(compiledData CData, functionAndTypeName Token, write c
             var usedGroupsFunctions Map = usedData.groupsFunctions`(nothing)
             usedGroupsFunctions.put(functionName.text~() + functionVariant, groupFunctions.group~())
             usedData.groupsFunctions`(usedGroupsFunctions)
+            usedGroupsFunctions = Map.createEmpty()
             parse _, typeInGroup = usedData.groupsTypes~()[groupFunctions.group~()]
                 const fullFunctionName String = functionName.text~() + "." + typeInGroup + functionVariant
                 compilingFunctions.add(const::emptyToken.replaceText(fullFunctionName))

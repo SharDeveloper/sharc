@@ -778,6 +778,7 @@ def compileTest(testBlock Block, write codeData CodeData, compiledData CData, wr
         var catchLabels Array = codeData.catchLabels`([])
         catchLabels.addItem(label(errorLabel, codeData.level~() + 1))
         codeData.catchLabels`(catchLabels)
+        catchLabels = []
         const expectedType OType = expectedErrorCodes.empty?().select(const::boolType, const::anyType)
         const testedResultOperand Operand = testedExpression.compileExpression(expectedType, codeData, compiledData, [], llvmIR)
         llvmIR += "\tbr label %##reg##" + okLabel + "##\n\t##nreg##" + okLabel + "##:\n"
@@ -801,6 +802,7 @@ def compileTest(testBlock Block, write codeData CodeData, compiledData CData, wr
         catchLabels = codeData.catchLabels`([])
         catchLabels.delete(catchLabels.length~() - 1, 1)
         codeData.catchLabels`(catchLabels)
+        catchLabels = []
         llvmIR += "\t##nreg##" + errorLabel + "##:\n"
         const errorRegister String = codeData.createRegister("load [2 x i64], [2 x i64]* %##reg##0##, align 8", llvmIR)
         var isExpectedErrorRegister String = ""
@@ -855,6 +857,7 @@ def compileTryCatch(tryBlock, catchBlock Block, write codeData CodeData, compile
     var catchLabels Array = codeData.catchLabels`([])
     catchLabels.addItem(label(catchLabel, codeData.level~()))
     codeData.catchLabels`(catchLabels)
+    catchLabels = []
     var lastIsTerminator Bool = compileCode(tryBlock.subBlocks~(), codeData, compiledData, llvmIR)
     if !lastIsTerminator
         codeData.freeLevel(codeData.level~(), compiledData, llvmIR)
@@ -863,6 +866,7 @@ def compileTryCatch(tryBlock, catchBlock Block, write codeData CodeData, compile
     catchLabels = codeData.catchLabels`([])
     catchLabels.delete(catchLabels.length~() - 1, 1)
     codeData.catchLabels`(catchLabels)
+    catchLabels = []
     llvmIR += "\t##nreg##" + catchLabel + "##:\n"
     var tokenIndex Int = 0
     catchBlock.next!(tokenIndex, ["catch"])

@@ -246,6 +246,7 @@ def compileExpression(expression Expression, expectType OType, write codeData Co
             text.setItem(text.length~() - 2, ']')
             text.delete(text.length~() - 1, 1)
             code.text`(text)
+            text = ""
             const itemsCount String = items.length~().toString()
             const itemsType OType = itemsOperands[0].type~()
             if itemsType.nothingType?()
@@ -324,6 +325,7 @@ def compileExpression(expression Expression, expectType OType, write codeData Co
             var firstArgumentType OType = firstArgument.type`(nothing)
             firstArgumentType.optional`(false)
             firstArgument.type`(firstArgumentType)
+            firstArgumentType = const::emptyOType
             arguments.addItem(firstArgument)
             if !firstArgument.named?()
                 allFreedOnError.addItem(firstArgument)
@@ -506,6 +508,7 @@ def compileExpression(expression Expression, expectType OType, write codeData Co
             text.setItem(text.length~() - 2, '}')
             text.delete(text.length~() - 1, 1)
             code.text`(text)
+            text = ""
             const itemsCount String = items.length~().toString()
             if isConstant
                 const llvmListDataType String = "[" + (itemsOperands.length~() * 2 + 2).toString() + " x i64]"
