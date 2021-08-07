@@ -407,7 +407,7 @@ def runtimeTypesCompatibleCheck(operand Operand, expectedType OType, write codeD
                 if !allOk
                     end expectedParse
             if allOk
-                runTimeOperandIsNothing = true
+                runTimeOperandIsNotNothing = true
             else
                 runTimeOperandInGroups = true
                 allOk = true
