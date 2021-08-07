@@ -14,11 +14,9 @@ def compileCode(code Array, write codeData CodeData, compiledData CData, write l
             !(currentBlock.line~()[0].text~() == "if" ||
                 currentBlock.line~()[0].text~() == "return" ||
                 currentBlock.line~()[0].text~() == "for" ||
-                currentBlock.line~()[0].text~() == "parse" ||
                 currentBlock.line~()[0].text~() == "switch" ||
                 currentBlock.line~()[0].text~() == "eSwitch" ||
-                currentBlock.line~()[0].text~() == "tSwitch" ||
-                currentBlock.line~()[0].text~() == "test"))
+                currentBlock.line~()[0].text~() == "tSwitch"))
         }
             compileExpressionFromBlock(currentBlock, codeData, compiledData, llvmIR).freeOperand(codeData, compiledData, llvmIR)
         else
@@ -33,6 +31,8 @@ def compileCode(code Array, write codeData CodeData, compiledData CData, write l
                 lastIsTerminator = true
             case "for"
                 compileFor(currentBlock, codeData, compiledData, llvmIR)
+            case "do"
+                compileDo(currentBlock, codeData, compiledData, llvmIR)
             case "parse"
                 compileParse(currentBlock, codeData, compiledData, llvmIR)
             case "gParse"
@@ -127,7 +127,7 @@ def compileConstantDefine(block Block, write codeData CodeData, compiledData CDa
     var tokenIndex Int = 1
     const constantName Token = block.getLowercaseName(tokenIndex, "constant")
     switch constantName.text~()
-    case "var", "const", "enum", "for", "parse", "if", "elif", "select", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough"
+    case "var", "const", "enum", "for", "do", "parse", "gParse", "if", "elif", "select", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough"
         errorInvalidName(constantName, "constant")
     const type OType = block.getOperandType(tokenIndex, !codeData.thisGroup~().empty?()).toFull(compiledData)
     block.next!(tokenIndex, ["="])
@@ -158,7 +158,7 @@ def compileVariableDefine(block Block, write codeData CodeData, compiledData CDa
     var tokenIndex Int = 1
     const variableName Token = block.getLowercaseName(tokenIndex, "variable")
     switch variableName.text~()
-    case "var", "const", "enum", "for", "parse", "if", "elif", "select", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough"
+    case "var", "const", "enum", "for", "do", "parse", "gParse", "if", "elif", "select", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough"
         errorInvalidName(variableName, "variable")
     const type OType = block.getOperandType(tokenIndex, !codeData.thisGroup~().empty?()).toFull(compiledData)
     block.next!(tokenIndex, ["="])
@@ -297,6 +297,34 @@ def compileFor(block Block, write codeData CodeData, compiledData CData, write l
     if haveVariable
         codeData.freeLevel(codeData.level~(), compiledData, llvmIR)
         codeData.deleteLevel(codeData.level~())
+
+// The function compiles the 'do' statement.
+def compileDo(block Block, write codeData CodeData, compiledData CData, write llvmIR String)
+    block.subBlocks!()
+    var tokenIndex Int = 1
+    var doName Token = const::emptyToken
+    if block.next?(tokenIndex, [":"])
+        block.next!(tokenIndex, ["("])
+        doName = block.getLowercaseName(tokenIndex, "do")
+        block.next!(tokenIndex, [")"])
+    block.eol!(tokenIndex)
+    const endLabel String = codeData.createLabel()
+    if !doName.empty?()
+        var endLabels Map = codeData.endLabels`(nothing)
+        if !endLabels.put(doName.text~(), label(endLabel, codeData.level~())).nothing?()
+            errorAlreadyExist(doName, "operator")
+        codeData.endLabels`(endLabels)
+    codeData.level`(codeData.level~() + 1)
+    const lastIsTerminator Bool = compileCode(block.subBlocks~(), codeData, compiledData, llvmIR)
+    if !lastIsTerminator
+        codeData.freeLevel(codeData.level~(), compiledData, llvmIR)
+        llvmIR += "\tbr label %##reg##" + endLabel + "##\n"
+    codeData.deleteLevel(codeData.level~())
+    if !doName.empty?()
+        var endLabels Map = codeData.endLabels`(nothing)
+        endLabels.put(doName.text~(), nothing)
+        codeData.endLabels`(endLabels)
+    llvmIR += "\t##nreg##" + endLabel + "##:\n"
 
 // The function compiles the 'parse' statement.
 def compileParse(block Block, write codeData CodeData, compiledData CData, write llvmIR String)
