@@ -587,7 +587,13 @@ def compileExpression(expression Expression, expectType OType, write codeData Co
         var type OType = OType.fromList({})
         if first.type~().typeEq?(second.type~(), false)
             type = first.type~()
-            type.optional`(first.type~().optional?() || second.type~().optional?() || isOptional)
+            type.optional`((first.type~().optional?() || second.type~().optional?() || isOptional) && !(type.nothingType?() || type.anyType?()))
+        elif first.type~().nothingType?() && !second.type~().anyType?()
+            type = second.type~()
+            type.optional`(true)
+        elif second.type~().nothingType?() && !first.type~().anyType?()
+            type = first.type~()
+            type.optional`(true)
         else
             type = const::anyType
         result = operand{
