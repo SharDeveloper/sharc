@@ -618,7 +618,7 @@ def toFunction(block Block, attributes FAttributes) Function
                 const access Int = block.getAccess(tokenIndex)
                 const argumentName Token = block.getLowercaseName(tokenIndex, "function argument")
                 switch argumentName.text~()
-                case "var", "const", "enum", "for", "do", "parse", "gParse", "if", "elif", "select", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough"
+                case "var", "const", "enum", "for", "do", "parse", "gParse", "if", "elif", "select", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough", "nothing"
                     errorInvalidName(argumentName, "function argument")
                 newArguments.addItem(fArgument(access, argumentName, OType.fromList({})))
                 if !block.next?(tokenIndex, [","])

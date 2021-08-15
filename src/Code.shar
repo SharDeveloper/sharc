@@ -127,7 +127,7 @@ def compileConstantDefine(block Block, write codeData CodeData, compiledData CDa
     var tokenIndex Int = 1
     const constantName Token = block.getLowercaseName(tokenIndex, "constant")
     switch constantName.text~()
-    case "var", "const", "enum", "for", "do", "parse", "gParse", "if", "elif", "select", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough"
+    case "var", "const", "enum", "for", "do", "parse", "gParse", "if", "elif", "select", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough", "nothing"
         errorInvalidName(constantName, "constant")
     const type OType = block.getOperandType(tokenIndex, !codeData.thisGroup~().empty?()).toFull(compiledData)
     block.next!(tokenIndex, ["="])
@@ -158,7 +158,7 @@ def compileVariableDefine(block Block, write codeData CodeData, compiledData CDa
     var tokenIndex Int = 1
     const variableName Token = block.getLowercaseName(tokenIndex, "variable")
     switch variableName.text~()
-    case "var", "const", "enum", "for", "do", "parse", "gParse", "if", "elif", "select", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough"
+    case "var", "const", "enum", "for", "do", "parse", "gParse", "if", "elif", "select", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough", "nothing"
         errorInvalidName(variableName, "variable")
     const type OType = block.getOperandType(tokenIndex, !codeData.thisGroup~().empty?()).toFull(compiledData)
     block.next!(tokenIndex, ["="])
