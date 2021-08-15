@@ -233,9 +233,7 @@ def callFunction(functionName Token, arguments Array, write codeData CodeData, c
                 if argumentFromSignatureType.this?()
                     argumentFromSignatureType = functionThisType
                 if argumentFromSignatureType.simple?() && !mutArgument.type~().simple?()
-                    var type OType = mutArgument.type`(nothing)
-                    type.type`(argumentFromSignatureType.type~())
-                    mutArgument.type`(type)
+                    mutArgument.type`(argumentFromSignatureType)
                 mutArgument.freeOperand(codeData, compiledData, llvmIR)
     if !memoryManagerFunction
         result.checkOperandForError(codeData, compiledData, freedOnError, llvmIR)
