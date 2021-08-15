@@ -175,7 +175,7 @@ def getType(compiledData CData, typeName Token, ignoreExport Bool) CType
                         type = typeWithDesiredName
                     else
                         errorFewVariants(typeName, "types", type.fullName~().splitByPart("::")[0], moduleName)
-            if !type.fullName~().empty?()
+            if !type.toList().empty?()
                 return type
         else
             const moduleName String = typeName.text~()[0 : separatorIndex]
@@ -242,7 +242,7 @@ def getGroup(compiledData CData, groupName Token, ignoreExport Bool) CGroup
                         group = groupWithDesiredName
                     else
                         errorFewVariants(groupName, "groups", group.fullName~().splitByPart("::")[0], moduleName)
-            if !group.fullName~().empty?()
+            if !group.toList().empty?()
                 return group
         else
             const moduleName String = groupName.text~()[0 : separatorIndex]
@@ -345,7 +345,7 @@ def getFunction(compiledData CData, functionName Token, ignoreExport Bool) CFunc
                         function = functionWithDesiredName
                     else
                         errorFewVariants(functionName, "functions", function.fullName~().splitByPart("::")[0], moduleName)
-            if !function.fullName~().empty?()
+            if !function.toList().empty?()
                 return function
         else
             const moduleName String = functionName.text~()[0 : separatorIndex]
