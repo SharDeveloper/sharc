@@ -11,7 +11,7 @@ type CData
 
 def moduleSignature() Bytes
     var result Bytes = Bytes.createEmpty()
-    parse _, char = "shar module 0.1|"
+    parse _, char = "shar module 0.2|"
         result.addItem(charToInt(char))
     return result
 
