@@ -322,7 +322,7 @@ def functionToFinalLLVMIR(compiledData CData, functionAndTypeName Token, write c
                         thisTypeArgumentIndex = index
                     elif argument.access~() != enum::access_write && simpleFunction.signature~().arguments~()[thisTypeArgumentIndex].access~() == enum::access_write
                         thisTypeArgumentIndex = index
-                llvmFunctionType += (argument.access~() == enum::access_write).select("[2 x i64]*, ", "[2 x i64], ")
+                llvmFunctionType += (argument.access~() == enum::access_write).select("[2 x i64]* noalias, ", "[2 x i64], ")
             const thisTypeArgumentIsMutable String = (simpleFunction.signature~().arguments~()[thisTypeArgumentIndex].access~() == enum::access_write).select("1", "0")
             llvmFunctionType.delete(llvmFunctionType.length~() - 2, 2)
             llvmFunctionSignature += llvmFunctionType[11 : llvmFunctionType.length~()]
@@ -342,7 +342,7 @@ def functionToFinalLLVMIR(compiledData CData, functionAndTypeName Token, write c
     var llvmFunction String = "define private [2 x i64] " + createFunctionLLVMName(functionName.text~(), typeName.text~(), functionVariant[0] == '1', functionVariant[1] == '1') + "("
     if !simpleFunction.signature~().arguments~().empty?()
         parse _, argument = simpleFunction.signature~().arguments~()
-            llvmFunction += (argument.access~() == enum::access_write).select("[2 x i64]*, ", "[2 x i64], ")
+            llvmFunction += (argument.access~() == enum::access_write).select("[2 x i64]* noalias, ", "[2 x i64], ")
         llvmFunction.delete(llvmFunction.length~() - 2, 2)
     var inlineAttribute String = ""
     const attributes FAttributes = simpleFunction.attributes~()
