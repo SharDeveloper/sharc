@@ -82,8 +82,8 @@ def loadModules(modulesFilesList Array, currentModule String) CData
     var functions Map = Map.createEmpty()
     var loadedModules Map = Map.createEmpty()
     const moduleSignature Bytes = moduleSignature()
-    var position Int = moduleSignature.length~()
     parse _, moduleFileName = modulesFilesList
+        var position Int = moduleSignature.length~()
         var module <>Bytes = loadFile(moduleFileName)
         if module.nothing?()
             errorCanNotLoadFile(moduleFileName)
