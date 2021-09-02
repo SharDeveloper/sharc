@@ -56,6 +56,7 @@
                 <li><a href="#end">end</a></li>
                 <li><a href="#next">next</a></li>
                 <li><a href="#fallthrough">fallthrough</a></li>
+                <li><a href="#nothrow">nothrow</a></li>
             </ul>
         </li>
         <li><a href="#вызов_функций">Способы вызова функций</a></li>
@@ -641,6 +642,15 @@
             Шаблон:
             <code><b>fallthrough</b> имя_оператора</code>
             Оператор перемещает ход выполнения в следующий вариант (case) оператора (switch, eSwitch, tSwitch) с указанным именем.
+        </div>
+        <div id="nothrow">
+            <h2>nothrow</h2>
+            Код из оператора <b>nothrow</b> выполняется так, как будто он находится в функции с атрибутом <b>nothrow</b>.<br>
+            Оператор не может использоваться в коде функции с атрибутом <b>nothrow</b>, либо внутри оператора <b>nothrow</b>.<br>
+            Шаблон:
+            <pre>
+<b>nothrow</b>
+    код</pre>
         </div>
     </div>
     <div id="вызов_функций">

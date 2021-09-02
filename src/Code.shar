@@ -33,6 +33,8 @@ def compileCode(code Array, write codeData CodeData, compiledData CData, write l
                 compileFor(currentBlock, codeData, compiledData, llvmIR)
             case "do"
                 compileDo(currentBlock, codeData, compiledData, llvmIR)
+            case "nothrow"
+                compileNothrow(currentBlock, codeData, compiledData, llvmIR)
             case "parse"
                 compileParse(currentBlock, codeData, compiledData, llvmIR)
             case "gParse"
@@ -325,6 +327,20 @@ def compileDo(block Block, write codeData CodeData, compiledData CData, write ll
         endLabels.put(doName.text~(), nothing)
         codeData.endLabels`(endLabels)
     llvmIR += "\t##nreg##" + endLabel + "##:\n"
+
+// The function compiles the 'nothrow' statement.
+def compileNothrow(block Block, write codeData CodeData, compiledData CData, write llvmIR String)
+    if codeData.ownerNoThrow~()
+        errorNotExpectedToken(block.line~()[0], "")
+    codeData.ownerNoThrow`(true)
+    block.subBlocks!()
+    block.eol!(1)
+    codeData.level`(codeData.level~() + 1)
+    const lastIsTerminator Bool = compileCode(block.subBlocks~(), codeData, compiledData, llvmIR)
+    codeData.ownerNoThrow`(false)
+    if !lastIsTerminator
+        codeData.freeLevel(codeData.level~(), compiledData, llvmIR)
+    codeData.deleteLevel(codeData.level~())
 
 // The function compiles the 'parse' statement.
 def compileParse(block Block, write codeData CodeData, compiledData CData, write llvmIR String)
