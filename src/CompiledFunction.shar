@@ -186,14 +186,17 @@ def callFunction(functionName Token, arguments Array, write codeData CodeData, c
                 else
                     notCheckArguments = false
             argument.typesCompatibleCheck(argumentFromSignature.type~(), codeData, compiledData)
-            if argumentWithCorrectAccess.type~().simple?() && !(argumentWithCorrectAccess.type~().optional?() || argumentWithCorrectAccess.Main::constant?())
+            if argumentWithCorrectAccess.type~().simple?() && !argumentWithCorrectAccess.Main::constant?()
                 var typeRegister String = ""
                 if argumentWithCorrectAccess.access~() == enum::access_write
                     const typePointerRegister String = codeData.createRegister("getelementptr [2 x i64], [2 x i64]* " + argumentWithCorrectAccess.value~() + ", i64 0, i32 0", assumes)
                     typeRegister = codeData.createRegister("load i64, i64* " + typePointerRegister + ", align 8", assumes)
                 else
                     typeRegister = codeData.createRegister("extractvalue [2 x i64] " + argumentWithCorrectAccess.value~() + ", 0", assumes)
-                const trueRegister String = codeData.createRegister("icmp eq i64 " + typeRegister + ", ##tnum##" + oTypeToToken(argumentWithCorrectAccess.type~(), false).text~() + "##", assumes)
+                var trueRegister String = codeData.createRegister("icmp eq i64 " + typeRegister + ", ##tnum##" + oTypeToToken(argumentWithCorrectAccess.type~(), false).text~() + "##", assumes)
+                if argumentWithCorrectAccess.type~().optional?()
+                    const isNothingRegister String = codeData.createRegister("icmp eq i64 " + typeRegister + ", 0", assumes)
+                    trueRegister = codeData.createRegister("or i1 " + trueRegister + ", " + isNothingRegister, assumes)
                 assumes += "\tcall void @llvm.assume(i1 " + trueRegister + ")\n"
             functionCallIRCode += (argumentFromSignature.access~() == enum::access_write).select("[2 x i64]* ", "[2 x i64] ") + argumentWithCorrectAccess.value~() + ", "
         functionCallIRCode.delete(functionCallIRCode.length~() - 2, 2)
