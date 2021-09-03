@@ -675,7 +675,7 @@ def createProgram(compiledData CData, outputFile String)
         else
             llvmIR += functionCode
     parse groupsAsString, functionName = usedData.inGroups~()
-        llvmIR += "define private i1 " + functionName + "(i64) alwaysinline nounwind{\n"
+        llvmIR += "define private i1 " + functionName + "(i64) alwaysinline nounwind readnone{\n"
         const groups Array = groupsAsString.split(',')
         var allTypes Set = usedData.groupsTypes~()[groups[groups.length~() - 1]]
         parse _, groupName = groups[0 : groups.length~() - 1]
@@ -713,7 +713,7 @@ def createProgram(compiledData CData, outputFile String)
                 "\tret i1 0\n"
             }
         llvmIR += functionBody + "}\n\n"
-    llvmIR += "define private [2 x i64] @shar.type.number.to.type.name(i64) nounwind{\n\tswitch i64 %0, label %notype [\n"
+    llvmIR += "define private [2 x i64] @shar.type.number.to.type.name(i64) nounwind readnone{\n\tswitch i64 %0, label %notype [\n"
     var labelNumber Int = 2
     var labelsCode String = ""
     var phiCode String = ""
@@ -847,7 +847,7 @@ def builtinConstants() String
 
 def builtinFunctions(mainFunctionMayThrow Bool) String
     return {
-        "define i32 @main(i32, i8** nocapture readnone) local_unnamed_addr sspstrong nounwind{\n"
+        "define i32 @main(i32, i8**) local_unnamed_addr sspstrong nounwind{\n"
         "\tcall void @shar__init(i32 %0, i8** %1)\n"
         "\tcall void @constnants.init()\n"
         "\tcall void @shar__enable__threads()\n"

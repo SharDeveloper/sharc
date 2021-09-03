@@ -330,7 +330,7 @@ def functionToFinalLLVMIR(compiledData CData, functionAndTypeName Token, write c
             llvmFunctionType.delete(llvmFunctionType.length~() - 2, 2)
             llvmFunctionSignature += llvmFunctionType[11 : llvmFunctionType.length~()]
             var usedFunctions Map = usedData.functions`(nothing)
-            usedFunctions.put(functionAndTypeName.text~(), "|" + thisTypeArgumentIndex.toString() + "|" + (simpleFunction.signature~().arguments~().length~() + 1).toString() + "|" + groupFunctions.group~() + "|" + llvmFunctionType + ")*|" + llvmFunctionSignature + ") {\n|" + thisTypeArgumentIsMutable)
+            usedFunctions.put(functionAndTypeName.text~(), "|" + thisTypeArgumentIndex.toString() + "|" + (simpleFunction.signature~().arguments~().length~() + 1).toString() + "|" + groupFunctions.group~() + "|" + llvmFunctionType + ")*|" + llvmFunctionSignature + ") nounwind {\n|" + thisTypeArgumentIsMutable)
             usedData.functions`(usedFunctions)
             return
         if !typeName.text~().containPart?("::")
