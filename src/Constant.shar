@@ -71,7 +71,7 @@ def compileConstant(constant Constant, write compiledData CData)
     var compiledConstant CConstant = compiledData.constants~()[constant.name~().text~()][compiledData.currentModule~()]
     var codeData CodeData = codeData{
         ("const::" + compiledData.currentModule~() + "::" + constant.name~().text~() /*functionNameForErrorMessage*/,
-        "" /*thisGroup*/,
+        Set.createEmpty() /*allThisGroups*/,
         OType.fromList({}) /*resultType*/,
         Map.createEmpty() /*namedOperands*/,
         1 /*level*/,

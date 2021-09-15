@@ -9,8 +9,8 @@ type UsedData
     // functions            Map(nameWithVariant String, code String)
     // llvmConstants        Map(llvmValue String, llvmName String)
     // llvmDeclares         Map(name String, llvmDeclaration String)
-    // groupsFunctions      Map(functionNameWithVariant String, groupName String)
-    // groupsTypes          Map(groupName String, Set(typeInGroups String))
+    // groupsFunctions      Map(functionNameWithVariant String, groupsNames [String])
+    // groupsTypes          Map(groupName String, typesInGroup Set(String))
     // groupListConstants   Map(groupName String, constantTypeAndName String)
 
 attach UsedData to FieldEnumerationsElements

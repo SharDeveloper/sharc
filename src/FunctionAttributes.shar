@@ -5,10 +5,10 @@ module Main
 // "override" - overrides a function with the "this" attribute for a particular type.
 type FAttributes
     // boolAttributes Int (like array of bit: alwaysinline, inline, noInline, cold, unsafewrite, nothrow, worker)
-    // this           Token
+    // this           [Token]
     // override       Token
 
-const defaultFAttributes FAttributes = FAttributes.fromList({0, const::emptyToken, const::emptyToken})
+const defaultFAttributes FAttributes = FAttributes.fromList({0, [], const::emptyToken})
 
 #alwaysinline
 def alwaysInline?(attributes FAttributes) Bool
@@ -46,7 +46,7 @@ def worker?(attributes FAttributes) Bool
     return boolAttributes.getBit(6)
 
 #alwaysinline
-def this~(attributes FAttributes) Token
+def this~(attributes FAttributes) Array
     return attributes.typeGetItem(1)
 
 #alwaysinline

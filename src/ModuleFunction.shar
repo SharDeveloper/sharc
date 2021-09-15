@@ -5,7 +5,7 @@ type ModuleFunction
     // export?        Bool
     // name           String
     // module         String
-    // owningGroup    String
+    // owningGroups   [String]
     // thisType       String
     // finalFunction  SimpleFunction
 
@@ -36,13 +36,13 @@ attach ModuleFunction to FieldModule
     def module`(write function ModuleFunction, new String) String
         return function.typePut(2, new)
 
-attach ModuleFunction to FieldOwningGroup
+attach ModuleFunction to FieldOwningGroups
     #alwaysinline
-    def owningGroup~(function ModuleFunction) String
+    def owningGroups~(function ModuleFunction) Array
         return function.typeGetItem(3)
 
     #alwaysinline
-    def owningGroup`(write function ModuleFunction, new String) String
+    def owningGroups`(write function ModuleFunction, new Array) Array
         return function.typePut(3, new)
 
 attach ModuleFunction to FieldThisType
@@ -64,8 +64,8 @@ attach ModuleFunction to FieldFinalFunction
         return function.typePut(5, new)
 
 #alwaysinline
-def moduleFunction(isExport Bool, name, module, group, thisType String, finalFunction SimpleFunction) ModuleFunction
-    return ModuleFunction.fromList({isExport, name, module, group, thisType, finalFunction})
+def moduleFunction(isExport Bool, name, module String, groups Array, thisType String, finalFunction SimpleFunction) ModuleFunction
+    return ModuleFunction.fromList({isExport, name, module, groups, thisType, finalFunction})
 
 attach ModuleFunction to BinarySerializable
     #alwaysinline
@@ -73,13 +73,15 @@ attach ModuleFunction to BinarySerializable
         const isExport Bool = function.export?()
         const name String = function.name~()
         const module String = function.module~()
-        const group String = function.owningGroup~()
+        const groups Array = function.owningGroups~()
         const thisType String = function.thisType~()
         const finalFunction SimpleFunction = function.finalFunction~()
         isExport.serialize(bytes)
         name.serialize(bytes)
         module.serialize(bytes)
-        group.serialize(bytes)
+        groups.length~().serialize(bytes)
+        parse _, group = groups
+            group.serialize(bytes)
         thisType.serialize(bytes)
         finalFunction.serialize(bytes)
 
@@ -90,10 +92,13 @@ attach ModuleFunction to BinarySerializable
             const isExport Bool = Bool.deserialize(bytes, position)
             const name String = String.deserialize(bytes, position)
             const module String = String.deserialize(bytes, position)
-            const group String = String.deserialize(bytes, position)
+            const length Int = Int.deserialize(bytes, position)
+            var groups Array = []
+            for :(index Int = 0) index < length; index++
+                groups.addItem(String.deserialize(bytes, position))
             const thisType String = String.deserialize(bytes, position)
             const finalFunction SimpleFunction = SimpleFunction.deserialize(bytes, position)
-            return moduleFunction(isExport, name, module, group, thisType, finalFunction)
+            return moduleFunction(isExport, name, module, groups, thisType, finalFunction)
         catch id, message
             position = startPosition
             throw(id, message)

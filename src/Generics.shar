@@ -136,9 +136,9 @@ group FieldModule
     module~(This) $Any
     module`(write This, $Any) $Any
 
-group FieldOwningGroup
-    owningGroup~(This) $Any
-    owningGroup`(write This, $Any) $Any
+group FieldOwningGroups
+    owningGroups~(This) $Any
+    owningGroups`(write This, $Any) $Any
 
 group FieldThisType
     thisType~(This) $Any
@@ -180,9 +180,9 @@ group FieldFunctionNameForErrorMessage
     functionNameForErrorMessage~(This) $Any
     functionNameForErrorMessage`(write This, $Any) $Any
 
-group FieldThisGroup
-    thisGroup~(This) $Any
-    thisGroup`(write This, $Any) $Any
+group FieldAllThisGroups
+    allThisGroups~(This) $Any
+    allThisGroups`(write This, $Any) $Any
 
 group FieldNamedOperands
     namedOperands~(This) $Any
