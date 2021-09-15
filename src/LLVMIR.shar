@@ -282,8 +282,11 @@ def toFinalLLVMIR(llvmIR String, errorCoordinates Token, compiledData CData, thi
                 typeNumber = usedTypes.length~().toString()
                 usedTypes.put(typeName, typeNumber)
                 usedData.types`(usedTypes)
-                parse functionName, groupName = usedData.groupsFunctions~()
-                    if typeGroups[groupName]
+                parse functionName, groupsNames = usedData.groupsFunctions~()
+                    var typeInGroups Bool = true
+                    parse :(groupsParse) _, groupName = groupsNames
+                        typeInGroups = typeInGroups && typeGroups[groupName]
+                    if typeInGroups
                         const functionVariant String = functionName[functionName.length~() - 2 : functionName.length~()]
                         const fullFunctionName String = functionName[0 : functionName.length~() - 2] + "." + typeName + functionVariant
                         compilingFunctions.add(const::emptyToken.replaceText(fullFunctionName))
@@ -423,8 +426,11 @@ def toFinalLLVMIR(llvmIR String, errorCoordinates Token, compiledData CData, thi
                                 typeNumber = usedTypes.length~().toString()
                                 usedTypes.put(fullTypeName, typeNumber)
                                 usedData.types`(usedTypes)
-                                parse functionName, groupOfFunctionName = usedData.groupsFunctions~()
-                                    if typeGroups[groupOfFunctionName]
+                                parse functionName, groupsNames = usedData.groupsFunctions~()
+                                    var typeInGroups Bool = true
+                                    parse :(groupsParse) _, usedGroupName = groupsNames
+                                        typeInGroups = typeInGroups && typeGroups[usedGroupName]
+                                    if typeInGroups
                                         const functionVariant String = functionName[functionName.length~() - 2 : functionName.length~()]
                                         const fullFunctionName String = functionName[0 : functionName.length~() - 2] + "." + fullTypeName + functionVariant
                                         compilingFunctions.add(const::emptyToken.replaceText(fullFunctionName))

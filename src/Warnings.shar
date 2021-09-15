@@ -5,3 +5,6 @@ def warningVarSetItself(name Token)
 
 def warningDeclaredButNotUsed(name Token, whatNotUsed String)
     ("Warning: " + name.coordinatesToString() + whatNotUsed + " \q" + name.text~() + "\q declared but not used.").println()
+
+def warningUnneededGroupInDefaultFunction(subGroupName Token, groupName String)
+    ("Warning: " + subGroupName.coordinatesToString() + "There is no point in specifying the \q" + subGroupName.text~() + "\q group, since the \q" + groupName + "\q group has already been specified, and all members of the \q" + groupName + "\q group are already members of the \q" + subGroupName.text~() + "\q group.").println()

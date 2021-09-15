@@ -1,0 +1,28 @@
+module Main
+
+// A type for storing functions from groups.
+type GroupsFunctions
+    // groups     [String]
+    // functions Map(String ("+" - default, "-" -  require, other - type name), SimpleFunction)
+
+attach GroupsFunctions to FieldGroups
+    #alwaysinline
+    def groups~(functions GroupsFunctions) Array
+        return functions.typeGetItem(0)
+
+    #alwaysinline
+    def groups`(write functions GroupsFunctions, new Array) Array
+        return functions.typePut(0, new)
+
+attach GroupsFunctions to FieldFunctions
+    #alwaysinline
+    def functions~(functions GroupsFunctions) Map
+        return functions.typeGetItem(1)
+
+    #alwaysinline
+    def functions`(write functions GroupsFunctions, new <>Map) <>Map
+        return functions.typePut(1, new)
+
+#alwaysinline
+def groupsFunctions(groups Array, functions Map) GroupsFunctions
+    return GroupsFunctions.fromList({groups, functions})

@@ -75,8 +75,8 @@ def precompileAttachmentFunction(function Function, write compiledData CData, ty
         errorNoFunctionInGroup(function.name~(), group.fullName~())
     const groupModule String = group.fullName~().splitByPart("::")[0]
     var compiledFunction CFunction = compiledData.borrowFunction(function.name~().replaceText(groupModule + "::" +function.name~().text~()))
-    var groupFunctions GroupFunctions = compiledFunction.finalFunction`(nothing)
-    const requireFunction SimpleFunction = groupFunctions.functions~()["-"]
+    var groupsFunctions GroupsFunctions = compiledFunction.finalFunction`(nothing)
+    const requireFunction SimpleFunction = groupsFunctions.functions~()["-"]
     const functionSignature FSignature = function.getSignature().toFull(compiledData)
     const requireFunctionSignature FSignature = requireFunction.signature~().replaceThisType(type.fullName~())
     functionSignature.signatureCompatible!(requireFunctionSignature, compiledData)
@@ -85,10 +85,10 @@ def precompileAttachmentFunction(function Function, write compiledData CData, ty
         parse _, argument = arguments
             if !(argument.type~().anyType?() || argument.type~().simple?())
                 errorNothrowOnInvalidFunction(function.name~())
-    var functions Map = groupFunctions.functions`(nothing)
+    var functions Map = groupsFunctions.functions`(nothing)
     functions.put(type.fullName~(), sFunction(function.attributes~(), functionSignature, "", true))
-    groupFunctions.functions`(functions)
-    compiledFunction.finalFunction`(groupFunctions)
+    groupsFunctions.functions`(functions)
+    compiledFunction.finalFunction`(groupsFunctions)
     compiledData.refitFunction(compiledFunction)
 
 // A function partially compiles a function that is defined as part of a group but has an implementation.
@@ -100,7 +100,22 @@ def precompileDefaultFunction(function Function, write compiledData CData)
     functionSignature.this!()
     var mapWithDefaultFunction Map = Map.createEmpty()
     mapWithDefaultFunction.put("+", sFunction(function.attributes~(), functionSignature, "", true))
-    const groupFullName String = compiledData.getGroup(function.attributes~().this~(), false).fullName~()
+    var groupsFullNames Array = []
+    do
+        var allGroups Array = []
+        parse _, groupName = function.attributes~().this~()
+            const group CGroup = compiledData.getGroup(groupName, false)
+            const groupFullName String = group.fullName~()
+            if groupsFullNames.contain?(groupFullName)
+                errorAlreadyExist(groupName, "group")
+            groupsFullNames.addItem(groupFullName)
+            allGroups.addItem(group)
+        for :(firstIndex Int = 0) firstIndex < allGroups.length~() - 1; firstIndex++
+            for :(secondIndex Int = firstIndex) secondIndex < allGroups.length~(); secondIndex++
+                const firstGroup CGroup = allGroups[firstIndex]
+                const secondGroup CGroup = allGroups[secondIndex]
+                if firstGroup.subGroups~()[secondGroup.fullName~()]
+                    warningUnneededGroupInDefaultFunction(function.attributes~().this~()[secondIndex].replaceText(secondGroup.fullName~()), firstGroup.fullName~())
     var allFunctions Map = compiledData.functions`(nothing)
     var functionsWithSameName <>Map = allFunctions.put(function.name~().text~(), Map.createEmpty())
     if functionsWithSameName.nothing?()
@@ -108,7 +123,7 @@ def precompileDefaultFunction(function Function, write compiledData CData)
     if !functionsWithSameName.put{
         (compiledData.currentModule~(),
         cFunction(function.export?(), compiledData.currentModule~() + "::" + function.name~().text~(),
-        groupFunctions(groupFullName, mapWithDefaultFunction))).nothing?()
+        groupsFunctions(groupsFullNames, mapWithDefaultFunction))).nothing?()
     }
         errorAlreadyExist(function.name~(), "function")
     allFunctions.put(function.name~().text~(), functionsWithSameName)
@@ -122,28 +137,29 @@ def precompileOverrideFunction(function Function, write compiledData CData)
     var defaultFunctionName Token = function.attributes~().override~()
     defaultFunctionName.addString("::" + function.name~().text~())
     var compiledFunction CFunction = compiledData.borrowFunction(defaultFunctionName)
-    if !compiledFunction.finalFunction~().type?(GroupFunctions)
+    if !compiledFunction.finalFunction~().type?(GroupsFunctions)
         errorDefaultFunctionNotFound(defaultFunctionName)
-    var groupFunctions GroupFunctions = compiledFunction.finalFunction`(nothing)
-    var groupFunctionsMap Map = groupFunctions.functions`(nothing)
-    var defaultFunction <>SimpleFunction = groupFunctionsMap["+"]
+    var groupsFunctions GroupsFunctions = compiledFunction.finalFunction`(nothing)
+    var groupsFunctionsMap Map = groupsFunctions.functions`(nothing)
+    var defaultFunction <>SimpleFunction = groupsFunctionsMap["+"]
     if defaultFunction.nothing?()
         errorDefaultFunctionNotFound(defaultFunctionName)
     const fullSignature FSignature = function.getSignature().toFull(compiledData)
     const thisTypeToken Token = fullSignature.getThisType(defaultFunction.signature~())
     const thisType CType = compiledData.getType(thisTypeToken, false)
-    if !thisType.groups~()[groupFunctions.group~()]
-        errorTypeNotInGroup(thisTypeToken, groupFunctions.group~())
+    parse _, groupName = groupsFunctions.groups~()
+        if !thisType.groups~()[groupName]
+            errorTypeNotInGroup(thisTypeToken, groupName)
     fullSignature.signatureCompatible!(defaultFunction.signature~().replaceThisType(thisTypeToken.text~()), compiledData)
     if function.attributes~().nothrow?()
         const arguments Array = fullSignature.arguments~()
         parse _, argument = arguments
             if !(argument.type~().anyType?() || argument.type~().simple?())
                 errorNothrowOnInvalidFunction(function.name~())
-    if !groupFunctionsMap.put(thisType.fullName~(), sFunction(function.attributes~(), fullSignature, "", true)).nothing?()
+    if !groupsFunctionsMap.put(thisType.fullName~(), sFunction(function.attributes~(), fullSignature, "", true)).nothing?()
         errorAlreadyExist(function.name~(), "function")
-    groupFunctions.functions`(groupFunctionsMap)
-    compiledFunction.finalFunction`(groupFunctions)
+    groupsFunctions.functions`(groupsFunctionsMap)
+    compiledFunction.finalFunction`(groupsFunctions)
     compiledData.refitFunction(compiledFunction)
 
 // The function partially compiles a function that does not in any way belong to any group.
@@ -192,7 +208,7 @@ def compileAttachmentFunction(function Function, write compiledData CData, type 
     var typeFunction SimpleFunction = compiledData.getFunction(function.name~().replaceText(fullFunctionName), false).finalFunction~().functions~()[type.fullName~()]
     var codeData CodeData = codeData{
         (fullFunctionName + " (" + type.fullName~() + ")" /*functionNameForErrorMessage*/,
-        "" /*thisGroup*/,
+        Set.createEmpty() /*allThisGroups*/,
         typeFunction.signature~().resultType~() /*resultType*/,
         Map.createEmpty() /*namedOperands*/,
         1 /*level*/,
@@ -238,21 +254,26 @@ def compileAttachmentFunction(function Function, write compiledData CData, type 
         codeData.allOperandsUsed!()
     llvmIR.sharRegistersToLLVMRegisters(typeFunction.signature~().arguments~().length~() + 1, function.name~())
     var compiledFunction CFunction = compiledData.borrowFunction(function.name~().replaceText(fullFunctionName))
-    var groupFunctions GroupFunctions = compiledFunction.finalFunction`(nothing)
-    var functions Map = groupFunctions.functions`(nothing)
+    var groupsFunctions GroupsFunctions = compiledFunction.finalFunction`(nothing)
+    var functions Map = groupsFunctions.functions`(nothing)
     typeFunction = functions.put(type.fullName~(), SimpleFunction.fromList({}))
     typeFunction.llvmIR`(llvmIR)
     functions.put(type.fullName~(), typeFunction)
-    groupFunctions.functions`(functions)
-    compiledFunction.finalFunction`(groupFunctions)
+    groupsFunctions.functions`(functions)
+    compiledFunction.finalFunction`(groupsFunctions)
     compiledData.refitFunction(compiledFunction)
 
 // A function compiles a function that is defined as part of a group but has an implementation.
 #alwaysinline
 def compileDefaultFunction(function Function, write compiledData CData)
-    const groupFullName String = compiledData.getGroup(function.attributes~().this~(), false).fullName~()
     const fullFunctionName String = compiledData.currentModule~() + "::" +function.name~().text~()
     var defaultFunction SimpleFunction = compiledData.getFunction(function.name~().replaceText(fullFunctionName), false).finalFunction~().functions~()["+"]
+    var allThisGroups Set = Set.createEmpty()
+    parse _, mainThisGroupName = function.attributes~().this~()
+        const mainThisGroup CGroup = compiledData.getGroup(mainThisGroupName, false)
+        parse _, subThisGroupName = mainThisGroup.subGroups~()
+            allThisGroups.add(subThisGroupName)
+        allThisGroups.add(mainThisGroup.fullName~())
     var memoryManagerFunction Bool = false
     if compiledData.currentModule~() == "STD"
         switch function.name~().text~()
@@ -260,7 +281,7 @@ def compileDefaultFunction(function Function, write compiledData CData)
             memoryManagerFunction = true
     var codeData CodeData = codeData{
         (compiledData.currentModule~() + "::" + function.name~().text~()  + " (@)" /*functionNameForErrorMessage*/,
-        groupFullName /*thisGroup*/,
+        allThisGroups /*allThisGroups*/,
         defaultFunction.signature~().resultType~() /*resultType*/,
         Map.createEmpty() /*namedOperands*/,
         1 /*level*/,
@@ -306,13 +327,13 @@ def compileDefaultFunction(function Function, write compiledData CData)
         codeData.allOperandsUsed!()
     llvmIR.sharRegistersToLLVMRegisters(defaultFunction.signature~().arguments~().length~() + 1, function.name~())
     var compiledFunction CFunction = compiledData.borrowFunction(function.name~().replaceText(fullFunctionName))
-    var groupFunctions GroupFunctions = compiledFunction.finalFunction`(nothing)
-    var functions Map = groupFunctions.functions`(nothing)
+    var groupsFunctions GroupsFunctions = compiledFunction.finalFunction`(nothing)
+    var functions Map = groupsFunctions.functions`(nothing)
     defaultFunction = functions.put("+", SimpleFunction.fromList({}))
     defaultFunction.llvmIR`(llvmIR)
     functions.put("+", defaultFunction)
-    groupFunctions.functions`(functions)
-    compiledFunction.finalFunction`(groupFunctions)
+    groupsFunctions.functions`(functions)
+    compiledFunction.finalFunction`(groupsFunctions)
     compiledData.refitFunction(compiledFunction)
 
 // A function compiles a function that overrides, for a particular type, a group-related function.
@@ -330,7 +351,7 @@ def compileOverrideFunction(function Function, write compiledData CData)
             memoryManagerFunction = true
     var codeData CodeData = codeData{
         (fullFunctionName + " (" + typeFullName + ")" /*functionNameForErrorMessage*/,
-        "" /*thisGroup*/,
+        Set.createEmpty() /*allThisGroups*/,
         typeFunction.signature~().resultType~() /*resultType*/,
         Map.createEmpty() /*namedOperands*/,
         1 /*level*/,
@@ -376,13 +397,13 @@ def compileOverrideFunction(function Function, write compiledData CData)
         codeData.allOperandsUsed!()
     llvmIR.sharRegistersToLLVMRegisters(typeFunction.signature~().arguments~().length~() + 1, function.name~())
     var compiledFunction CFunction = compiledData.borrowFunction(function.name~().replaceText(fullFunctionName))
-    var groupFunctions GroupFunctions = compiledFunction.finalFunction`(nothing)
-    functions = groupFunctions.functions`(nothing)
+    var groupsFunctions GroupsFunctions = compiledFunction.finalFunction`(nothing)
+    functions = groupsFunctions.functions`(nothing)
     typeFunction = functions.put(typeFullName, SimpleFunction.fromList({}))
     typeFunction.llvmIR`(llvmIR)
     functions.put(typeFullName, typeFunction)
-    groupFunctions.functions`(functions)
-    compiledFunction.finalFunction`(groupFunctions)
+    groupsFunctions.functions`(functions)
+    compiledFunction.finalFunction`(groupsFunctions)
     compiledData.refitFunction(compiledFunction)
 
 // A function compiles a function that does not in any way belong to any group.
@@ -392,7 +413,7 @@ def compileSimpleFunction(function Function, write compiledData CData)
     var simpleFunction SimpleFunction = compiledData.getFunction(function.name~().replaceText(fullFunctionName), false).finalFunction~()
     var codeData CodeData = codeData{
         (fullFunctionName /*functionNameForErrorMessage*/,
-        "" /*thisGroup*/,
+        Set.createEmpty() /*allThisGroups*/,
         simpleFunction.signature~().resultType~() /*resultType*/,
         Map.createEmpty() /*namedOperands*/,
         1 /*level*/,

@@ -249,10 +249,9 @@ def runtimeTypeCheck(operand Operand, expectedType OType, expectedTypeNumber Str
         if !allOk && (compileTimeThisInOperandGroups || compileTimeThisInExpectedGroups)
             haveCompileTimeOperations = true
             const groupType Array = compileTimeThisInOperandGroups.select(operandType, expectedType).type~()
-            const thisGroupSubGroups Set = compiledData.getGroup(const::emptyToken.replaceText(codeData.thisGroup~()), false).subGroups~()
+            const allThisGroups Set = codeData.allThisGroups~()
             parse :(parse) _, groupNameToken = groupType
-                const groupName String = groupNameToken.text~()
-                allOk = thisGroupSubGroups[groupName] || groupName == codeData.thisGroup~()
+                allOk = allThisGroups[groupNameToken.text~()]
                 if !allOk
                     end parse
         isError = haveCompileTimeOperations && !allOk
@@ -423,10 +422,9 @@ def runtimeTypesCompatibleCheck(operand Operand, expectedType OType, write codeD
         if !allOk && (compileTimeThisInOperandGroups || compileTimeThisInExpectedGroups)
             haveCompileTimeOperations = true
             const groupType Array = compileTimeThisInOperandGroups.select(operandType, expectedType).type~()
-            const thisGroupSubGroups Set = compiledData.getGroup(const::emptyToken.replaceText(codeData.thisGroup~()), false).subGroups~()
-            parse :(parse) _, groupToken = groupType
-                const group String = groupToken.text~()
-                allOk = thisGroupSubGroups[group] || group == codeData.thisGroup~()
+            const allThisGroups Set = codeData.allThisGroups~()
+            parse :(parse) _, groupNameToken = groupType
+                allOk = allThisGroups[groupNameToken.text~()]
                 if !allOk
                     end parse
         isError = haveCompileTimeOperations && !allOk
@@ -543,10 +541,9 @@ def typesCompatibleCheck(operand Operand, expectedType OType, write codeData Cod
         if !allOk && (compileTimeThisInOperandGroups || compileTimeThisInExpectedGroups)
             haveCompileTimeOperations = true
             const groupType Array = compileTimeThisInOperandGroups.select(operandType, expectedType).type~()
-            const thisGroupSubGroups Set = compiledData.getGroup(const::emptyToken.replaceText(codeData.thisGroup~()), false).subGroups~()
-            parse :(parse) _, groupToken = groupType
-                const group String = groupToken.text~()
-                allOk = thisGroupSubGroups[group] || group == codeData.thisGroup~()
+            const allThisGroups Set = codeData.allThisGroups~()
+            parse :(parse) _, groupNameToken = groupType
+                allOk = allThisGroups[groupNameToken.text~()]
                 if !allOk
                     end parse
         isError = haveCompileTimeOperations && !allOk

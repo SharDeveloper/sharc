@@ -3,7 +3,7 @@ module Main
 // The data that is used when compiling the program code.
 type CodeData
     // functionNameForErrorMessage String
-    // thisGroup                   String
+    // allThisGroups               Set of String
     // resultType                  OType
     // namedOperands               Map(name String, operand NamedOperand)
     // level                       Int
@@ -25,13 +25,13 @@ attach CodeData to FieldFunctionNameForErrorMessage
     def functionNameForErrorMessage`(write codeData CodeData, new String) String
         return codeData.typePut(0, new)
 
-attach CodeData to FieldThisGroup
+attach CodeData to FieldAllThisGroups
     #alwaysinline
-    def thisGroup~(codeData CodeData) String
+    def allThisGroups~(codeData CodeData) Set
         return codeData.typeGetItem(1)
 
     #alwaysinline
-    def thisGroup`(write codeData CodeData, new String) String
+    def allThisGroups`(write codeData CodeData, new Set) Set
         return codeData.typePut(1, new)
 
 attach CodeData to FieldResultType
@@ -134,8 +134,8 @@ attach CodeData to FieldOwnerNoThrow
         return codeData.typePut(12, new)
 
 #alwaysinline
-def codeData(functionNameForErrorMessage, thisGroup String, resultType OType, namedOperands Map, level, registerCounter Int, endLabels, nextLabels, fallthroughLabels Map, catchLabels, allocs, unneededAllocs Array, ownerNoThrow Bool) CodeData
-    return CodeData.fromList({functionNameForErrorMessage, thisGroup, resultType, namedOperands, level, registerCounter, endLabels, nextLabels, fallthroughLabels, catchLabels, allocs, unneededAllocs, ownerNoThrow})
+def codeData(functionNameForErrorMessage String, allThisGroup Set, resultType OType, namedOperands Map, level, registerCounter Int, endLabels, nextLabels, fallthroughLabels Map, catchLabels, allocs, unneededAllocs Array, ownerNoThrow Bool) CodeData
+    return CodeData.fromList({functionNameForErrorMessage, allThisGroup, resultType, namedOperands, level, registerCounter, endLabels, nextLabels, fallthroughLabels, catchLabels, allocs, unneededAllocs, ownerNoThrow})
 
 // The function creates ir code with allocations.
 #alwaysinline

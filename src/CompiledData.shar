@@ -144,15 +144,15 @@ def loadModules(modulesFilesList Array, currentModule String) CData
                 var newFunction CFunction = CFunction.fromList({})
                 if allFunctionsWithSameName.nothing?()
                     allFunctionsWithSameName = Map.createEmpty()
-                if function.owningGroup~().empty?()
+                if function.owningGroups~().empty?()
                     const cFunction CFunction = cFunction(function.export?(), functionModule + "::" + functionName, function.finalFunction~())
                     newFunction = cFunction
                 else
-                    var groupFunctions <>CFunction = allFunctionsWithSameName[functionModule]
-                    if groupFunctions.nothing?()
-                        groupFunctions = cFunction(function.export?(), functionModule + "::" + functionName, groupFunctions(function.owningGroup~(), Map.createEmpty()))
-                    addFunctionToFunctionWithGroupsFunctions(groupFunctions, function.thisType~(), function.finalFunction~())
-                    newFunction = groupFunctions
+                    var groupsFunctions <>CFunction = allFunctionsWithSameName[functionModule]
+                    if groupsFunctions.nothing?()
+                        groupsFunctions = cFunction(function.export?(), functionModule + "::" + functionName, groupsFunctions(function.owningGroups~(), Map.createEmpty()))
+                    addFunctionToFunctionWithGroupsFunctions(groupsFunctions, function.thisType~(), function.finalFunction~())
+                    newFunction = groupsFunctions
                 allFunctionsWithSameName.put(functionModule, newFunction)
                 functions.put(functionName, allFunctionsWithSameName)
         catch
@@ -272,7 +272,7 @@ def addRequiredFunction(write compiledData CData, group Group, function GFunctio
         cFunction(
             group.export?(),
             compiledData.currentModule~() + "::" + function.name~().text~(),
-            groupFunctions(compiledData.currentModule~() + "::" + group.name~().text~(), groupFunctions)
+            groupsFunctions([compiledData.currentModule~() + "::" + group.name~().text~()], groupFunctions)
         )).nothing?()
     }
         errorAlreadyExist(function.name~(), "function")
@@ -473,16 +473,16 @@ def createModule(compiledData CData, outputFile String)
     parse functionName, functionsWithName = compiledData.functions~()
         parse moduleName, function = functionsWithName
             tSwitch function.finalFunction~()
-            case GroupFunctions
-                const groupFunctions GroupFunctions = function.finalFunction~()
-                parse thisType, simpleFunction = groupFunctions.functions~()
+            case GroupsFunctions
+                const groupsFunctions GroupsFunctions = function.finalFunction~()
+                parse thisType, simpleFunction = groupsFunctions.functions~()
                     if simpleFunction.fromCurrentModule?()
                         functions.addItem{
                             (moduleFunction(
                                 function.export?(),
                                 functionName,
                                 moduleName,
-                                groupFunctions.group~(),
+                                groupsFunctions.groups~(),
                                 thisType,
                                 simpleFunction
                             ))
@@ -495,7 +495,7 @@ def createModule(compiledData CData, outputFile String)
                             function.export?(),
                             functionName,
                             moduleName,
-                            "",
+                            [],
                             "",
                             simpleFunction
                         ))
@@ -512,29 +512,31 @@ def createModule(compiledData CData, outputFile String)
 def createProgram(compiledData CData, outputFile String)
     var compilingConstants Set = Set.createEmpty()
     var compilingFunctions Set = Set.createEmpty()
-    var groupsTypes Map = Map.createEmpty()
-    parse _, groups = compiledData.groups~()
-        parse _, group = groups
-            groupsTypes.put(group.fullName~(), Set.createEmpty())
-    const alwaysUsedTypes Map = alwaysUsedTypes()
-    parse typeName, _ = alwaysUsedTypes
-        const typeGroups Set = compiledData.getType(const::emptyToken.replaceText(typeName), true).groups~()
-        parse _, group = typeGroups
-            var groupTypes Set = groupsTypes.put(group, Set.createEmpty())
-            groupTypes.add(typeName)
-            groupsTypes.put(group, groupTypes)
-    var usedData UsedData = usedData{
-        (builtinEnumerationsElements(),
-        Map.createEmpty(),
-        alwaysUsedTypes,
-        Map.createEmpty(),
-        Map.createEmpty(),
-        builtinConstantStrings(),
-        builtinLLVMDeclaredFunctions(),
-        Map.createEmpty(),
-        groupsTypes,
-        Map.createEmpty())
-    }
+    var usedData UsedData = UsedData.fromList({})
+    do
+        var groupsTypes Map = Map.createEmpty()
+        parse _, groups = compiledData.groups~()
+            parse _, group = groups
+                groupsTypes.put(group.fullName~(), Set.createEmpty())
+        const alwaysUsedTypes Map = alwaysUsedTypes()
+        parse typeName, _ = alwaysUsedTypes
+            const typeGroups Set = compiledData.getType(const::emptyToken.replaceText(typeName), true).groups~()
+            parse _, group = typeGroups
+                var groupTypes Set = groupsTypes.put(group, Set.createEmpty())
+                groupTypes.add(typeName)
+                groupsTypes.put(group, groupTypes)
+        usedData = usedData{
+            (builtinEnumerationsElements(),
+            Map.createEmpty(),
+            alwaysUsedTypes,
+            Map.createEmpty(),
+            Map.createEmpty(),
+            builtinConstantStrings(),
+            builtinLLVMDeclaredFunctions(),
+            Map.createEmpty(),
+            groupsTypes,
+            Map.createEmpty())
+        }
     var mainFunctionMayThrow Bool = true
     try
         mainFunctionMayThrow = !compiledData.getFunction(const::emptyToken.replaceText("Main::main"), true).finalFunction~().attributes~().nothrow?()
@@ -618,14 +620,20 @@ def createProgram(compiledData CData, outputFile String)
             const functionData Array = functionCode.split('|')
             const thisTypeArgumentIndex String = functionData[1]
             var newRegisterNumber Int = Int.fromString(functionData[2])
-            const group String = functionData[3]
+            const groups Array = functionData[3].split(',')
             const llvmFunctionType String = functionData[4]
             const llvmFunctionSignature String = functionData[5]
             const thisTypeArgumentIsMutable Bool = functionData[6][0] == '1'
-            const groupTypes Set = usedData.groupsTypes~()[group]
+            var typesInGroups Set = usedData.groupsTypes~()[groups[0]]
+            for :(groupIndex Int = 1) groupIndex < groups.length~(); groupIndex++
+                const currentGroupName String = groups[groupIndex]
+                const currentGroupTypes Set = usedData.groupsTypes~()[currentGroupName]
+                parse _, alreadyInTypeName = typesInGroups
+                    if !currentGroupTypes[alreadyInTypeName]
+                        typesInGroups.remove(alreadyInTypeName)
             var brs String = ""
             llvmIR += llvmFunctionSignature
-            if !groupsTypes.empty?()
+            if !typesInGroups.empty?()
                 var typeRegister String = newRegisterNumber.toString()
                 if thisTypeArgumentIsMutable
                     const typePointerRegister String = typeRegister
@@ -642,24 +650,24 @@ def createProgram(compiledData CData, outputFile String)
                 brs = "\t" + newRegisterNumber.toString() + ":\n"
                 newRegisterNumber++
             brs += "\tret [2 x i64] " + genericFunctionsErrors[functionName] + "\n"
-            if !groupsTypes.empty?()
+            if !typesInGroups.empty?()
                 // [[ (number | 0x4000000000000000).toString(), numberAsString, name] ...]
-                var typesInGroups Array = []
-                parse _, typeName = groupTypes
+                var typesInGroupsArray Array = []
+                parse _, typeName = typesInGroups
                     const typeNumberAsString String = usedData.types~()[typeName]
                     var typeNumber Int = 0
                     try
                         typeNumber = Int.fromString(typeNumberAsString)
                     catch
                         unreachable()
-                    typesInGroups.addItem([(typeNumber | 0x4000000000000000).toString(), typeNumberAsString, typeName])
-                typesInGroups.sort(true)
+                    typesInGroupsArray.addItem([(typeNumber | 0x4000000000000000).toString(), typeNumberAsString, typeName])
+                typesInGroupsArray.sort(true)
                 var llvmArgumentsInCall String = "("
                 const splitedLLVmFunctionType Array = llvmFunctionType.split(']')
                 parse argumentRegisterNumber, afterTypePart = splitedLLVmFunctionType[2 : splitedLLVmFunctionType.length~()]
                     llvmArgumentsInCall += (afterTypePart[0] == '*').select("[2 x i64]* %", "[2 x i64] %") + argumentRegisterNumber.toString() + ", "
                 llvmArgumentsInCall.copy(llvmArgumentsInCall.length~() - 2, ")\n", 0, 2)
-                parse _, type = typesInGroups
+                parse _, type = typesInGroupsArray
                     const newRegister String = newRegisterNumber.toString()
                     newRegisterNumber++
                     const resultRegister String = newRegisterNumber.toString()
@@ -678,14 +686,11 @@ def createProgram(compiledData CData, outputFile String)
         llvmIR += "define private i1 " + functionName + "(i64) alwaysinline nounwind readnone{\n"
         const groups Array = groupsAsString.split(',')
         var allTypes Set = usedData.groupsTypes~()[groups[groups.length~() - 1]]
-        parse _, groupName = groups[0 : groups.length~() - 1]
-            const groupTypes Set = usedData.groupsTypes~()[groupName]
-            var unneededTypes Array = []
+        for :(groupIndex Int = 0) groupIndex < groups.length~() - 1; groupIndex++
+            const groupTypes Set = usedData.groupsTypes~()[groups[groupIndex]]
             parse _, type = allTypes
                 if !groupTypes[type]
-                    unneededTypes.addItem(type)
-            parse _, unneededType = unneededTypes
-                allTypes.remove(unneededType)
+                    allTypes.remove(type)
         var functionBody String = ""
         if allTypes.empty?()
             functionBody = "\tret i1 0\n"
