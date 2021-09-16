@@ -215,7 +215,7 @@ def getConstantLLVMName(constantName String) String
 
 // The function creates the function name in llvm ir code.
 #alwaysinline
-def createFunctionLLVMName(fullFunctionName, fullThisTypeName String, checkArgument, mayThrow Bool) String
+def createFunctionLLVMName(fullFunctionName, fullThisTypeName String, checkArgument, mayThrow, isSuperFunction Bool) String
     var suffix String = ""
     switch fullFunctionName[fullFunctionName.length~() - 1]
     case '!'
@@ -230,9 +230,12 @@ def createFunctionLLVMName(fullFunctionName, fullThisTypeName String, checkArgum
         suffix = ".5"
     default
         suffix = ".0"
-    var result String = "@f." + fullFunctionName
+    var result String = "@f."
+    if isSuperFunction
+        result += "__super__"
+    result += fullFunctionName
     if suffix[1] != '0'
-        result = result[0 : result.length~() - 1]
+        result.delete(result.length~() - 1, 1)
     if !fullThisTypeName.empty?()
         result += "." + fullThisTypeName
     result.replacePart("::", ".")
@@ -293,11 +296,12 @@ def toFinalLLVMIR(llvmIR String, errorCoordinates Token, compiledData CData, thi
             result += typeNumber
         case "func", "ancfunc", "ntfunc", "ancntfunc"
             var functionName String = context.text~()
+            const isSuperFunction Bool = functionName[0] == '!'
             const separatorIndex <>Int = functionName.lookBack('.')
             var type String = ""
             if !separatorIndex.nothing?()
                 type = functionName[separatorIndex + 1 : functionName.length~()]
-                functionName = functionName[0 : separatorIndex]
+                functionName = functionName[isSuperFunction.select(1, 0) : separatorIndex]
                 if type == "This"
                     type = thisType
             var functionNameSuffix String = ""
@@ -315,12 +319,12 @@ def toFinalLLVMIR(llvmIR String, errorCoordinates Token, compiledData CData, thi
                     functionNameSuffix = "11"
             else
                 functionNameSuffix = "00"
-            var functionFullName String = functionName
+            var functionFullName String = isSuperFunction.select("!" + functionName, functionName)
             if !type.empty?()
                 functionFullName += "." + type
             functionFullName += functionNameSuffix
             compilingFunctions.add(context.replaceText(functionFullName))
-            result += createFunctionLLVMName(functionName, type, functionNameSuffix[0] == '1', functionNameSuffix[1] == '1')
+            result += createFunctionLLVMName(functionName, type, functionNameSuffix[0] == '1', functionNameSuffix[1] == '1', isSuperFunction)
         case "ingroups"
             var inGroupsFunctionName <>String = usedData.inGroups~()[context.text~()]
             if inGroupsFunctionName.nothing?()

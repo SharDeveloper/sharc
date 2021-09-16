@@ -216,7 +216,7 @@ def toGroupFunction(block Block) GFunction
     if block.next?(tokenIndex, ["?", "!", "$", "~", "`"])
         name.addString(block.line~()[tokenIndex - 1].text~())
     switch name.text~()
-    case "select", "inGroups?", "if", "for", "do", "parse", "gParse", "switch", "tSwitch", "eSwitch", "var", "return"
+    case "select", "inGroups?", "if", "for", "do", "parse", "gParse", "switch", "tSwitch", "eSwitch", "var", "return", "super"
         errorInvalidName(name, "function")
     block.next!(tokenIndex, ["("])
     tokenIndex--
@@ -610,7 +610,7 @@ def toFunction(block Block, attributes FAttributes) Function
     if block.next?(tokenIndex, ["?", "!", "$", "~", "`"])
         name.addString(block.line~()[tokenIndex - 1].text~())
     switch name.text~()
-    case "select", "inGroups?", "if", "for", "do", "parse", "gParse", "switch", "tSwitch", "eSwitch", "var", "return"
+    case "select", "inGroups?", "if", "for", "do", "parse", "gParse", "switch", "tSwitch", "eSwitch", "var", "return", "super"
         errorInvalidName(name, "function")
     block.next!(tokenIndex, ["("])
     var arguments Array = []
@@ -621,7 +621,7 @@ def toFunction(block Block, attributes FAttributes) Function
                 const access Int = block.getAccess(tokenIndex)
                 const argumentName Token = block.getLowercaseName(tokenIndex, "function argument")
                 switch argumentName.text~()
-                case "var", "const", "enum", "for", "do", "parse", "gParse", "if", "elif", "select", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough", "nothing"
+                case "var", "const", "enum", "for", "do", "parse", "gParse", "if", "elif", "select", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough", "nothing", "super"
                     errorInvalidName(argumentName, "function argument")
                 newArguments.addItem(fArgument(access, argumentName, OType.fromList({})))
                 if !block.next?(tokenIndex, [","])

@@ -219,7 +219,9 @@ def compileAttachmentFunction(function Function, write compiledData CData, type 
         [] /*catchLabels*/,
         [] /*allocs*/,
         [] /*unneededAllocs*/,
-        typeFunction.attributes~().nothrow?() /*ownerNoThrow*/)
+        typeFunction.attributes~().nothrow?() /*ownerNoThrow*/,
+        "" /*defaultFunctionName*/,
+        type.fullName~() /*thisTypeName*/)
     }
     var llvmIR String = ""
     typeFunction.signature~().arguments~().runtimeCheckFunctionArguments(codeData, llvmIR)
@@ -292,7 +294,9 @@ def compileDefaultFunction(function Function, write compiledData CData)
         [] /*catchLabels*/,
         [] /*allocs*/,
         [] /*unneededAllocs*/,
-        memoryManagerFunction /*ownerNoThrow*/)
+        memoryManagerFunction /*ownerNoThrow*/,
+        "" /*defaultFunctionName*/,
+        "" /*thisTypeName*/)
     }
     var llvmIR String = ""
     memoryManagerFunction.select("", defaultFunction.signature~().arguments~().runtimeCheckFunctionArguments(codeData, llvmIR))
@@ -362,7 +366,9 @@ def compileOverrideFunction(function Function, write compiledData CData)
         [] /*catchLabels*/,
         [] /*allocs*/,
         [] /*unneededAllocs*/,
-        typeFunction.attributes~().nothrow?() || memoryManagerFunction /*ownerNoThrow*/)
+        typeFunction.attributes~().nothrow?() || memoryManagerFunction /*ownerNoThrow*/,
+        fullFunctionName /*defaultFunctionName*/,
+        typeFullName /*thisTypeName*/)
     }
     var llvmIR String = ""
     memoryManagerFunction.select("", typeFunction.signature~().arguments~().runtimeCheckFunctionArguments(codeData, llvmIR))
@@ -424,7 +430,9 @@ def compileSimpleFunction(function Function, write compiledData CData)
         [] /*catchLabels*/,
         [] /*allocs*/,
         [] /*unneededAllocs*/,
-        simpleFunction.attributes~().nothrow?() /*ownerNoThrow*/)
+        simpleFunction.attributes~().nothrow?() /*ownerNoThrow*/,
+        "" /*defaultFunctionName*/,
+        "" /*thisTypeName*/)
     }
     var llvmIR String = ""
     simpleFunction.signature~().arguments~().runtimeCheckFunctionArguments(codeData, llvmIR)

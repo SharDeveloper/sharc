@@ -15,6 +15,8 @@ type CodeData
     // allocs                      [String]
     // unneededAllocs              [String]
     // ownerNoThrow                Bool
+    // defaultFunctionName         String
+    // thisTypeName                String
 
 attach CodeData to FieldFunctionNameForErrorMessage
     #alwaysinline
@@ -133,9 +135,27 @@ attach CodeData to FieldOwnerNoThrow
     def ownerNoThrow`(write codeData CodeData, new Bool) Bool
         return codeData.typePut(12, new)
 
+attach CodeData to FieldDefaultFunctionName
+    #alwaysinline
+    def defaultFunctionName~(codeData CodeData) String
+        return codeData.typeGetItem(13)
+
+    #alwaysinline
+    def defaultFunctionName`(write codeData CodeData, new String) String
+        return codeData.typePut(13, new)
+
+attach CodeData to FieldThisTypeName
+    #alwaysinline
+    def thisTypeName~(codeData CodeData) String
+        return codeData.typeGetItem(14)
+
+    #alwaysinline
+    def thisTypeName`(write codeData CodeData, new String) String
+        return codeData.typePut(14, new)
+
 #alwaysinline
-def codeData(functionNameForErrorMessage String, allThisGroup Set, resultType OType, namedOperands Map, level, registerCounter Int, endLabels, nextLabels, fallthroughLabels Map, catchLabels, allocs, unneededAllocs Array, ownerNoThrow Bool) CodeData
-    return CodeData.fromList({functionNameForErrorMessage, allThisGroup, resultType, namedOperands, level, registerCounter, endLabels, nextLabels, fallthroughLabels, catchLabels, allocs, unneededAllocs, ownerNoThrow})
+def codeData(functionNameForErrorMessage String, allThisGroup Set, resultType OType, namedOperands Map, level, registerCounter Int, endLabels, nextLabels, fallthroughLabels Map, catchLabels, allocs, unneededAllocs Array, ownerNoThrow Bool, defaultFunctionName, thisTypeName String) CodeData
+    return CodeData.fromList({functionNameForErrorMessage, allThisGroup, resultType, namedOperands, level, registerCounter, endLabels, nextLabels, fallthroughLabels, catchLabels, allocs, unneededAllocs, ownerNoThrow, defaultFunctionName, thisTypeName})
 
 // The function creates ir code with allocations.
 #alwaysinline
