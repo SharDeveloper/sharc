@@ -675,7 +675,7 @@ def createProgram(compiledData CData, outputFile String)
                     llvmIR += "\t\ti64 " + type[1] + ", label %" + newRegister + "\n"
                     brs += {
                         "\t" + newRegister + ":\n"
-                        "\t%" + resultRegister + " = call [2 x i64] " + createFunctionLLVMName(functionName, type[2], functionVariant[0] == '1', functionVariant[1] == '1') + llvmArgumentsInCall +
+                        "\t%" + resultRegister + " = call [2 x i64] " + createFunctionLLVMName(functionName, type[2], functionVariant[0] == '1', functionVariant[1] == '1', false) + llvmArgumentsInCall +
                         "\tret [2 x i64] %" + resultRegister + "\n"
                     }
                 llvmIR += "\t]\n" + brs
@@ -858,7 +858,7 @@ def builtinFunctions(mainFunctionMayThrow Bool) String
         "\tcall void @shar__init(i32 %0, i8** %1)\n"
         "\tcall void @constnants.init()\n"
         "\tcall void @shar__enable__threads()\n"
-        "\t%3 = call [2 x i64] " + createFunctionLLVMName("Main::main", "", false, mainFunctionMayThrow) + "()\n"
+        "\t%3 = call [2 x i64] " + createFunctionLLVMName("Main::main", "", false, mainFunctionMayThrow, false) + "()\n"
         "\t%4 = extractvalue [2 x i64] %3, 0\n"
         "\t%5 = icmp eq i64 %4, 1\n"
         "\tbr i1 %5, label %6, label %22\n"

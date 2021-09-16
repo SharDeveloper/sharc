@@ -271,3 +271,11 @@ group FieldGroupsTypes
 group FieldGroupListConstants
     groupListConstants~(This) $Any
     groupListConstants`(write This, $Any) $Any
+
+group FieldDefaultFunctionName
+    defaultFunctionName~(This) $Any
+    defaultFunctionName`(write This, $Any) $Any
+
+group FieldThisTypeName
+    thisTypeName~(This) $Any
+    thisTypeName`(write This, $Any) $Any

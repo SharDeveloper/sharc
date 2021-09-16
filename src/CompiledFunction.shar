@@ -48,7 +48,10 @@ def addFunctionToFunctionWithGroupsFunctions(write functionWithGroupFunctions CF
 // The function calls the function with the specified name and arguments.
 #noinline
 def callFunction(functionName Token, arguments Array, write codeData CodeData, compiledData CData, freedOnError Array, needFreeArguments Bool, write llvmIR String) Operand
-    const function CFunction = compiledData.getFunction(functionName, false)
+    const isSuperFunction Bool = functionName.text~() == "super"
+    if isSuperFunction && codeData.defaultFunctionName~().empty?()
+        errorNotFound(functionName, "function")
+    const function CFunction = compiledData.getFunction(isSuperFunction.select(functionName.replaceText(codeData.defaultFunctionName~()), functionName), false)
     var argumentsFromSignature Array = []
     var resultType OType = OType.fromList({})
     var functionThisType OType = OType.fromList({})
@@ -56,9 +59,19 @@ def callFunction(functionName Token, arguments Array, write codeData CodeData, c
     var typedFunction Bool = false
     var haveFinalSignature Bool = false
     var isWorker Bool = false
-    tSwitch function.finalFunction~()
+    tSwitch :(switch) function.finalFunction~()
     case GroupsFunctions
         const groupsFunctions GroupsFunctions = function.finalFunction~()
+        if isSuperFunction
+            const signature FSignature = groupsFunctions.functions~()["+"].signature~()
+            argumentsFromSignature = signature.arguments~()
+            resultType = signature.resultType~()
+            if arguments.length~() != argumentsFromSignature.length~()
+                errorWrongNumberOfArguments(functionName)
+            typedFunction = true
+            haveFinalSignature = true
+            functionThisType = oType(const::emptyToken.replaceText(codeData.thisTypeName~()), false)
+            end switch
         var simpleFunction <>SimpleFunction = groupsFunctions.functions~()["-"]
         if simpleFunction.nothing?()
             simpleFunction = groupsFunctions.functions~()["+"]
@@ -211,13 +224,13 @@ def callFunction(functionName Token, arguments Array, write codeData CodeData, c
         code.text`(codeText)
     var functionCallPrefix String = ""
     if (codeData.ownerNoThrow~() && codeData.catchLabels~().empty?()) || (functionIsNoThrow && notCheckArguments) || memoryManagerFunction
-        functionCallPrefix = "ancntfunc##"
+        functionCallPrefix = isSuperFunction.select("ancntfunc##!", "ancntfunc##")
     elif notCheckArguments
-        functionCallPrefix = "ancfunc##"
+        functionCallPrefix = isSuperFunction.select("ancfunc##!", "ancfunc##")
     elif functionIsNoThrow
-        functionCallPrefix = "ntfunc##"
+        functionCallPrefix = isSuperFunction.select("ntfunc##!", "ntfunc##")
     else
-        functionCallPrefix = "func##"
+        functionCallPrefix = isSuperFunction.select("func##!", "func##")
     llvmIR += assumes
     if isWorker
         llvmIR += {
@@ -292,10 +305,12 @@ def functionToFinalLLVMIR(compiledData CData, functionAndTypeName Token, write c
     if !functionAndTypeName.text~().containPart?("::")
         errorNotFound(functionAndTypeName, "function")
     const separatorIndex <>Int = functionAndTypeName.text~().look('.')
+    const isSuperFunction Bool = functionAndTypeName[0] == '!'
+    const nameStartIndex Int = isSuperFunction.select(1, 0)
     const functionName Token = functionAndTypeName.replaceText{
         (separatorIndex.nothing?().select(
-            functionAndTypeName.text~()[0 : functionAndTypeName.text~().length~() - 2],
-            functionAndTypeName.text~()[0 : separatorIndex]
+            functionAndTypeName.text~()[nameStartIndex : functionAndTypeName.text~().length~() - 2],
+            functionAndTypeName.text~()[nameStartIndex : separatorIndex]
         ))
     }
     const typeName Token = separatorIndex.nothing?().select{
@@ -332,7 +347,7 @@ def functionToFinalLLVMIR(compiledData CData, functionAndTypeName Token, write c
                     compilingFunctions.add(const::emptyToken.replaceText(fullFunctionName))
                 const maybeSimpleFunction <>SimpleFunction = groupsFunctions.functions~()["-"]
                 simpleFunction = maybeSimpleFunction.nothing?().select(groupsFunctions.functions~()["+"], maybeSimpleFunction)
-            var llvmFunctionSignature String = "define private [2 x i64] " + createFunctionLLVMName(functionName.text~(), "", functionVariant[0] == '1', functionVariant[1] == '1') + "("
+            var llvmFunctionSignature String = "define private [2 x i64] " + createFunctionLLVMName(functionName.text~(), "", functionVariant[0] == '1', functionVariant[1] == '1', false) + "("
             var llvmFunctionType String = "[2 x i64] ("
             var thisTypeArgumentIndex Int = -1
             parse index, argument = simpleFunction.signature~().arguments~()
@@ -346,19 +361,22 @@ def functionToFinalLLVMIR(compiledData CData, functionAndTypeName Token, write c
             llvmFunctionType.delete(llvmFunctionType.length~() - 2, 2)
             llvmFunctionSignature += llvmFunctionType[11 : llvmFunctionType.length~()]
             var usedFunctions Map = usedData.functions`(nothing)
-            usedFunctions.put(functionAndTypeName.text~(), "|" + thisTypeArgumentIndex.toString() + "|" + (simpleFunction.signature~().arguments~().length~() + 1).toString() + "|" + groupsListAsString + "|" + llvmFunctionType + ")*|" + llvmFunctionSignature + ") nounwind {\n|" + thisTypeArgumentIsMutable)
+            usedFunctions.put(isSuperFunction.select(functionAndTypeName.text~()[1 : functionAndTypeName.text~().length~()], functionAndTypeName.text~()), "|" + thisTypeArgumentIndex.toString() + "|" + (simpleFunction.signature~().arguments~().length~() + 1).toString() + "|" + groupsListAsString + "|" + llvmFunctionType + ")*|" + llvmFunctionSignature + ") nounwind {\n|" + thisTypeArgumentIsMutable)
             usedData.functions`(usedFunctions)
             return
         if !typeName.text~().containPart?("::")
             errorNotFound(typeName, "type")
         compiledData.getType(typeName, true)
-        var maybeSimpleFunction <>SimpleFunction = groupsFunctions.functions~()[typeName.text~()]
-        if maybeSimpleFunction.nothing?()
-            maybeSimpleFunction = groupsFunctions.functions~()["+"]
+        if isSuperFunction
+            simpleFunction = groupsFunctions.functions~()["+"]
+        else
+            var maybeSimpleFunction <>SimpleFunction = groupsFunctions.functions~()[typeName.text~()]
             if maybeSimpleFunction.nothing?()
-                errorNotFound(functionAndTypeName, "function")
-        simpleFunction = maybeSimpleFunction
-    var llvmFunction String = "define private [2 x i64] " + createFunctionLLVMName(functionName.text~(), typeName.text~(), functionVariant[0] == '1', functionVariant[1] == '1') + "("
+                maybeSimpleFunction = groupsFunctions.functions~()["+"]
+                if maybeSimpleFunction.nothing?()
+                    errorNotFound(functionAndTypeName, "function")
+            simpleFunction = maybeSimpleFunction
+    var llvmFunction String = "define private [2 x i64] " + createFunctionLLVMName(functionName.text~(), typeName.text~(), functionVariant[0] == '1', functionVariant[1] == '1', isSuperFunction) + "("
     if !simpleFunction.signature~().arguments~().empty?()
         parse _, argument = simpleFunction.signature~().arguments~()
             llvmFunction += (argument.access~() == enum::access_write).select("[2 x i64]* noalias, ", "[2 x i64], ")

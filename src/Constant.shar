@@ -82,7 +82,9 @@ def compileConstant(constant Constant, write compiledData CData)
         [] /*catchLabels*/,
         [] /*allocs*/,
         [] /*unneededAllocs*/,
-        false /*ownerNoThrow*/)
+        false /*ownerNoThrow*/,
+        "" /*defaultFunctionName*/,
+        "" /*thisTypeName*/)
     }
     var llvmIR String = ""
     const constOperand Operand = constant.value~().compileExpression(compiledConstant.type~(), codeData, compiledData, [], llvmIR)
