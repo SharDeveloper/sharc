@@ -102,7 +102,7 @@ def loadData(blocks Array) Data
                 if blockIndex == blocks.length~()
                     errorNotExpectedToken(token, "")
                 block  = blocks[blockIndex]
-            data.addFunction(block.toFunction(functionAttributes))
+            data.addFunction(block.toFunction(functionAttributes, false))
         case "attach"
             data.addAttachment(block.toAttachment())
         case "module"
