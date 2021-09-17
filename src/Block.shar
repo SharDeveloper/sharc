@@ -344,9 +344,16 @@ def getExpression(block Block, write tokenIndex Int) Expression
                     expressionArray.addItem({enum::exp_function, token, false, arguments})
                 elif nextToken[0].inRange?('A', '[')
                     token.addString("::" + nextToken.text~())
-                    expressionArray.addItem({enum::exp_noReadOperand, token})
+                    if block.next?(tokenIndex, ["("])
+                        const arguments Array = block.getExpressions(tokenIndex, ")")
+                        expressionArray.addItem({enum::exp_function, token, false, arguments})
+                    else
+                        expressionArray.addItem({enum::exp_noReadOperand, token})
                 else
                     errorNotExpectedToken(nextToken, "")
+            elif block.next?(tokenIndex, ["("])
+                const arguments Array = block.getExpressions(tokenIndex, ")")
+                expressionArray.addItem({enum::exp_function, token, false, arguments})
             else
                 expressionArray.addItem({enum::exp_noReadOperand, token})
             previousIsOperand = true
@@ -600,18 +607,24 @@ def toFunctionAttributes(block Block) FAttributes
 
 // The function turns the block in which the function is stored into a function.
 #alwaysinline
-def toFunction(block Block, attributes FAttributes) Function
+def toFunction(block Block, attributes FAttributes, fromAttachment Bool) Function
     block.subBlocks!()
     var tokenIndex Int = 0
     const isExport Bool = block.next?(tokenIndex, ["export"])
     if isExport && !attributes.override~().empty?()
         errorNotExpectedToken(block.line~()[0], "")
     block.next!(tokenIndex, ["def"])
-    var name Token = block.getLowercaseName(tokenIndex, "function")
-    if block.next?(tokenIndex, ["?", "!", "$", "~", "`"])
-        name.addString(block.line~()[tokenIndex - 1].text~())
+    var name Token = const::emptyToken
+    if block.next(tokenIndex)[0].inRange?('A', '[') && !fromAttachment && attributes.this~().empty?() && attributes.override~().empty?() && !attributes.worker?()
+        tokenIndex--
+        name =  block.getUppercaseName(tokenIndex, "function")
+    else
+        tokenIndex--
+        name = block.getLowercaseName(tokenIndex, "function")
+        if block.next?(tokenIndex, ["?", "!", "$", "~", "`"])
+            name.addString(block.line~()[tokenIndex - 1].text~())
     switch name.text~()
-    case "select", "inGroups?", "if", "for", "do", "parse", "gParse", "switch", "tSwitch", "eSwitch", "var", "return", "super"
+    case "select", "inGroups?", "if", "for", "do", "parse", "gParse", "switch", "tSwitch", "eSwitch", "var", "return", "super", "This"
         errorInvalidName(name, "function")
     block.next!(tokenIndex, ["("])
     var arguments Array = []
@@ -674,7 +687,7 @@ def toAttachment(block Block) Attachment
             tokenIndex = 0
         if subBlock.next?(tokenIndex, ["export"])
             errorNotExpectedToken(subBlock.line~()[0], "")
-        const newFunction Function = subBlock.toFunction(functionAttributes)
+        const newFunction Function = subBlock.toFunction(functionAttributes, true)
         if !functions.put(newFunction.name~().text~(), newFunction).nothing?()
             errorAlreadyExist(newFunction.name~(), "function")
     return attachment(typeName, groupName, functions)
