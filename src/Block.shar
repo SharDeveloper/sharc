@@ -338,6 +338,7 @@ def getExpression(block Block, write tokenIndex Int) Expression
                 if nextToken[0].inRange?('a', '{')
                     if block.next?(tokenIndex, ["!", "?", "$", "~", "`"])
                         nextToken.addString(line[tokenIndex - 1].text~())
+                    token.addString("::" + nextToken.text~())
                     block.next!(tokenIndex, ["("])
                     const arguments Array = block.getExpressions(tokenIndex, ")")
                     expressionArray.addItem({enum::exp_function, token, false, arguments})
