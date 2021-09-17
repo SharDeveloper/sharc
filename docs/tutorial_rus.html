@@ -1004,9 +1004,9 @@
         При вычислении глобальных констант запрещено использование потоков.
         Полезные функции из стандартного модуля для работы с многопоточностью:
         <ul>
-            <li><b>createPipeline</b>() - создаёт новый объект с типом STD::Pipeline</li>
-            <li><b>getPipelineOut</b>(Pipeline) PipelineOut - возвращает объект имеющий тип STD::Pipeline, но уже с типом STD::PipelineOut</li>
-            <li><b>getPipelineIn</b>(Pipeline) PipelineIn - возвращает объект имеющий тип STD::Pipeline, но уже с типом STD::PipelineIn</li>
+            <li><b>Pipeline</b>() - создаёт новый объект с типом STD::Pipeline</li>
+            <li><b>PipelineOut</b>(Pipeline) PipelineOut - возвращает объект имеющий тип STD::Pipeline, но уже с типом STD::PipelineOut</li>
+            <li><b>PipelineIn</b>(Pipeline) PipelineIn - возвращает объект имеющий тип STD::Pipeline, но уже с типом STD::PipelineIn</li>
             <li><b>push</b>(Pipeline, $Multithreaded), <b>push</b>(PipelineIn, $Multithreaded) - передаёт объект другим потокам</li>
             <li><b>pop</b>(Pipeline) &lt;&gt;$Multithreaded, <b>pop</b>(PipelineOut) &lt;&gt;$Multithreaded - забирает объект из других потоков, объекты забираются по принципу очереди (первый вошёл, первый вышел).
             Если нечего забирать, то функция возвращает <b>nothing</b>.</li>
@@ -1017,13 +1017,13 @@
 <b>module</b> Main
 
 <b>def</b> main()
-    <b>const</b> mainToWorker Pipeline = createPipeline()
-    <b>const</b> workerToMain Pipeline = createPipeline()
+    <b>const</b> mainToWorker Pipeline = Pipeline()
+    <b>const</b> workerToMain Pipeline = Pipeline()
     println("Random number: " + <i>const</i>::staticRandomNumber.toString())
-    worker(mainToWorker.getPipelineOut(), workerToMain.getPipelineIn())
-    worker(mainToWorker.getPipelineOut(), workerToMain.getPipelineIn())
-    worker(mainToWorker.getPipelineOut(), workerToMain.getPipelineIn())
-    worker(mainToWorker.getPipelineOut(), workerToMain.getPipelineIn())
+    worker(PipelineOut(workerToMain), PipelineIn(workerToMain))
+    worker(PipelineOut(workerToMain), PipelineIn(workerToMain))
+    worker(PipelineOut(workerToMain), PipelineIn(workerToMain))
+    worker(PipelineOut(workerToMain), PipelineIn(workerToMain))
     mainToWorker.push(<i>const</i>::staticRandomNumber)
     <b>for</b> :(counter Int = 0) counter < 4; counter++
         <b>for</b> :(loop)
