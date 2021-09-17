@@ -1,13 +1,13 @@
 module Main
 
 def main()
-    const mainToWorker Pipeline = createPipeline()
-    const workerToMain Pipeline = createPipeline()
+    const mainToWorker Pipeline = Pipeline()
+    const workerToMain Pipeline = Pipeline()
     println("Random number: " + const::staticRandomNumber.toString())
-    worker(mainToWorker.getPipelineOut(), workerToMain.getPipelineIn())
-    worker(mainToWorker.getPipelineOut(), workerToMain.getPipelineIn())
-    worker(mainToWorker.getPipelineOut(), workerToMain.getPipelineIn())
-    worker(mainToWorker.getPipelineOut(), workerToMain.getPipelineIn())
+    worker(PipelineOut(mainToWorker), PipelineIn(workerToMain))
+    worker(PipelineOut(mainToWorker), PipelineIn(workerToMain))
+    worker(PipelineOut(mainToWorker), PipelineIn(workerToMain))
+    worker(PipelineOut(mainToWorker), PipelineIn(workerToMain))
     mainToWorker.push(const::staticRandomNumber)
     for :(counter Int = 0) counter < 4; counter++
         for :(loop)
