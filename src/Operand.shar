@@ -6,7 +6,7 @@ type Operand
     // access enum::access_*
     // value String
     // type OType
-    // constant? used? named? argument? Int (Array of Bits)
+    // constant? used? named? argument? globalConstant? Int (Array of Bits)
 
 attach Operand to FieldCode
     #alwaysinline
@@ -80,14 +80,23 @@ attach Operand to FieldArgument
     def argument`(write operand Operand, new Bool) Bool
         return (operand.typePut(4, operand.typeGetItem(4) & (-9) | new.select(8, 0)) & 8) == 8
 
+attach Operand to FieldGlobalConstant
+    #alwaysinline
+    def globalConstant?(operand Operand) Bool
+        return (operand.typeGetItem(4) & 16) == 16
+
+    #alwaysinline
+    def globalConstant`(write operand Operand, new Bool) Bool
+        return (operand.typePut(4, operand.typeGetItem(4) & (-17) | new.select(16, 0)) & 16) == 16
+
 #alwaysinline
-def operand(code Token, access Int, value String, type OType, isConstant, isUsed, isNamed, isArgument Bool) Operand
-    return Operand.fromList({code, access, value, type, isConstant.select(1, 0) | isUsed.select(2, 0) | isNamed.select(4, 0) | isArgument.select(8, 0)})
+def operand(code Token, access Int, value String, type OType, isConstant, isUsed, isNamed, isArgument, isGlobalConstant Bool) Operand
+    return Operand.fromList({code, access, value, type, isConstant.select(1, 0) | isUsed.select(2, 0) | isNamed.select(4, 0) | isArgument.select(8, 0) | isGlobalConstant.select(16, 0)})
 
 // The function applies the "shar__to_const" function to the operand.
 #alwaysinline
 def operandToConst(operand Operand, write codeData CodeData, compiledData CData, write llvmIR String)
-    var needToTransform Bool = !(operand.Main::constant?() || operand.access~() == enum::access_noread || operand.type~().nothingType?())
+    var needToTransform Bool = !(operand.Main::constant?() || operand.access~() == enum::access_noread || operand.type~().nothingType?() || operand.globalConstant?())
     if needToTransform && operand.type~().simple?() && !operand.type~().this?()
         needToTransform = !compiledData.getType(operand.type~().type~(), true).groups~()["STD::Independent"]
     var endLabel String = ""
@@ -109,7 +118,7 @@ def operandToConst(operand Operand, write codeData CodeData, compiledData CData,
 // The function applies the "shar__rc_free" function to the operand.
 #alwaysinline
 def freeOperand(operand Operand, write codeData CodeData, compiledData CData, write llvmIR String)
-    var needToFree Bool = !(operand.Main::constant?() || operand.access~() == enum::access_noread || operand.type~().nothingType?())
+    var needToFree Bool = !(operand.Main::constant?() || operand.access~() == enum::access_noread || operand.type~().nothingType?() || operand.globalConstant?())
     if needToFree && operand.type~().simple?() && !operand.type~().this?()
         needToFree = !compiledData.getType(operand.type~().type~(), true).groups~()["STD::Independent"]
     var endLabel String = ""
@@ -131,7 +140,7 @@ def freeOperand(operand Operand, write codeData CodeData, compiledData CData, wr
 // The function applies the "shar__rc_use" function to the operand.
 #alwaysinline
 def useOperand(operand Operand, write codeData CodeData, compiledData CData, write llvmIR String)
-    var needToUse Bool = !(operand.Main::constant?() || operand.access~() == enum::access_noread || operand.type~().nothingType?())
+    var needToUse Bool = !(operand.Main::constant?() || operand.access~() == enum::access_noread || operand.type~().nothingType?() || operand.globalConstant?())
     if needToUse && operand.type~().simple?() && !operand.type~().this?()
         needToUse = !compiledData.getType(operand.type~().type~(), true).groups~()["STD::Independent"]
     var endLabel String = ""

@@ -240,6 +240,10 @@ group FieldArgument
     argument?(This) Bool
     argument`(write This, Bool) Bool
 
+group FieldGlobalConstant
+    globalConstant?(This) Bool
+    globalConstant`(write This, Bool) Bool
+
 group FieldOperand
     operand~(This) $Any
     operand`(write This, $Any) $Any
