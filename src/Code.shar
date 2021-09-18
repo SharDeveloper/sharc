@@ -147,7 +147,7 @@ def compileConstantDefine(block Block, write codeData CodeData, compiledData CDa
             enum::access_read,
             constantValue.value~(),
             type,
-            false, false, true, false)
+            false, false, true, false, false)
         }
     var namedOperands Map = codeData.namedOperands`(nothing)
     if !namedOperands.put(constantName.text~(), namedOperand(codeData.level~(), constantValue)).nothing?()
@@ -179,7 +179,7 @@ def compileVariableDefine(block Block, write codeData CodeData, compiledData CDa
             enum::access_write,
             mutableRegister,
             type,
-            false, false, true, false
+            false, false, true, false, false
         ))).nothing?()
     }
         errorAlreadyExist(variableName, "variable")
@@ -249,7 +249,7 @@ def compileFor(block Block, write codeData CodeData, compiledData CData, write l
                     enum::access_write,
                     mutableRegister,
                     type,
-                    false, false, true, false
+                    false, false, true, false, false
                 ))).nothing?()
             }
                 errorAlreadyExist(forName, "variable")
@@ -377,7 +377,7 @@ def compileParse(block Block, write codeData CodeData, compiledData CData, write
         enum::access_write,
         indexMutableRegister,
         hiddenIndex.type~(),
-        false, true, true, false)
+        false, true, true, false, false)
     }
     namedOperands = codeData.namedOperands`(nothing)
     namedOperands.put(hiddenIndexVariableName, namedOperand(codeData.level~(), hiddenIndex))
@@ -478,7 +478,7 @@ def compileGroupParse(block Block, write codeData CodeData, compiledData CData, 
                     enum::access_noread,
                     typeRegister,
                     const::anyType,
-                    false, false, false, true
+                    false, false, false, true, false
                 )
             )
         ).nothing?()
@@ -884,7 +884,7 @@ def compileTest(testBlock Block, write codeData CodeData, compiledData CData, wr
             enum::access_read,
             "[i64 ##tnum##STD::Int##, i64 " + integerToLLVMI64(lineToken) + "]",
             const::intType,
-            true, true, false, false)
+            true, true, false, false, false)
         }
         callFunction(const::emptyToken.replaceText("STD::addItem"), [errorsCoordinates, failFileOperand], codeData, compiledData, [], false, llvmIR)
         callFunction(const::emptyToken.replaceText("STD::addItem"), [errorsCoordinates, failLineOperand], codeData, compiledData, [], false, llvmIR)
@@ -934,7 +934,7 @@ def compileTryCatch(tryBlock, catchBlock Block, write codeData CodeData, compile
                 enum::access_read,
                 idRegister,
                 const::intType,
-                false, false, true, false
+                false, false, true, false, false
             ))).nothing?()
         }
             errorAlreadyExist(idName, "constant")
@@ -946,7 +946,7 @@ def compileTryCatch(tryBlock, catchBlock Block, write codeData CodeData, compile
             enum::access_read,
             idRegister,
             const::stringType,
-            false, false, true, false)
+            false, false, true, false, false)
         }
         messageOperand.useOperand(codeData, compiledData, llvmIR)
         var namedOperands Map = codeData.namedOperands`(nothing)

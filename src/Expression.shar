@@ -277,24 +277,24 @@ def compileExpression(expression Expression, expectType OType, write codeData Co
                     const itemOperand Operand = itemsOperands[index]
                     itemOperand.runtimeTypeCheck(itemsType, itemsTypeNumberRegister, codeData, compiledData, allFreedOnError, llvmIR)
                 value = createArrayInLLVMIR(codeData, itemsTypeNumberRegister, itemsOperands, llvmIR)
-        result = operand(code, enum::access_read, value, oType(code.replaceText("STD::Array"), false), isConstant, true, false, false)
+        result = operand(code, enum::access_read, value, oType(code.replaceText("STD::Array"), false), isConstant, true, false, false, false)
     case exp_bool
         const boolToken Token = expressionAsList[1]
         const value String = (boolToken.text~() == "true").select("[i64 ##tnum##STD::Bool##, i64 1]", "[i64 ##tnum##STD::Bool##, i64 0]")
-        result = operand(boolToken, enum::access_read, value, oType(boolToken.replaceText("STD::Bool"), false), true, true, false, false)
+        result = operand(boolToken, enum::access_read, value, oType(boolToken.replaceText("STD::Bool"), false), true, true, false, false, false)
     case exp_char
         const charToken Token = expressionAsList[1]
-        result = operand(charToken, enum::access_read, "[i64 ##tnum##STD::Char##, i64 " + charToken.charToLLVMI64() + "]", oType(charToken.replaceText("STD::Char"), false), true, true, false, false)
+        result = operand(charToken, enum::access_read, "[i64 ##tnum##STD::Char##, i64 " + charToken.charToLLVMI64() + "]", oType(charToken.replaceText("STD::Char"), false), true, true, false, false, false)
     case exp_const
         const constantToken Token = expressionAsList[1]
         const constant CConstant = compiledData.getConstant(constantToken, false)
         const value String = codeData.createRegister("call [2 x i64] ##const##" + constant.fullName~() + "##()", llvmIR)
-        result = operand(constantToken, enum::access_read, value, constant.type~(), false, true, false, false)
+        result = operand(constantToken, enum::access_read, value, constant.type~(), false, true, false, false, true)
     case exp_enum
         const elementToken Token = expressionAsList[1]
         const elementFullName String = compiledData.getEnumElementFullName(elementToken, false)
         const value String = "[i64 ##tnum##STD::Int##, i64 ##enum##" + elementFullName + "##]"
-        result = operand(elementToken, enum::access_read, value, oType(elementToken.replaceText("STD::Int"), false), true, true, false, false)
+        result = operand(elementToken, enum::access_read, value, oType(elementToken.replaceText("STD::Int"), false), true, true, false, false, false)
     case exp_function
         const name Token = expressionAsList[1]
         const isOptional Bool = expressionAsList[2]
@@ -411,7 +411,7 @@ def compileExpression(expression Expression, expectType OType, write codeData Co
             value = codeData.createRegister("call i1 ##ingroups##" + groupListAsOneString + "##(i64 " + typeRegister + ")", llvmIR)
             value = codeData.createRegister("zext i1 " + value + " to i64", llvmIR)
             value = codeData.createRegister("insertvalue [2 x i64] [i64 ##tnum##STD::Bool##, i64 0], i64 " + value + ", 1", llvmIR)
-        result = operand(code, enum::access_read, value, oType(code.replaceText("STD::Bool"), isOptional), isConstant, true, false, false)
+        result = operand(code, enum::access_read, value, oType(code.replaceText("STD::Bool"), isOptional), isConstant, true, false, false, false)
         if isOptional
             llvmIR += {
                 "\tbr label %##reg##" + inGroupEndLabel + "##\n"
@@ -424,7 +424,7 @@ def compileExpression(expression Expression, expectType OType, write codeData Co
             result.value`(codeData.createRegister("phi [2 x i64] [" + result.value~() + ", %##reg##" + inGroupEndLabel + "##], [zeroinitializer, %##reg##" + nothingLabel + "##]", llvmIR))
     case exp_int
         const intToken Token = expressionAsList[1]
-        result = operand(intToken, enum::access_read, "[i64 ##tnum##STD::Int##, i64 " + integerToLLVMI64(intToken) + "]", oType(intToken.replaceText("STD::Int"), false), true, true, false, false)
+        result = operand(intToken, enum::access_read, "[i64 ##tnum##STD::Int##, i64 " + integerToLLVMI64(intToken) + "]", oType(intToken.replaceText("STD::Int"), false), true, true, false, false, false)
     case exp_lazyAnd
         const leftExpression Expression = expressionAsList[1]
         const rightExpression Expression = expressionAsList[2]
@@ -453,7 +453,7 @@ def compileExpression(expression Expression, expectType OType, write codeData Co
             enum::access_read,
             value,
             oType(leftOperand.code~().replaceText("STD::Bool"), false),
-            false, true, false, false)
+            false, true, false, false, false)
         }
     case exp_lazyOr
         const leftExpression Expression = expressionAsList[1]
@@ -483,7 +483,7 @@ def compileExpression(expression Expression, expectType OType, write codeData Co
             enum::access_read,
             value,
             oType(leftOperand.code~().replaceText("STD::Bool"), false),
-            false, true, false, false)
+            false, true, false, false, false)
         }
     case exp_list
         var code Token = expressionAsList[1]
@@ -519,17 +519,17 @@ def compileExpression(expression Expression, expectType OType, write codeData Co
                 value = "[i64 ##tnum##STD::List##, i64 ptrtoint (" + llvmListDataType + "* " + llvmListData + " to i64)]"
             else
                 value = codeData.createListInLLVMIR(itemsOperands, llvmIR)
-        result = operand(code, enum::access_read, value, oType(code.replaceText("STD::List"), false), isConstant, true, false, false)
+        result = operand(code, enum::access_read, value, oType(code.replaceText("STD::List"), false), isConstant, true, false, false, false)
     case exp_noReadOperand
         const noReadToken Token = expressionAsList[1]
         const typeFullName String = (noReadToken.text~() == "This").select("This", compiledData.getType(noReadToken, false).fullName~())
-        result = operand(noReadToken, enum::access_noread, "[i64 ##tnum##" + typeFullName + "##, i64 0]", oType(noReadToken.replaceText(typeFullName), false), true, true, false, false)
+        result = operand(noReadToken, enum::access_noread, "[i64 ##tnum##" + typeFullName + "##, i64 0]", oType(noReadToken.replaceText(typeFullName), false), true, true, false, false, false)
     case exp_nothing
         const nothingToken Token = expressionAsList[1]
-        result = operand(nothingToken, enum::access_read, "[i64 0, i64 0]", oType(nothingToken.replaceText("STD::Nothing"), false), true, true, false, false)
+        result = operand(nothingToken, enum::access_read, "[i64 0, i64 0]", oType(nothingToken.replaceText("STD::Nothing"), false), true, true, false, false, false)
     case exp_real
         const realToken Token = expressionAsList[1]
-        result = operand(realToken, enum::access_read, "[i64 ##tnum##STD::Real##, i64 bitcast (double " + realToken.realToLLVMDouble() + " to i64)]", oType(realToken.replaceText("STD::Real"), false), true, true, false, false)
+        result = operand(realToken, enum::access_read, "[i64 ##tnum##STD::Real##, i64 bitcast (double " + realToken.realToLLVMDouble() + " to i64)]", oType(realToken.replaceText("STD::Real"), false), true, true, false, false, false)
     case exp_select
         var predicateExpression Expression = expressionAsList[1]
         var isOptional Bool = expressionAsList[2]
@@ -601,7 +601,7 @@ def compileExpression(expression Expression, expectType OType, write codeData Co
             enum::access_read,
             value,
             type,
-            false, true, false, false)
+            false, true, false, false, false)
         }
     case exp_string
         result = expressionAsList[1].stringToOperand()

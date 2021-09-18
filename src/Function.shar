@@ -238,7 +238,7 @@ def compileAttachmentFunction(function Function, write compiledData CData, type 
                 argument.access~(),
                 "%" + index.toString(),
                 argument.type~(),
-                false, true, true, true)
+                false, true, true, true, false)
             }
             namedOperands.put(argumentOperand.code~().text~(), namedOperand(0, argumentOperand))
         codeData.namedOperands`(namedOperands)
@@ -313,7 +313,7 @@ def compileDefaultFunction(function Function, write compiledData CData)
                 argument.access~(),
                 "%" + index.toString(),
                 argument.type~(),
-                false, true, true, true)
+                false, true, true, true, false)
             }
             namedOperands.put(argumentOperand.code~().text~(), namedOperand(0, argumentOperand))
         codeData.namedOperands`(namedOperands)
@@ -385,7 +385,7 @@ def compileOverrideFunction(function Function, write compiledData CData)
                 argument.access~(),
                 "%" + index.toString(),
                 argument.type~(),
-                false, true, true, true)
+                false, true, true, true, false)
             }
             namedOperands.put(argumentOperand.code~().text~(), namedOperand(0, argumentOperand))
         codeData.namedOperands`(namedOperands)
@@ -449,7 +449,7 @@ def compileSimpleFunction(function Function, write compiledData CData)
                 argument.access~(),
                 "%" + index.toString(),
                 argument.type~(),
-                false, true, true, true)
+                false, true, true, true, false)
             }
             namedOperands.put(argumentOperand.code~().text~(), namedOperand(0, argumentOperand))
         codeData.namedOperands`(namedOperands)

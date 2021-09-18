@@ -245,7 +245,7 @@ def callFunction(functionName Token, arguments Array, write codeData CodeData, c
         isWorker.select
             ("zeroinitializer",
             codeData.createRegister("call [2 x i64] ##" + functionCallPrefix + functionCallIRCode + ")", llvmIR)),
-        resultType, false, true, false, false)
+        resultType, false, true, false, false, false)
     }
     if needFreeArguments
         parse index, argument = arguments
