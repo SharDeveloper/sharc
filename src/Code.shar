@@ -1057,7 +1057,7 @@ def createStringSwitch(casesBlocks Array, operand Operand, haveDefault Bool, lab
         var allCasesWithSameLength <>Array = casesByLength.put(currentLength, [])
         if allCasesWithSameLength.nothing?()
             lengths.addItem(currentLength)
-            allCasesWithSameLength = [codeData.createLabel(), rawString, currentLabel]
+            allCasesWithSameLength = (currentLength != 0).select([codeData.createLabel(), rawString, currentLabel], [currentLabel])
         else
             allCasesWithSameLength += [rawString, currentLabel]
         casesByLength.put(currentLength, allCasesWithSameLength)
@@ -1074,8 +1074,9 @@ def createStringSwitch(casesBlocks Array, operand Operand, haveDefault Bool, lab
         llvmIR += "\t\ti64 " + length.toString() + ", label %##reg##" + stringsWithSameLength[0] + "##\n"
     llvmIR += "\t]\n"
     parse _, length = lengths
-        const stringsWithSameLength Array = casesByLength[length]
-        createLLVMSwitchesForStrings(stringsWithSameLength, defaultOrEndLabel, charsPointerRegister, codeData, llvmIR)
+        if length != 0
+            const stringsWithSameLength Array = casesByLength[length]
+            createLLVMSwitchesForStrings(stringsWithSameLength, defaultOrEndLabel, charsPointerRegister, codeData, llvmIR)
 
 // The function generates llvm ir code that searches for a string unknown at compile time among the strings known at compile time.
 // All lines known at compile time must be of the same length.
