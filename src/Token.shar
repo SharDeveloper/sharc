@@ -99,6 +99,9 @@ attach Token to Shar__sugar__notEqual
         return !(token1 == token2)
 
 attach Token to Ordered
+    #alwaysinline nothrow
+    def compare(token1, token2 Token) Int
+        return token1.text~().compare(token2.text~())
 
 attach Token to Shar__sugar__less
     #alwaysinline
