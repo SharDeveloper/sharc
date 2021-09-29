@@ -831,6 +831,7 @@ def builtinLLVMDeclaredFunctions() Map
         "shar__enable__threads", "declare void @shar__enable__threads() local_unnamed_addr nounwind",
         "shar__end", "declare void @shar__end() local_unnamed_addr nounwind",
         "shar__exit", "declare void @shar__exit() local_unnamed_addr nounwind cold noreturn",
+        "shar__fail", "declare void @shar__fail() local_unnamed_addr nounwind cold noreturn",
         "llvm.expect.i1", "declare i1 @llvm.expect.i1(i1, i1)",
         "llvm.assume", "declare void @llvm.assume(i1)",
         "llvm.memcpy.i16.i16.i64", "declare void @llvm.memcpy.i16.i16.i64(i16*, i16*, i64, i1)",
