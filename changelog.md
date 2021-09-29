@@ -1,3 +1,7 @@
+# 0.3.1
+- Fixed a problem with applications crashing when an exception occurs when executing a global constant code.
+- Fixed problem with joining splitted strings.
+
 # 0.3
 - Added operator 'nothrow'.
 - Added the ability to add multiple groups in the 'this' function attribute.
