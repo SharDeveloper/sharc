@@ -298,7 +298,6 @@ def joinSplittedStrings(write tokens Array)
                 for :(endLoop) stringEnd < tokens.length~(); stringEnd++
                     if tokens[stringEnd][0] != '\q'
                         end endLoop
-                index = stringEnd - 1
                 end beginLoop
         if stringBegin == stringEnd
             end mainLoop
@@ -313,5 +312,6 @@ def joinSplittedStrings(write tokens Array)
         tokens = leftPart
         tokens.addItem(newToken)
         tokens += rightPart
+        index = stringBegin + 2
         stringBegin = 0
         stringEnd = 0
