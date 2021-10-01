@@ -446,18 +446,30 @@ def getExpression(block Block, write tokenIndex Int) Expression
             previousIsOperand = false
             expressionArray.addItem(token)
         case '['
+            var newExpression List = {}
             if previousIsOperand
+                var checkEnd Bool = true
                 expressionArray.addItem(token.replaceText("."))
-                const fromIndex Expression = block.getExpression(tokenIndex)
                 if block.next?(tokenIndex, [":"])
                     const toIndex Expression = block.getExpression(tokenIndex)
-                    expressionArray.addItem({enum::exp_function, token.replaceText("STD::shar__sugar__getRange"), false, [fromIndex, toIndex]})
+                    newExpression = {enum::exp_function, token.replaceText("STD::shar__sugar__getFromFirstToA"), false, [toIndex]}
                 else
-                    expressionArray.addItem({enum::exp_function, token.replaceText("STD::shar__sugar__getItem"), false, [fromIndex]})
-                block.next!(tokenIndex, ["]"])
+                    const fromIndex Expression = block.getExpression(tokenIndex)
+                    if block.next?(tokenIndex, [":"])
+                        if block.next?(tokenIndex, ["]"])
+                            newExpression = {enum::exp_function, token.replaceText("STD::shar__sugar__getFromAToLast"), false, [fromIndex]}
+                            checkEnd = false
+                        else
+                            const toIndex Expression = block.getExpression(tokenIndex)
+                            newExpression = {enum::exp_function, token.replaceText("STD::shar__sugar__getRange"), false, [fromIndex, toIndex]}
+                    else
+                        newExpression = {enum::exp_function, token.replaceText("STD::shar__sugar__getItem"), false, [fromIndex]}
+                if checkEnd
+                    block.next!(tokenIndex, ["]"])
             else
-                expressionArray.addItem({enum::exp_array, token, block.getExpressions(tokenIndex, "]")})
+                newExpression = {enum::exp_array, token, block.getExpressions(tokenIndex, "]")}
                 previousIsOperand = true
+            expressionArray.addItem(newExpression)
         case '{'
             if previousIsOperand
                 errorNotExpectedToken(token, "")
