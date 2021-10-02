@@ -379,7 +379,7 @@ def compileExpression(expression Expression, expectType OType, write codeData Co
             operand.type`(operandType)
         if !operand.named?()
             operand.freeOperand(codeData, compiledData, llvmIR)
-        var groupsFullSet Set = Set.createEmpty()
+        var groupsFullSet Set = Set()
         var code Token = operand.code~().replaceText("inGroup?(" + operand.code~().text~())
         parse _, groupName = groups
             code.addString(", " + groupName.text~())

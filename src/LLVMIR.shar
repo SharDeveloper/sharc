@@ -3,7 +3,7 @@ module Main
 // The function replaces the registers created at compile time with llvm ir registers.
 #alwaysinline
 def sharRegistersToLLVMRegisters(write llvmIR String, firstRegisterNumber Int, errorCoordinates Token)
-    var registers Map = Map.createEmpty()
+    var registers Map = Map()
     var registerNumber Int = firstRegisterNumber
     var previousEndEdge Int = 0
     var newLLVMIR String = ""
@@ -277,7 +277,7 @@ def toFinalLLVMIR(llvmIR String, errorCoordinates Token, compiledData CData, thi
                 const typeGroups Set = compiledData.getType(context.replaceText(typeName), true).groups~()
                 var usedGroupsTypes Map = usedData.groupsTypes`(nothing)
                 parse _, group = typeGroups
-                    var usedGroupTypes Set = usedGroupsTypes.put(group, Set.createEmpty())
+                    var usedGroupTypes Set = usedGroupsTypes.put(group, Set())
                     usedGroupTypes.add(typeName)
                     usedGroupsTypes.put(group, usedGroupTypes)
                 usedData.groupsTypes`(usedGroupsTypes)
@@ -422,7 +422,7 @@ def toFinalLLVMIR(llvmIR String, errorCoordinates Token, compiledData CData, thi
                                 const typeGroups Set = compiledData.getType(context.replaceText(fullTypeName), true).groups~()
                                 var usedGroupsTypes Map = usedData.groupsTypes`(nothing)
                                 parse _, group = typeGroups
-                                    var usedGroupTypes Set = usedGroupsTypes.put(group, Set.createEmpty())
+                                    var usedGroupTypes Set = usedGroupsTypes.put(group, Set())
                                     usedGroupTypes.add(fullTypeName)
                                     usedGroupsTypes.put(group, usedGroupTypes)
                                 usedData.groupsTypes`(usedGroupsTypes)

@@ -201,7 +201,7 @@ def toGroup(block Block) Group
             if !block.next?(tokenIndex, [","])
                 end loop
     block.eol!(tokenIndex)
-    var result Group = Group(isExport, groupName, subGroups, Map.createEmpty())
+    var result Group = Group(isExport, groupName, subGroups, Map())
     const subBlocks Array = block.subBlocks~()
     parse _, groupFunctionBlock = subBlocks
         result.addGroupFunction(groupFunctionBlock.toGroupFunction())
@@ -678,7 +678,7 @@ def toAttachment(block Block) Attachment
     block.next!(tokenIndex, ["to"])
     const groupName Token = block.getFullUppercaseName(tokenIndex, "group")
     block.eol!(tokenIndex)
-    var functions Map = Map.createEmpty()
+    var functions Map = Map()
     const subBlocks Array = block.subBlocks~()
     for :(subBlockIndex Int = 0) subBlockIndex < subBlocks.length~(); subBlockIndex++
         var subBlock Block = subBlocks[subBlockIndex]

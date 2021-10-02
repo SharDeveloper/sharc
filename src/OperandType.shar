@@ -112,7 +112,7 @@ attach OType to ToFull
                 result = OType(typeToken.replaceText(compiledData.getType(typeToken, false).fullName~()), type.optional?())
         case Array
             var oldGroupsArray Array = type.type~()
-            var groupsSet Set = Set.createEmpty()
+            var groupsSet Set = Set()
             parse _, groupName = oldGroupsArray
                 const group CGroup = compiledData.getGroup(groupName, false)
                 parse _, subGroupName = group.subGroups~()

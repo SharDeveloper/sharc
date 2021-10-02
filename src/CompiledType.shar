@@ -57,7 +57,7 @@ attach CType to BinarySerializable
             const isExport Bool = Bool.deserialize(bytes, position)
             const name String = String.deserialize(bytes, position)
             const groupsCount Int = Int.deserialize(bytes, position)
-            var groups Set = Set.createEmpty()
+            var groups Set = Set()
             for :(counter Int = 0) counter < groupsCount; counter++
                 groups.add(String.deserialize(bytes, position))
             return CType(isExport, name, groups)

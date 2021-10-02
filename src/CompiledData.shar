@@ -10,7 +10,7 @@ type CData
     // functions            Map(name String, Map(moduleName String, CFunction))
 
 def moduleSignature() Bytes
-    var result Bytes = Bytes.createEmpty()
+    var result Bytes = Bytes()
     parse _, char = "shar module 0.3|"
         result.addItem(charToInt(char))
     return result
@@ -75,12 +75,12 @@ def CData(currentModule String, enumerationsElements, constants, types, groups, 
 
 // The function loads data from modules into compiled data.
 def loadModules(modulesFilesList Array, currentModule String) CData
-    var enumerationsElements Map = Map.createEmpty()
-    var constants Map = Map.createEmpty()
-    var types Map = Map.createEmpty()
-    var groups Map = Map.createEmpty()
-    var functions Map = Map.createEmpty()
-    var loadedModules Map = Map.createEmpty()
+    var enumerationsElements Map = Map()
+    var constants Map = Map()
+    var types Map = Map()
+    var groups Map = Map()
+    var functions Map = Map()
+    var loadedModules Map = Map()
     const moduleSignature Bytes = moduleSignature()
     parse _, moduleFileName = modulesFilesList
         var position Int = moduleSignature.length~()
@@ -100,9 +100,9 @@ def loadModules(modulesFilesList Array, currentModule String) CData
             for :(counter Int = 0) counter < length; counter++
                 const elementName String = String.deserialize(module, position)
                 const isExport Bool = Bool.deserialize(module, position)
-                var allElementsWithSameName <>Map = enumerationsElements.put(elementName, Map.createEmpty())
+                var allElementsWithSameName <>Map = enumerationsElements.put(elementName, Map())
                 if allElementsWithSameName.nothing?()
-                    allElementsWithSameName = Map.createEmpty()
+                    allElementsWithSameName = Map()
                 allElementsWithSameName.put(moduleName, isExport)
                 enumerationsElements.put(elementName, allElementsWithSameName)
             length = Int.deserialize(module, position)
@@ -110,9 +110,9 @@ def loadModules(modulesFilesList Array, currentModule String) CData
                 var constant CConstant = CConstant.deserialize(module, position)
                 const constantName String = constant.fullName~()
                 constant.fullName`(moduleName + "::" + constantName)
-                var allConstantsWithSameName <>Map = constants.put(constantName, Map.createEmpty())
+                var allConstantsWithSameName <>Map = constants.put(constantName, Map())
                 if allConstantsWithSameName.nothing?()
-                    allConstantsWithSameName = Map.createEmpty()
+                    allConstantsWithSameName = Map()
                 allConstantsWithSameName.put(moduleName, constant)
                 constants.put(constantName, allConstantsWithSameName)
             length = Int.deserialize(module, position)
@@ -120,9 +120,9 @@ def loadModules(modulesFilesList Array, currentModule String) CData
                 var type CType = CType.deserialize(module, position)
                 const typeName String = type.fullName~()
                 type.fullName`(moduleName + "::" + typeName)
-                var allTypesWithSameName <>Map = types.put(typeName, Map.createEmpty())
+                var allTypesWithSameName <>Map = types.put(typeName, Map())
                 if allTypesWithSameName.nothing?()
-                    allTypesWithSameName = Map.createEmpty()
+                    allTypesWithSameName = Map()
                 allTypesWithSameName.put(moduleName, type)
                 types.put(typeName, allTypesWithSameName)
             length = Int.deserialize(module, position)
@@ -130,9 +130,9 @@ def loadModules(modulesFilesList Array, currentModule String) CData
                 var group CGroup = CGroup.deserialize(module, position)
                 const groupName String = group.fullName~()
                 group.fullName`(moduleName + "::" + groupName)
-                var allGroupsWithSameName <>Map = groups.put(groupName, Map.createEmpty())
+                var allGroupsWithSameName <>Map = groups.put(groupName, Map())
                 if allGroupsWithSameName.nothing?()
-                    allGroupsWithSameName = Map.createEmpty()
+                    allGroupsWithSameName = Map()
                 allGroupsWithSameName.put(moduleName, group)
                 groups.put(groupName, allGroupsWithSameName)
             length = Int.deserialize(module, position)
@@ -140,17 +140,17 @@ def loadModules(modulesFilesList Array, currentModule String) CData
                 const function ModuleFunction = ModuleFunction.deserialize(module, position)
                 const functionName String = function.name~()
                 const functionModule String = function.module~()
-                var allFunctionsWithSameName <>Map = functions.put(functionName, Map.createEmpty())
+                var allFunctionsWithSameName <>Map = functions.put(functionName, Map())
                 var newFunction CFunction = CFunction.fromList({})
                 if allFunctionsWithSameName.nothing?()
-                    allFunctionsWithSameName = Map.createEmpty()
+                    allFunctionsWithSameName = Map()
                 if function.owningGroups~().empty?()
                     const cFunction CFunction = CFunction(function.export?(), functionModule + "::" + functionName, function.finalFunction~())
                     newFunction = cFunction
                 else
                     var groupsFunctions <>CFunction = allFunctionsWithSameName[functionModule]
                     if groupsFunctions.nothing?()
-                        groupsFunctions = CFunction(function.export?(), functionModule + "::" + functionName, GroupsFunctions(function.owningGroups~(), Map.createEmpty()))
+                        groupsFunctions = CFunction(function.export?(), functionModule + "::" + functionName, GroupsFunctions(function.owningGroups~(), Map()))
                     addFunctionToFunctionWithGroupsFunctions(groupsFunctions, function.thisType~(), function.finalFunction~())
                     newFunction = groupsFunctions
                 allFunctionsWithSameName.put(functionModule, newFunction)
@@ -191,7 +191,7 @@ def borrowType(write compiledData CData, typeName Token) CType
     if !separatorIndex.nothing?()
         shortTypeName = shortTypeName[separatorIndex +  2 : shortTypeName.length~()]
     var allTypes Map = compiledData.types`(nothing)
-    var allTypesWithSameName <>Map = allTypes.put(shortTypeName, Map.createEmpty())
+    var allTypesWithSameName <>Map = allTypes.put(shortTypeName, Map())
     var type <>CType = nothing
     if !allTypesWithSameName.nothing?()
         if separatorIndex.nothing?()
@@ -221,7 +221,7 @@ def refitType(write compiledData CData, type CType)
     const moduleName String = splitedName[0]
     const typeName String = splitedName[1]
     var allTypes Map = compiledData.types`(nothing)
-    var allTypesWithSameName Map = allTypes.put(typeName, Map.createEmpty())
+    var allTypesWithSameName Map = allTypes.put(typeName, Map())
     allTypesWithSameName.put(moduleName, type)
     allTypes.put(typeName, allTypesWithSameName)
     compiledData.types`(allTypes)
@@ -255,10 +255,10 @@ def getGroup(compiledData CData, groupName Token, ignoreExport Bool) CGroup
 #alwaysinline
 def addRequiredFunction(write compiledData CData, group Group, function GFunction)
     var allFunctions Map = compiledData.functions`(nothing)
-    var allFunctionsWithSameName <>Map = allFunctions.put(function.name~().text~(), Map.createEmpty())
+    var allFunctionsWithSameName <>Map = allFunctions.put(function.name~().text~(), Map())
     if allFunctionsWithSameName.nothing?()
-        allFunctionsWithSameName = Map.createEmpty()
-    var groupFunctions Map = Map.createEmpty()
+        allFunctionsWithSameName = Map()
+    var groupFunctions Map = Map()
     groupFunctions.put{
         ("-", SimpleFunction(
             const::defaultFAttributes,
@@ -361,7 +361,7 @@ def borrowFunction(write compiledData CData, functionName Token) CFunction
     if !separatorIndex.nothing?()
         shortFunctionName = shortFunctionName[separatorIndex +  2 : shortFunctionName.length~()]
     var allFunctions Map = compiledData.functions`(nothing)
-    var allFunctionsWithSameName <>Map = allFunctions.put(shortFunctionName, Map.createEmpty())
+    var allFunctionsWithSameName <>Map = allFunctions.put(shortFunctionName, Map())
     var function <>CFunction = nothing
     if !allFunctionsWithSameName.nothing?()
         if separatorIndex.nothing?()
@@ -391,7 +391,7 @@ def refitFunction(write compiledData CData, function CFunction)
     const moduleName String = splitedName[0]
     const functionName String = splitedName[1]
     var allFunctions Map = compiledData.functions`(nothing)
-    var allFunctionsWithSameName Map = allFunctions.put(functionName, Map.createEmpty())
+    var allFunctionsWithSameName Map = allFunctions.put(functionName, Map())
     allFunctionsWithSameName.put(moduleName, function)
     allFunctions.put(functionName, allFunctionsWithSameName)
     compiledData.functions`(allFunctions)
@@ -410,9 +410,9 @@ def addCGroup(write compiledData CData, group CGroup)
     const moduleName String = splitedName[0]
     const groupName String = splitedName[1]
     var groups Map = compiledData.groups`(nothing)
-    var allGroupsWithSameName <>Map = groups.put(groupName, Map.createEmpty())
+    var allGroupsWithSameName <>Map = groups.put(groupName, Map())
     if allGroupsWithSameName.nothing?()
-        allGroupsWithSameName = Map.createEmpty()
+        allGroupsWithSameName = Map()
     allGroupsWithSameName.put(moduleName, group)
     groups.put(groupName, allGroupsWithSameName)
     compiledData.groups`(groups)
@@ -423,9 +423,9 @@ def addCType(write compiledData CData, type CType)
     const moduleName String = splitedName[0]
     const typeName String = splitedName[1]
     var types Map = compiledData.types`(nothing)
-    var allTypesWithSameName <>Map = types.put(typeName, Map.createEmpty())
+    var allTypesWithSameName <>Map = types.put(typeName, Map())
     if allTypesWithSameName.nothing?()
-        allTypesWithSameName = Map.createEmpty()
+        allTypesWithSameName = Map()
     allTypesWithSameName.put(moduleName, type)
     types.put(typeName, allTypesWithSameName)
     compiledData.types`(types)
@@ -436,7 +436,7 @@ def createModule(compiledData CData, outputFile String)
     var fileData Bytes = moduleSignature()
     const currentModuleName String = compiledData.currentModule~()
     currentModuleName.serialize(fileData)
-    var elements Map = Map.createEmpty()
+    var elements Map = Map()
     parse elementName, elementsWithName = compiledData.enumerationsElements~()
         parse moduleName, isExport = elementsWithName
             if moduleName == currentModuleName
@@ -510,32 +510,32 @@ def createModule(compiledData CData, outputFile String)
 // The function creates a file with the final program.
 #noinline
 def createProgram(compiledData CData, outputFile String)
-    var compilingConstants Set = Set.createEmpty()
-    var compilingFunctions Set = Set.createEmpty()
+    var compilingConstants Set = Set()
+    var compilingFunctions Set = Set()
     var usedData UsedData = UsedData.fromList({})
     do
-        var groupsTypes Map = Map.createEmpty()
+        var groupsTypes Map = Map()
         parse _, groups = compiledData.groups~()
             parse _, group = groups
-                groupsTypes.put(group.fullName~(), Set.createEmpty())
+                groupsTypes.put(group.fullName~(), Set())
         const alwaysUsedTypes Map = alwaysUsedTypes()
         parse typeName, _ = alwaysUsedTypes
             const typeGroups Set = compiledData.getType(const::emptyToken.replaceText(typeName), true).groups~()
             parse _, group = typeGroups
-                var groupTypes Set = groupsTypes.put(group, Set.createEmpty())
+                var groupTypes Set = groupsTypes.put(group, Set())
                 groupTypes.add(typeName)
                 groupsTypes.put(group, groupTypes)
         usedData = UsedData{
             (builtinEnumerationsElements(),
-            Map.createEmpty(),
+            Map(),
             alwaysUsedTypes,
-            Map.createEmpty(),
-            Map.createEmpty(),
+            Map(),
+            Map(),
             builtinConstantStrings(),
             builtinLLVMDeclaredFunctions(),
-            Map.createEmpty(),
+            Map(),
             groupsTypes,
-            Map.createEmpty())
+            Map())
         }
     var mainFunctionMayThrow Bool = true
     try
@@ -574,7 +574,7 @@ def createProgram(compiledData CData, outputFile String)
             constantsArray.setItem(index, name + " = " + code + "\n")
         parse _, line = constantsArray
             llvmIR += line
-    var genericFunctionsErrors Map = Map.createEmpty()
+    var genericFunctionsErrors Map = Map()
     do
         var idCounter Int = usedData.llvmConstants~().length~()
         parse functionNameWithVariant, functionCode = usedData.functions~()
@@ -752,7 +752,7 @@ def createProgram(compiledData CData, outputFile String)
         errorCanNotWriteToFile(outputFile)
 
 def builtinEnumerationsElements() Map
-    var result Map = Map.createEmpty()
+    var result Map = Map()
     parse index, element = {
         ["STD::error_invalidType",
         "STD::error_noReturnValue",
@@ -763,13 +763,13 @@ def builtinEnumerationsElements() Map
     return result
 
 def builtinConstantStrings() Map
-    var result Map = Map.createEmpty()
+    var result Map = Map()
     parse index, constant = ["private unnamed_addr constant [21 x i16] [i16 0, i16 0, i16 0, i16 0, i16 13, i16 0, i16 0, i16 0, i16 73, i16 110, i16 118, i16 97, i16 108, i16 105, i16 100, i16 32, i16 116, i16 121, i16 112, i16 101, i16 46], align 8"]
         result.put(constant, "@lc." + index.toString())
     return result
 
 def alwaysUsedTypes() Map
-    var result Map = Map.createEmpty()
+    var result Map = Map()
     parse typeNumber, typeName = {
         ["STD::Nothing",
         "STD::Error",
@@ -781,7 +781,7 @@ def alwaysUsedTypes() Map
     return result
 
 def builtinLLVMDeclaredFunctions() Map
-    var result Map = Map.createEmpty()
+    var result Map = Map()
     const functions Array = {
         ["shar__get__cmd__argument", "declare i1 @shar__get__cmd__argument(i64, i64, i64* nocapture, i16** nocapture) local_unnamed_addr nounwind",
         "shar__get__cmd__arguments__count", "declare i64 @shar__get__cmd__arguments__count() local_unnamed_addr nounwind readonly",

@@ -92,7 +92,7 @@ def callFunction(functionName Token, arguments Array, write codeData CodeData, c
                 functionThisType = argument.type~()
                 end parse
         if thisIndexInArguments == -1
-            var groupsSet Set = Set.createEmpty()
+            var groupsSet Set = Set()
             parse _, mainGroupName = groupsFunctions.groups~()
                 parse _, subGroupName = compiledData.getGroup(const::emptyToken.replaceText(mainGroupName), true).subGroups~()
                     groupsSet.add(subGroupName)
