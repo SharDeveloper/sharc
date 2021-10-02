@@ -563,56 +563,59 @@ def createProgram(compiledData CData, outputFile String)
         if compilingConstants.empty?()
             end loop
     var llvmIR String = builtinConstants()
-    var constantsArray Array = Array.repeat("", usedData.llvmConstants~().length~())
-    parse code, name = usedData.llvmConstants~()
-        var index Int = 0
-        try
-            index = Int.fromString(name[4 : name.length~()])
-        catch
-            unreachable()
-        constantsArray.setItem(index, name + " = " + code + "\n")
-    parse _, line = constantsArray
-        llvmIR += line
+    do
+        var constantsArray Array = Array.repeat("", usedData.llvmConstants~().length~())
+        parse code, name = usedData.llvmConstants~()
+            var index Int = 0
+            try
+                index = Int.fromString(name[4 : name.length~()])
+            catch
+                unreachable()
+            constantsArray.setItem(index, name + " = " + code + "\n")
+        parse _, line = constantsArray
+            llvmIR += line
     var genericFunctionsErrors Map = Map.createEmpty()
-    var idCounter Int = usedData.llvmConstants~().length~()
-    parse functionNameWithVariant, functionCode = usedData.functions~()
-        if functionCode[0] == '|'
-            const functionName String = functionNameWithVariant[0: functionNameWithVariant.length~() - 2]
+    do
+        var idCounter Int = usedData.llvmConstants~().length~()
+        parse functionNameWithVariant, functionCode = usedData.functions~()
+            if functionCode[0] == '|'
+                const functionName String = functionNameWithVariant[0: functionNameWithVariant.length~() - 2]
+                var llvmStringType String = ""
+                const llvmStringData String = stringToLLVMArray(const::emptyToken.replaceText("Invalid type.\\n<- " + functionName), llvmStringType)
+                const stringConstantName String = "@lc." + idCounter.toString()
+                idCounter++
+                llvmIR += stringConstantName + " = private unnamed_addr constant " + llvmStringType + " " + llvmStringData + ", align 8\n"
+                const errorConstantName String = "@lc." + idCounter.toString()
+                idCounter++
+                llvmIR += errorConstantName + " = private unnamed_addr constant [3 x i64] [i64 0, i64 ptrtoint (" + llvmStringType + "* " + stringConstantName + " to i64), i64 0], align 8\n"
+                genericFunctionsErrors.put(functionName, "[i64 1, i64 ptrtoint([3 x i64]* " + errorConstantName + " to i64)]")
+    do
+        var typesArray Array = Array.repeat("", usedData.types~().length~())
+        parse typeName, typeNumber = usedData.types~()
             var llvmStringType String = ""
-            const llvmStringData String = stringToLLVMArray(const::emptyToken.replaceText("Invalid type.\\n<- " + functionName), llvmStringType)
-            const stringConstantName String = "@lc." + idCounter.toString()
-            idCounter++
-            llvmIR += stringConstantName + " = private unnamed_addr constant " + llvmStringType + " " + llvmStringData + ", align 8\n"
-            const errorConstantName String = "@lc." + idCounter.toString()
-            idCounter++
-            llvmIR += errorConstantName + " = private unnamed_addr constant [3 x i64] [i64 0, i64 ptrtoint (" + llvmStringType + "* " + stringConstantName + " to i64), i64 0], align 8\n"
-            genericFunctionsErrors.put(functionName, "[i64 1, i64 ptrtoint([3 x i64]* " + errorConstantName + " to i64)]")
-    constantsArray = Array.repeat("", usedData.types~().length~())
-    parse typeName, typeNumber = usedData.types~()
-        var llvmStringType String = ""
-        const llvmStringData String = stringToLLVMArray(const::emptyToken.replaceText(typeName), llvmStringType)
-        var index Int = 0
-        try
-            index = Int.fromString(typeNumber)
-        catch
-            unreachable()
-        const stringConstantName String = "@ctnc." + typeNumber
-        constantsArray.setItem{
-            (index,
-            stringConstantName + " = private unnamed_addr constant " + llvmStringType + " " + llvmStringData + ", align 8\n"
-            "@ctn." + typeNumber + " = private unnamed_addr constant [2 x i64] [i64 4, i64 ptrtoint(" + llvmStringType + "* " + stringConstantName + " to i64)], align 8\n")
-        }
-    parse _, line = constantsArray
-        llvmIR += line
-    constantsArray = []
+            const llvmStringData String = stringToLLVMArray(const::emptyToken.replaceText(typeName), llvmStringType)
+            var index Int = 0
+            try
+                index = Int.fromString(typeNumber)
+            catch
+                unreachable()
+            const stringConstantName String = "@ctnc." + typeNumber
+            typesArray.setItem{
+                (index,
+                stringConstantName + " = private unnamed_addr constant " + llvmStringType + " " + llvmStringData + ", align 8\n"
+                "@ctn." + typeNumber + " = private unnamed_addr constant [2 x i64] [i64 4, i64 ptrtoint(" + llvmStringType + "* " + stringConstantName + " to i64)], align 8\n")
+            }
+        parse _, line = typesArray
+            llvmIR += line
     llvmIR += "\n"
-    var constantsInitFunction String = "define private void @constnants.init() nounwind noinline{\n"
-    var registerNumber Int = 1
-    parse constantName, code = usedData.constants~()
-        constantsInitFunction += "\t%" + registerNumber.toString() + " = call [2 x i64] @get.c." + constantName.replacePart$("::", ".") + "() noinline\n"
-        llvmIR += code + "\n"
-        registerNumber++
-    llvmIR += constantsInitFunction + "\tret void\n}\n\n" + builtinFunctions(mainFunctionMayThrow)
+    do
+        var constantsInitFunction String = "define private void @constnants.init() nounwind noinline{\n"
+        var registerNumber Int = 1
+        parse constantName, code = usedData.constants~()
+            constantsInitFunction += "\t%" + registerNumber.toString() + " = call [2 x i64] @get.c." + constantName.replacePart$("::", ".") + "() noinline\n"
+            llvmIR += code + "\n"
+            registerNumber++
+        llvmIR += constantsInitFunction + "\tret void\n}\n\n" + builtinFunctions(mainFunctionMayThrow)
     parse functionNameWithVariant, functionCode = usedData.functions~()
         if functionCode[0] == '|'
             const functionName String = functionNameWithVariant[0 : functionNameWithVariant.length~() - 2]
@@ -682,6 +685,7 @@ def createProgram(compiledData CData, outputFile String)
             llvmIR += "}\n\n"
         else
             llvmIR += functionCode
+    genericFunctionsErrors = Map()
     parse groupsAsString, functionName = usedData.inGroups~()
         llvmIR += "define private i1 " + functionName + "(i64) alwaysinline nounwind readnone{\n"
         const groups Array = groupsAsString.split(',')
@@ -719,28 +723,29 @@ def createProgram(compiledData CData, outputFile String)
             }
         llvmIR += functionBody + "}\n\n"
     llvmIR += "define private [2 x i64] @shar.type.number.to.type.name(i64) nounwind readnone{\n\tswitch i64 %0, label %notype [\n"
-    var labelNumber Int = 2
-    var labelsCode String = ""
-    var phiCode String = ""
-    for :(index Int = 0) index < usedData.types~().length~(); index++
-        const typeNumber String = index.toString()
-        const label String = labelNumber.toString()
-        llvmIR += "\t\ti64 " + typeNumber + ", label %" + label + "\n"
-        labelsCode += "\t" + label + ":\n\tbr label %end\n"
-        phiCode += "[@ctn." + typeNumber + ", %" + label + "], "
-        labelNumber++
-    const phiRegisterNumber String = labelNumber.toString()
-    const resultRegisterNumber String = (labelNumber + 1).toString()
-    llvmIR += {
-        "\t]\n" +
-        labelsCode +
-        "\tnotype:\n"
-        "\tbr label %end\n"
-        "\tend:\n"
-        "\t%" + phiRegisterNumber + " = phi [2 x i64]* " + phiCode + "[@shar.empty.string, %notype]\n"
-        "\t%" + resultRegisterNumber + " = load [2 x i64], [2 x i64]* %" + phiRegisterNumber + ", align 8\n"
-        "\tret [2 x i64] %" + resultRegisterNumber + "\n}\n\n"
-    }
+    do
+        var labelNumber Int = 2
+        var labelsCode String = ""
+        var phiCode String = ""
+        for :(index Int = 0) index < usedData.types~().length~(); index++
+            const typeNumber String = index.toString()
+            const label String = labelNumber.toString()
+            llvmIR += "\t\ti64 " + typeNumber + ", label %" + label + "\n"
+            labelsCode += "\t" + label + ":\n\tbr label %end\n"
+            phiCode += "[@ctn." + typeNumber + ", %" + label + "], "
+            labelNumber++
+        const phiRegisterNumber String = labelNumber.toString()
+        const resultRegisterNumber String = (labelNumber + 1).toString()
+        llvmIR += {
+            "\t]\n" +
+            labelsCode +
+            "\tnotype:\n"
+            "\tbr label %end\n"
+            "\tend:\n"
+            "\t%" + phiRegisterNumber + " = phi [2 x i64]* " + phiCode + "[@shar.empty.string, %notype]\n"
+            "\t%" + resultRegisterNumber + " = load [2 x i64], [2 x i64]* %" + phiRegisterNumber + ", align 8\n"
+            "\tret [2 x i64] %" + resultRegisterNumber + "\n}\n\n"
+        }
     parse _, declare = usedData.llvmDeclares~()
         llvmIR += declare + "\n"
     if !saveToUTF8File(llvmIR, outputFile)
