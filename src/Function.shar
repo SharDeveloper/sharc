@@ -98,7 +98,7 @@ def precompileDefaultFunction(function Function, write compiledData CData)
         errorFunctionCannotBeAWorker(function.name~())
     const functionSignature FSignature = function.getSignature().toFull(compiledData)
     functionSignature.this!()
-    var mapWithDefaultFunction Map = Map.createEmpty()
+    var mapWithDefaultFunction Map = Map()
     mapWithDefaultFunction.put("+", SimpleFunction(function.attributes~(), functionSignature, "", true))
     var groupsFullNames Array = []
     do
@@ -117,9 +117,9 @@ def precompileDefaultFunction(function Function, write compiledData CData)
                 if firstGroup.subGroups~()[secondGroup.fullName~()]
                     warningUnneededGroupInDefaultFunction(function.attributes~().this~()[secondIndex].replaceText(secondGroup.fullName~()), firstGroup.fullName~())
     var allFunctions Map = compiledData.functions`(nothing)
-    var functionsWithSameName <>Map = allFunctions.put(function.name~().text~(), Map.createEmpty())
+    var functionsWithSameName <>Map = allFunctions.put(function.name~().text~(), Map())
     if functionsWithSameName.nothing?()
-        functionsWithSameName = Map.createEmpty()
+        functionsWithSameName = Map()
     if !functionsWithSameName.put{
         (compiledData.currentModule~(),
         CFunction(function.export?(), compiledData.currentModule~() + "::" + function.name~().text~(),
@@ -188,9 +188,9 @@ def precompileSimpleFunction(function Function, write compiledData CData)
             if !(argument.type~().anyType?() || argument.type~().simple?())
                 errorNothrowOnInvalidFunction(function.name~())
     var allFunctions Map = compiledData.functions`(nothing)
-    var functionsWithSameName <>Map = allFunctions.put(function.name~().text~(), Map.createEmpty())
+    var functionsWithSameName <>Map = allFunctions.put(function.name~().text~(), Map())
     if functionsWithSameName.nothing?()
-        functionsWithSameName = Map.createEmpty()
+        functionsWithSameName = Map()
     if !functionsWithSameName.put{
         (compiledData.currentModule~(),
         CFunction(function.export?(), compiledData.currentModule~() + "::" + function.name~().text~(),
@@ -208,14 +208,14 @@ def compileAttachmentFunction(function Function, write compiledData CData, type 
     var typeFunction SimpleFunction = compiledData.getFunction(function.name~().replaceText(fullFunctionName), false).finalFunction~().functions~()[type.fullName~()]
     var codeData CodeData = CodeData{
         (fullFunctionName + " (" + type.fullName~() + ")" /*functionNameForErrorMessage*/,
-        Set.createEmpty() /*allThisGroups*/,
+        Set() /*allThisGroups*/,
         typeFunction.signature~().resultType~() /*resultType*/,
-        Map.createEmpty() /*namedOperands*/,
+        Map() /*namedOperands*/,
         1 /*level*/,
         1 /*registerCounter*/,
-        Map.createEmpty() /*endLabels*/,
-        Map.createEmpty() /*nextLabels*/,
-        Map.createEmpty() /*fallthroughLabels*/,
+        Map() /*endLabels*/,
+        Map() /*nextLabels*/,
+        Map() /*fallthroughLabels*/,
         [] /*catchLabels*/,
         [] /*allocs*/,
         [] /*unneededAllocs*/,
@@ -230,7 +230,7 @@ def compileAttachmentFunction(function Function, write compiledData CData, type 
         for :(index Int = 1) index < llvmLines.length~(); index++
             llvmIR += "\t" + llvmLines[index].text~() + "\n"
     else
-        var namedOperands Map = Map.createEmpty()
+        var namedOperands Map = Map()
         const arguments Array = typeFunction.signature~().arguments~()
         parse index, argument = arguments
             const argumentOperand Operand = Operand{
@@ -242,7 +242,7 @@ def compileAttachmentFunction(function Function, write compiledData CData, type 
             }
             namedOperands.put(argumentOperand.code~().text~(), NamedOperand(0, argumentOperand))
         codeData.namedOperands`(namedOperands)
-        namedOperands = Map.createEmpty()
+        namedOperands = Map()
         const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, llvmIR)
         llvmIR = "\t%##nreg##0## = alloca [2 x i64], align 8\n" + codeData.allocsToIR() + llvmIR
         if !lastIsTerminator
@@ -270,7 +270,7 @@ def compileAttachmentFunction(function Function, write compiledData CData, type 
 def compileDefaultFunction(function Function, write compiledData CData)
     const fullFunctionName String = compiledData.currentModule~() + "::" +function.name~().text~()
     var defaultFunction SimpleFunction = compiledData.getFunction(function.name~().replaceText(fullFunctionName), false).finalFunction~().functions~()["+"]
-    var allThisGroups Set = Set.createEmpty()
+    var allThisGroups Set = Set()
     parse _, mainThisGroupName = function.attributes~().this~()
         const mainThisGroup CGroup = compiledData.getGroup(mainThisGroupName, false)
         parse _, subThisGroupName = mainThisGroup.subGroups~()
@@ -285,12 +285,12 @@ def compileDefaultFunction(function Function, write compiledData CData)
         (compiledData.currentModule~() + "::" + function.name~().text~()  + " (@)" /*functionNameForErrorMessage*/,
         allThisGroups /*allThisGroups*/,
         defaultFunction.signature~().resultType~() /*resultType*/,
-        Map.createEmpty() /*namedOperands*/,
+        Map() /*namedOperands*/,
         1 /*level*/,
         1 /*registerCounter*/,
-        Map.createEmpty() /*endLabels*/,
-        Map.createEmpty() /*nextLabels*/,
-        Map.createEmpty() /*fallthroughLabels*/,
+        Map() /*endLabels*/,
+        Map() /*nextLabels*/,
+        Map() /*fallthroughLabels*/,
         [] /*catchLabels*/,
         [] /*allocs*/,
         [] /*unneededAllocs*/,
@@ -305,7 +305,7 @@ def compileDefaultFunction(function Function, write compiledData CData)
         for :(index Int = 1) index < llvmLines.length~(); index++
             llvmIR += "\t" + llvmLines[index].text~() + "\n"
     else
-        var namedOperands Map = Map.createEmpty()
+        var namedOperands Map = Map()
         const arguments Array = defaultFunction.signature~().arguments~()
         parse index, argument = arguments
             const argumentOperand Operand = Operand{
@@ -317,7 +317,7 @@ def compileDefaultFunction(function Function, write compiledData CData)
             }
             namedOperands.put(argumentOperand.code~().text~(), NamedOperand(0, argumentOperand))
         codeData.namedOperands`(namedOperands)
-        namedOperands = Map.createEmpty()
+        namedOperands = Map()
         const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, llvmIR)
         llvmIR = "\t%##nreg##0## = alloca [2 x i64], align 8\n" + codeData.allocsToIR() + llvmIR
         if !lastIsTerminator
@@ -355,14 +355,14 @@ def compileOverrideFunction(function Function, write compiledData CData)
             memoryManagerFunction = true
     var codeData CodeData = CodeData{
         (fullFunctionName + " (" + typeFullName + ")" /*functionNameForErrorMessage*/,
-        Set.createEmpty() /*allThisGroups*/,
+        Set() /*allThisGroups*/,
         typeFunction.signature~().resultType~() /*resultType*/,
-        Map.createEmpty() /*namedOperands*/,
+        Map() /*namedOperands*/,
         1 /*level*/,
         1 /*registerCounter*/,
-        Map.createEmpty() /*endLabels*/,
-        Map.createEmpty() /*nextLabels*/,
-        Map.createEmpty() /*fallthroughLabels*/,
+        Map() /*endLabels*/,
+        Map() /*nextLabels*/,
+        Map() /*fallthroughLabels*/,
         [] /*catchLabels*/,
         [] /*allocs*/,
         [] /*unneededAllocs*/,
@@ -377,7 +377,7 @@ def compileOverrideFunction(function Function, write compiledData CData)
         for :(index Int = 1) index < llvmLines.length~(); index++
             llvmIR += "\t" + llvmLines[index].text~() + "\n"
     else
-        var namedOperands Map = Map.createEmpty()
+        var namedOperands Map = Map()
         const arguments Array = typeFunction.signature~().arguments~()
         parse index, argument = arguments
             const argumentOperand Operand = Operand{
@@ -389,7 +389,7 @@ def compileOverrideFunction(function Function, write compiledData CData)
             }
             namedOperands.put(argumentOperand.code~().text~(), NamedOperand(0, argumentOperand))
         codeData.namedOperands`(namedOperands)
-        namedOperands = Map.createEmpty()
+        namedOperands = Map()
         const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, llvmIR)
         llvmIR = "\t%##nreg##0## = alloca [2 x i64], align 8\n" + codeData.allocsToIR() + llvmIR
         if !lastIsTerminator
@@ -419,14 +419,14 @@ def compileSimpleFunction(function Function, write compiledData CData)
     var simpleFunction SimpleFunction = compiledData.getFunction(function.name~().replaceText(fullFunctionName), false).finalFunction~()
     var codeData CodeData = CodeData{
         (fullFunctionName /*functionNameForErrorMessage*/,
-        Set.createEmpty() /*allThisGroups*/,
+        Set() /*allThisGroups*/,
         simpleFunction.signature~().resultType~() /*resultType*/,
-        Map.createEmpty() /*namedOperands*/,
+        Map() /*namedOperands*/,
         1 /*level*/,
         1 /*registerCounter*/,
-        Map.createEmpty() /*endLabels*/,
-        Map.createEmpty() /*nextLabels*/,
-        Map.createEmpty() /*fallthroughLabels*/,
+        Map() /*endLabels*/,
+        Map() /*nextLabels*/,
+        Map() /*fallthroughLabels*/,
         [] /*catchLabels*/,
         [] /*allocs*/,
         [] /*unneededAllocs*/,
@@ -441,7 +441,7 @@ def compileSimpleFunction(function Function, write compiledData CData)
         for :(index Int = 1) index < llvmLines.length~(); index++
             llvmIR += "\t" + llvmLines[index].text~() + "\n"
     else
-        var namedOperands Map = Map.createEmpty()
+        var namedOperands Map = Map()
         const arguments Array = simpleFunction.signature~().arguments~()
         parse index, argument = arguments
             const argumentOperand Operand = Operand{
@@ -453,7 +453,7 @@ def compileSimpleFunction(function Function, write compiledData CData)
             }
             namedOperands.put(argumentOperand.code~().text~(), NamedOperand(0, argumentOperand))
         codeData.namedOperands`(namedOperands)
-        namedOperands = Map.createEmpty()
+        namedOperands = Map()
         const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, llvmIR)
         llvmIR = "\t%##nreg##0## = alloca [2 x i64], align 8\n" + codeData.allocsToIR() + llvmIR
         if !lastIsTerminator

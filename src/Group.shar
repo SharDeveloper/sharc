@@ -57,7 +57,7 @@ def addGroupFunction(write group Group, function GFunction)
 // The function compiles the group.
 #alwaysinline
 def compileGroup(group Group, write compiledData CData, write compilingGroups Map)
-    var inProcess Set = Set.createEmpty()
+    var inProcess Set = Set()
     compileGroup_helpFunction(group, compiledData, compilingGroups, inProcess, group.name~().replaceText(compiledData.currentModule~() + "::" + group.name~().text~()))
 
 def compileGroup_helpFunction(group Group, write compiledData CData, write compilingGroups Map, write inProcess Set, mainGroupName Token)
@@ -67,10 +67,10 @@ def compileGroup_helpFunction(group Group, write compiledData CData, write compi
         return
     if inProcess.add(groupName)
         errorRecursiveGroup(mainGroupName, fullName)
-    var compiledGroupFunctions Set = Set.createEmpty()
+    var compiledGroupFunctions Set = Set()
     parse functionName, _ = group.functions~()
         compiledGroupFunctions.add(functionName)
-    var compiledGroup CGroup = CGroup(group.export?(), fullName, Set.createEmpty(), compiledGroupFunctions)
+    var compiledGroup CGroup = CGroup(group.export?(), fullName, Set(), compiledGroupFunctions)
     parse _, subGroupName = group.subGroups~()
         const subGroup <>Group = compilingGroups[subGroupName.text~()]
         if !subGroup.nothing?()

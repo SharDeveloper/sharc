@@ -51,9 +51,9 @@ def Constant(isExport Bool, name Token, type OType, value Expression) Constant
 #alwaysinline
 def precompileConstant(constant Constant, write compiledData CData)
     var constants Map = compiledData.constants`(nothing)
-    var constantsWithSameName <>Map = constants.put(constant.name~().text~(), Map.createEmpty())
+    var constantsWithSameName <>Map = constants.put(constant.name~().text~(), Map())
     if constantsWithSameName.nothing?()
-        constantsWithSameName = Map.createEmpty()
+        constantsWithSameName = Map()
     if !constantsWithSameName.put{
         (compiledData.currentModule~(),
         CConstant(constant.export?(),
@@ -71,14 +71,14 @@ def compileConstant(constant Constant, write compiledData CData)
     var compiledConstant CConstant = compiledData.constants~()[constant.name~().text~()][compiledData.currentModule~()]
     var codeData CodeData = CodeData{
         ("const::" + compiledData.currentModule~() + "::" + constant.name~().text~() /*functionNameForErrorMessage*/,
-        Set.createEmpty() /*allThisGroups*/,
+        Set() /*allThisGroups*/,
         OType.fromList({}) /*resultType*/,
-        Map.createEmpty() /*namedOperands*/,
+        Map() /*namedOperands*/,
         1 /*level*/,
         0 /*registerCounter*/,
-        Map.createEmpty() /*endLabels*/,
-        Map.createEmpty() /*nextLabels*/,
-        Map.createEmpty() /*fallthroughLabels*/,
+        Map() /*endLabels*/,
+        Map() /*nextLabels*/,
+        Map() /*fallthroughLabels*/,
         [] /*catchLabels*/,
         [] /*allocs*/,
         [] /*unneededAllocs*/,
@@ -93,7 +93,7 @@ def compileConstant(constant Constant, write compiledData CData)
     llvmIR += "\tret [2 x i64] " + constOperand.value~() + "\n"
     llvmIR.sharRegistersToLLVMRegisters(1, constant.name~())
     var constants Map = compiledData.constants`(nothing)
-    var constantsWithSameName <>Map = constants.put(constant.name~().text~(), Map.createEmpty())
+    var constantsWithSameName <>Map = constants.put(constant.name~().text~(), Map())
     compiledConstant = constantsWithSameName.put(compiledData.currentModule~(), CConstant.fromList({}))
     compiledConstant.llvmIR`(llvmIR)
     constantsWithSameName.put(compiledData.currentModule~(), compiledConstant)

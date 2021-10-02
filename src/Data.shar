@@ -75,7 +75,7 @@ attach Data to FieldAttachments
 
 #alwaysinline
 def Data() Data
-    return Data.fromList({const::emptyToken, Map.createEmpty(), Map.createEmpty(), Map.createEmpty(), Map.createEmpty(), [], []})
+    return Data.fromList({const::emptyToken, Map(), Map(), Map(), Map(), [], []})
 
 // The function loads data from blocks.
 def loadData(blocks Array) Data
@@ -173,11 +173,11 @@ def compileData(data Data, write compiledData CData)
     parse enumElement, isExport = data.enumerationsElements~()
         var elementsWithSameName <>Map = allElements.put(enumElement, nothing)
         if elementsWithSameName.nothing?()
-            elementsWithSameName = Map.createEmpty()
+            elementsWithSameName = Map()
         elementsWithSameName.put(compiledData.currentModule~(), isExport)
         allElements.put(enumElement, elementsWithSameName)
     compiledData.enumerationsElements`(allElements)
-    allElements = Map.createEmpty()
+    allElements = Map()
     var compilingGroups Map = data.groups~()
     for !compilingGroups.empty?()
         var oneCompilingGroup Group = Group.fromList({})

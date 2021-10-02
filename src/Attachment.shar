@@ -40,7 +40,7 @@ def Attachment(type, group Token, functions Map) Attachment
 // The function adds types to groups.
 #alwaysinline
 def addTypesToGroups(attachments Array, write compiledData CData)
-    var groupedAttachments Map = Map.createEmpty()
+    var groupedAttachments Map = Map()
     parse _, attachment = attachments
         var existedAttachments <>Array = groupedAttachments.put(attachment.type~().text~(), [])
         if existedAttachments.nothing?()

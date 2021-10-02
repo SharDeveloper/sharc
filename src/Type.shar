@@ -39,7 +39,7 @@ def Type(isExport Bool, name Token, isPrimitive Bool) Type
 
 // The function compiles the data in the type.
 def compileType(type Type, write compiledData CData)
-    var groups Set = Set.createEmpty()
+    var groups Set = Set()
     groups.add("STD::Any")
     if !(compiledData.currentModule~() == "STD" && type.name~().text~() == "Nothing")
         groups.add(type.primitive?().select("STD::Primitive", "STD::Type"))
