@@ -24,5 +24,5 @@ attach NamedOperand to FieldOperand
         return operand.typePut(1, new)
 
 #alwaysinline
-def namedOperand(level Int, operand Operand) NamedOperand
+def NamedOperand(level Int, operand Operand) NamedOperand
     return NamedOperand.fromList({level, operand})

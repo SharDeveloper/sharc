@@ -74,12 +74,12 @@ attach Data to FieldAttachments
         return data.typePut(6, new)
 
 #alwaysinline
-def initData() Data
+def Data() Data
     return Data.fromList({const::emptyToken, Map.createEmpty(), Map.createEmpty(), Map.createEmpty(), Map.createEmpty(), [], []})
 
 // The function loads data from blocks.
 def loadData(blocks Array) Data
-    var data Data = initData()
+    var data Data = Data()
     for :(blockIndex Int = 0) blockIndex < blocks.length~(); blockIndex++
         var block Block = blocks[blockIndex]
         var tokenIndex Int = 0

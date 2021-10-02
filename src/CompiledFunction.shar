@@ -34,7 +34,7 @@ attach CFunction to FieldFinalFunction
         return function.typePut(2, new)
 
 #alwaysinline
-def cFunction(isExport Bool, fullName String, finalFunction $Any) CFunction
+def CFunction(isExport Bool, fullName String, finalFunction $Any) CFunction
     return CFunction.fromList({isExport, fullName, finalFunction})
 
 #alwaysinline
@@ -70,7 +70,7 @@ def callFunction(functionName Token, arguments Array, write codeData CodeData, c
                 errorWrongNumberOfArguments(functionName)
             typedFunction = true
             haveFinalSignature = true
-            functionThisType = oType(const::emptyToken.replaceText(codeData.thisTypeName~()), false)
+            functionThisType = OType(const::emptyToken.replaceText(codeData.thisTypeName~()), false)
             end switch
         var simpleFunction <>SimpleFunction = groupsFunctions.functions~()["-"]
         if simpleFunction.nothing?()
@@ -101,7 +101,7 @@ def callFunction(functionName Token, arguments Array, write codeData CodeData, c
             parse _, groupName = groupsSet
                 groupsArray.addItem(const::emptyToken.replaceText(groupName))
             groupsArray.sort(true)
-            functionThisType = oType(groupsArray, false)
+            functionThisType = OType(groupsArray, false)
         else
             typedFunction = true
             haveFinalSignature = true
@@ -240,7 +240,7 @@ def callFunction(functionName Token, arguments Array, write codeData CodeData, c
             ", [2 x i64] ([2 x i64])* ##ancntfunc##STD::shar__rc_free##)\n"
         }
     code.addChar(')')
-    const result Operand = operand{
+    const result Operand = Operand{
         (code, enum::access_read,
         isWorker.select
             ("zeroinitializer",

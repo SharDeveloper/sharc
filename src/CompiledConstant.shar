@@ -8,7 +8,7 @@ type CConstant
     // type     OType
 
 #alwaysinline
-def cConstant(isExport Bool, fullName, llvmIR String, type OType) CConstant
+def CConstant(isExport Bool, fullName, llvmIR String, type OType) CConstant
     return CConstant.fromList({isExport, fullName, llvmIR, type})
 
 attach CConstant to FieldExport
@@ -68,7 +68,7 @@ attach CConstant to BinarySerializable
             const name String = String.deserialize(bytes, position)
             const llvmIR String = String.deserialize(bytes, position)
             const oType OType = OType.deserialize(bytes, position)
-            return cConstant(isExport, name, llvmIR, oType)
+            return CConstant(isExport, name, llvmIR, oType)
         catch id, message
             position = startPosition
             throw(id, message)

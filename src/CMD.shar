@@ -83,7 +83,7 @@ attach CMDData to FieldIgnoreNoThrow
         return command.typePut(4, new)
 
 #alwaysinline
-def cmdData(cmd Int, sources, modules Array, outFile String, ignoreNoThrow Bool) CMDData
+def CMDData(cmd Int, sources, modules Array, outFile String, ignoreNoThrow Bool) CMDData
     return CMDData.fromList({cmd, sources, modules, outFile, ignoreNoThrow})
 
 // The function receives the command and data that the user passed to the compiler.
@@ -142,7 +142,7 @@ def getCMDAndData() CMDData
             if outFile.empty?()
                 errorNoOutputFile()
             cmd = enum::cmd_compile
-    return cmdData(cmd, sources, modules, outFile, ignoreNoThrow)
+    return CMDData(cmd, sources, modules, outFile, ignoreNoThrow)
 
 // The function executes the command that the user gave to the compiler.
 def runCommand(command CMDData)

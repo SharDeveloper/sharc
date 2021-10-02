@@ -24,5 +24,5 @@ attach Label to FieldLevel
         return label.typePut(1, new)
 
 #alwaysinline
-def label(label String, level Int) Label
+def Label(label String, level Int) Label
     return Label.fromList({label, level})

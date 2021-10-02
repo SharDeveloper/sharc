@@ -44,7 +44,7 @@ attach CGroup to FieldFunctions
         return group.typePut(3, new)
 
 #alwaysinline
-def cGroup(isExport Bool, fullName String, allSubGroups, functions Set) CGroup
+def CGroup(isExport Bool, fullName String, allSubGroups, functions Set) CGroup
     return CGroup.fromList({isExport, fullName, allSubGroups, functions})
 
 attach CGroup to BinarySerializable
@@ -78,7 +78,7 @@ attach CGroup to BinarySerializable
             var functions Set = Set.createEmpty()
             for :(counter Int = 0) counter < functionsCount; counter++
                 functions.add(String.deserialize(bytes, position))
-            return cGroup(isExport, name, subGroups, functions)
+            return CGroup(isExport, name, subGroups, functions)
         catch id, message
             position = startPosition
             throw(id, message)

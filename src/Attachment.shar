@@ -34,7 +34,7 @@ attach Attachment to FieldFunctions
         return attachment.typePut(2, new)
 
 #alwaysinline
-def attachment(type, group Token, functions Map) Attachment
+def Attachment(type, group Token, functions Map) Attachment
     return Attachment.fromList({type, group, functions})
 
 // The function adds types to groups.

@@ -43,7 +43,7 @@ attach Group to FieldFunctions
         return group.typePut(3, new)
 
 #alwaysinline
-def group(isExport Bool, name Token, subGroups Array, functions Map) Group
+def Group(isExport Bool, name Token, subGroups Array, functions Map) Group
     return Group.fromList({isExport, name, subGroups, functions})
 
 // A function adds a function to existing functions in a group.
@@ -70,7 +70,7 @@ def compileGroup_helpFunction(group Group, write compiledData CData, write compi
     var compiledGroupFunctions Set = Set.createEmpty()
     parse functionName, _ = group.functions~()
         compiledGroupFunctions.add(functionName)
-    var compiledGroup CGroup = cGroup(group.export?(), fullName, Set.createEmpty(), compiledGroupFunctions)
+    var compiledGroup CGroup = CGroup(group.export?(), fullName, Set.createEmpty(), compiledGroupFunctions)
     parse _, subGroupName = group.subGroups~()
         const subGroup <>Group = compilingGroups[subGroupName.text~()]
         if !subGroup.nothing?()

@@ -42,7 +42,7 @@ def loadBlock(lines Array, fileName String, fileID, write lineIndex, expectedLev
                 tokens = lines.getLLVMCode(fileName, fileID, lineIndex, expectedLevel + 1)
             if !ignoreSplittedStrings
                 tokens.joinSplittedStrings()
-            return block(tokens, lines.getSubBlocks(fileName, fileID, lineIndex, expectedLevel + 1))
+            return Block(tokens, lines.getSubBlocks(fileName, fileID, lineIndex, expectedLevel + 1))
         elif checkLevel
             errorWrongLevel(fileName, lineIndex, expectedLevel, lineLevel)
     return nothing
@@ -89,7 +89,7 @@ def getTokens(line, fileName String, fileID, lineIndex, lineLevel Int) Array // 
 
 // The function receives the token from the string from the specified position.
 def getToken(line, fileName String, fileID, lineIndex, write columnIndex Int) <>Token
-    var token Token = token("", fileName, fileID, lineIndex, columnIndex)
+    var token Token = Token("", fileName, fileID, lineIndex, columnIndex)
     var previousCharType Int = enum::ct_none
     for
         if columnIndex >= line.length~()
@@ -220,7 +220,7 @@ def getToken(line, fileName String, fileID, lineIndex, write columnIndex Int) <>
             if tokenText == "/"
                 const endIndex <>Int = line.lookPartFromAtoB("*/", columnIndex + 1, line.length~())
                 if endIndex.nothing?()
-                    errorNotExpectedEOL(token("", fileName, fileID, lineIndex, line.length~() - 1), "*/")
+                    errorNotExpectedEOL(Token("", fileName, fileID, lineIndex, line.length~() - 1), "*/")
                 columnIndex = endIndex + 1
                 token.text`("")
                 previousCharType = enum::ct_none
@@ -240,12 +240,12 @@ def getToken(line, fileName String, fileID, lineIndex, write columnIndex Int) <>
                 const beginIndex Int = columnIndex
                 const endIndex <>Int = line.lookFromAtoB(char, columnIndex + 1, line.length~())
                 if endIndex.nothing?()
-                    errorNotExpectedEOL(token("", fileName, fileID, lineIndex, line.length~() - 1), char.toString())
+                    errorNotExpectedEOL(Token("", fileName, fileID, lineIndex, line.length~() - 1), char.toString())
                 columnIndex = endIndex + 1
                 token.text`(line[beginIndex : columnIndex])
             return token
         default
-            errorInvalidCharacter(token(char.charToInt().toString(), fileName, fileID, lineIndex, columnIndex))
+            errorInvalidCharacter(Token(char.charToInt().toString(), fileName, fileID, lineIndex, columnIndex))
         columnIndex++
 
 // Functions attaches to existing tokens, tokens from the following lines.
@@ -270,7 +270,7 @@ def getLLVMCode(lines Array, fileName String, fileID, write lineIndex, level Int
     var lineLevel Int = line.getLevel()
     if lineLevel < level
         errorWrongLevel(fileName, lineIndex, level, lineLevel)
-    var result Array = [const::llvmToken, token(line[lineLevel * 4 : line.length~()], fileName, fileID, lineIndex, level * 4)]
+    var result Array = [const::llvmToken, Token(line[lineLevel * 4 : line.length~()], fileName, fileID, lineIndex, level * 4)]
     lineIndex++
     if lineIndex != lines.length~()
         for :(loop)
@@ -281,7 +281,7 @@ def getLLVMCode(lines Array, fileName String, fileID, write lineIndex, level Int
             lineLevel = line.getLevel()
             if lineLevel < level
                 end loop
-            result.addItem(token(line[level * 4 : line.length~()], fileName, fileID, lineIndex, level * 4))
+            result.addItem(Token(line[level * 4 : line.length~()], fileName, fileID, lineIndex, level * 4))
             lineIndex++
     return result
 

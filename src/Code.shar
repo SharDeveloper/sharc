@@ -142,7 +142,7 @@ def compileConstantDefine(block Block, write codeData CodeData, compiledData CDa
         constantValue.named`(true)
         constantValue.used`(false)
     else
-        constantValue = operand{
+        constantValue = Operand{
             (constantName,
             enum::access_read,
             constantValue.value~(),
@@ -150,7 +150,7 @@ def compileConstantDefine(block Block, write codeData CodeData, compiledData CDa
             false, false, true, false, false)
         }
     var namedOperands Map = codeData.namedOperands`(nothing)
-    if !namedOperands.put(constantName.text~(), namedOperand(codeData.level~(), constantValue)).nothing?()
+    if !namedOperands.put(constantName.text~(), NamedOperand(codeData.level~(), constantValue)).nothing?()
         errorAlreadyExist(constantName, "constant")
     codeData.namedOperands`(namedOperands)
 
@@ -173,8 +173,8 @@ def compileVariableDefine(block Block, write codeData CodeData, compiledData CDa
     var namedOperands Map = codeData.namedOperands`(nothing)
     if !namedOperands.put{
         (variableName.text~(),
-        namedOperand(codeData.level~(),
-        operand(
+        NamedOperand(codeData.level~(),
+        Operand(
             variableName,
             enum::access_write,
             mutableRegister,
@@ -243,8 +243,8 @@ def compileFor(block Block, write codeData CodeData, compiledData CData, write l
             var namedOperands Map = codeData.namedOperands`(nothing)
             if !namedOperands.put{
                 (forName.text~(),
-                namedOperand(codeData.level~(),
-                operand(
+                NamedOperand(codeData.level~(),
+                Operand(
                     forName,
                     enum::access_write,
                     mutableRegister,
@@ -261,11 +261,11 @@ def compileFor(block Block, write codeData CodeData, compiledData CData, write l
     const endLabel String = codeData.createLabel()
     if !forName.empty?()
         var endLabels Map = codeData.endLabels`(nothing)
-        if !endLabels.put(forName.text~(), label(endLabel, codeData.level~())).nothing?()
+        if !endLabels.put(forName.text~(), Label(endLabel, codeData.level~())).nothing?()
             errorAlreadyExist(forName, "operator")
         codeData.endLabels`(endLabels)
         var nextLabels Map = codeData.nextLabels`(nothing)
-        if !nextLabels.put(forName.text~(), label(nextLabel, codeData.level~())).nothing?()
+        if !nextLabels.put(forName.text~(), Label(nextLabel, codeData.level~())).nothing?()
             errorAlreadyExist(forName, "operator")
         codeData.nextLabels`(nextLabels)
     llvmIR += "\tbr label %##reg##" + forStartLabel + "##\n\t##nreg##" + forStartLabel + "##:\n"
@@ -313,7 +313,7 @@ def compileDo(block Block, write codeData CodeData, compiledData CData, write ll
     const endLabel String = codeData.createLabel()
     if !doName.empty?()
         var endLabels Map = codeData.endLabels`(nothing)
-        if !endLabels.put(doName.text~(), label(endLabel, codeData.level~())).nothing?()
+        if !endLabels.put(doName.text~(), Label(endLabel, codeData.level~())).nothing?()
             errorAlreadyExist(doName, "operator")
         codeData.endLabels`(endLabels)
     codeData.level`(codeData.level~() + 1)
@@ -356,7 +356,7 @@ def compileParse(block Block, write codeData CodeData, compiledData CData, write
     const itemName Token = block.next?(tokenIndex, ["_"]).select(const::emptyToken, block.getLowercaseName(tokenIndex, "constant"))
     block.next!(tokenIndex, ["="])
     codeData.level`(codeData.level~() + 1)
-    var parsedOperand Operand = block.getExpression(tokenIndex).compileExpression(oType([const::emptyToken.replaceText("STD::Any"), const::emptyToken.replaceText("STD::Iterable")], false), codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
+    var parsedOperand Operand = block.getExpression(tokenIndex).compileExpression(OType([const::emptyToken.replaceText("STD::Any"), const::emptyToken.replaceText("STD::Iterable")], false), codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
     if parsedOperand.named?()
         parsedOperand.useOperand(codeData, compiledData, llvmIR)
     else
@@ -365,14 +365,14 @@ def compileParse(block Block, write codeData CodeData, compiledData CData, write
     block.eol!(tokenIndex)
     const parsedHideName String = parsedOperand.code~().getUniqID()
     var namedOperands Map = codeData.namedOperands`(nothing)
-    namedOperands.put(parsedHideName, namedOperand(codeData.level~(), parsedOperand))
+    namedOperands.put(parsedHideName, NamedOperand(codeData.level~(), parsedOperand))
     codeData.namedOperands`(namedOperands)
     namedOperands = Map.createEmpty()
     var hiddenIndex Operand = callFunction(const::emptyToken.replaceText("STD::parse__init"), [parsedOperand], codeData, compiledData, [], false, llvmIR)
     const hiddenIndexVariableName String = parsedHideName + ".index"
     const indexMutableRegister String = codeData.newAlloc()
     llvmIR += "\tstore [2 x i64] " + hiddenIndex.value~() + ", [2 x i64]* " + indexMutableRegister + ", align 8\n"
-    hiddenIndex = operand{
+    hiddenIndex = Operand{
         (const::emptyToken.replaceText(hiddenIndexVariableName),
         enum::access_write,
         indexMutableRegister,
@@ -380,7 +380,7 @@ def compileParse(block Block, write codeData CodeData, compiledData CData, write
         false, true, true, false, false)
     }
     namedOperands = codeData.namedOperands`(nothing)
-    namedOperands.put(hiddenIndexVariableName, namedOperand(codeData.level~(), hiddenIndex))
+    namedOperands.put(hiddenIndexVariableName, NamedOperand(codeData.level~(), hiddenIndex))
     codeData.namedOperands`(namedOperands)
     namedOperands = Map.createEmpty()
     codeData.level`(codeData.level~() + 1)
@@ -390,11 +390,11 @@ def compileParse(block Block, write codeData CodeData, compiledData CData, write
     const endLabel String = codeData.createLabel()
     if !parseName.empty?()
         var endLabels Map = codeData.endLabels`(nothing)
-        if !endLabels.put(parseName.text~(), label(endLabel, codeData.level~())).nothing?()
+        if !endLabels.put(parseName.text~(), Label(endLabel, codeData.level~())).nothing?()
             errorAlreadyExist(parseName, "operator")
         codeData.endLabels`(endLabels)
         var nextLabels Map = codeData.nextLabels`(nothing)
-        if !nextLabels.put(parseName.text~(), label(nextLabel, codeData.level~())).nothing?()
+        if !nextLabels.put(parseName.text~(), Label(nextLabel, codeData.level~())).nothing?()
             errorAlreadyExist(parseName, "operator")
         codeData.nextLabels`(nextLabels)
     llvmIR += "\tbr label %##reg##" + parseStartLabel + "##\n\t##nreg##" + parseStartLabel + "##:\n"
@@ -408,7 +408,7 @@ def compileParse(block Block, write codeData CodeData, compiledData CData, write
         key.named`(true)
         key.used`(false)
         namedOperands = codeData.namedOperands`(nothing)
-        if !namedOperands.put(keyName.text~(), namedOperand(codeData.level~(), key)).nothing?()
+        if !namedOperands.put(keyName.text~(), NamedOperand(codeData.level~(), key)).nothing?()
             errorAlreadyExist(keyName, "constant")
         codeData.namedOperands`(namedOperands)
         namedOperands = Map.createEmpty()
@@ -418,7 +418,7 @@ def compileParse(block Block, write codeData CodeData, compiledData CData, write
         item.named`(true)
         item.used`(false)
         namedOperands = codeData.namedOperands`(nothing)
-        if !namedOperands.put(itemName.text~(), namedOperand(codeData.level~(), item)).nothing?()
+        if !namedOperands.put(itemName.text~(), NamedOperand(codeData.level~(), item)).nothing?()
             errorAlreadyExist(itemName, "constant")
         codeData.namedOperands`(namedOperands)
         namedOperands = Map.createEmpty()
@@ -472,8 +472,8 @@ def compileGroupParse(block Block, write codeData CodeData, compiledData CData, 
     var namedOperands Map = codeData.namedOperands`(nothing)
     if !namedOperands.put{
         (typeConstantName.text~(),
-            namedOperand(0,
-                operand(
+            NamedOperand(0,
+                Operand(
                     typeConstantName,
                     enum::access_noread,
                     typeRegister,
@@ -488,12 +488,12 @@ def compileGroupParse(block Block, write codeData CodeData, compiledData CData, 
     namedOperands = Map.createEmpty()
     codeData.level`(codeData.level~() + 1)
     var endLabels Map = codeData.endLabels`(nothing)
-    if !endLabels.put(typeConstantName.text~(), label(endLabel, codeData.level~())).nothing?()
+    if !endLabels.put(typeConstantName.text~(), Label(endLabel, codeData.level~())).nothing?()
         errorAlreadyExist(typeConstantName, "operator")
     codeData.endLabels`(endLabels)
     endLabels = Map.createEmpty()
     var nextLabels Map = codeData.nextLabels`(nothing)
-    if !nextLabels.put(typeConstantName.text~(), label(nextLabel, codeData.level~())).nothing?()
+    if !nextLabels.put(typeConstantName.text~(), Label(nextLabel, codeData.level~())).nothing?()
         errorAlreadyExist(typeConstantName, "operator")
     codeData.nextLabels`(nextLabels)
     nextLabels = Map.createEmpty()
@@ -626,13 +626,13 @@ def compileSwitch(switchBlocks Array, haveDefault Bool, write codeData CodeData,
             codeData.level`(codeData.level~() + 1)
             const stringUniqName String = operand.code~().getUniqID()
             var namedOperands Map = codeData.namedOperands`(nothing)
-            namedOperands.put(stringUniqName, namedOperand(codeData.level~(), operand))
+            namedOperands.put(stringUniqName, NamedOperand(codeData.level~(), operand))
             codeData.namedOperands`(namedOperands)
     case 3
         createCharSwitch(casesBlocks, operand, haveDefault, labels, endLabel, codeData, llvmIR)
     if !switchName.empty?()
         var endLabels Map = codeData.endLabels`(nothing)
-        if !endLabels.put(switchName.text~(), label(endLabel, codeData.level~() + 1)).nothing?()
+        if !endLabels.put(switchName.text~(), Label(endLabel, codeData.level~() + 1)).nothing?()
             errorAlreadyExist(switchName, "operator")
         codeData.endLabels`(endLabels)
     parse caseIndex, caseBlock = casesBlocks
@@ -640,7 +640,7 @@ def compileSwitch(switchBlocks Array, haveDefault Bool, write codeData CodeData,
         const allowFallthrough Bool = !switchName.empty?() && caseIndex + 1 != casesBlocks.length~()
         if allowFallthrough
             var fallthroughLabels Map = codeData.fallthroughLabels`(nothing)
-            fallthroughLabels.put(switchName.text~(), label(labels[caseIndex + 1], codeData.level~()))
+            fallthroughLabels.put(switchName.text~(), Label(labels[caseIndex + 1], codeData.level~()))
             codeData.fallthroughLabels`(fallthroughLabels)
         llvmIR += "\t##nreg##" + labels[caseIndex] + "##:\n"
         const lastIsTerminator Bool = compileCode(caseBlock.subBlocks~(), codeData, compiledData, llvmIR)
@@ -677,7 +677,7 @@ def compileTypeSwitch(switchBlocks Array, haveDefault Bool, write codeData CodeD
     const endLabel String = codeData.createLabel()
     if !switchName.empty?()
         var endLabels Map = codeData.endLabels`(nothing)
-        if !endLabels.put(switchName.text~(), label(endLabel, codeData.level~() + 1)).nothing?()
+        if !endLabels.put(switchName.text~(), Label(endLabel, codeData.level~() + 1)).nothing?()
             errorAlreadyExist(switchName, "operator")
         codeData.endLabels`(endLabels)
     var labels Array = []
@@ -710,7 +710,7 @@ def compileTypeSwitch(switchBlocks Array, haveDefault Bool, write codeData CodeD
         const allowFallthrough Bool = !switchName.empty?() && caseIndex + 1 != casesBlocks.length~()
         if allowFallthrough
             var fallthroughLabels Map = codeData.fallthroughLabels`(nothing)
-            fallthroughLabels.put(switchName.text~(), label(labels[caseIndex + 1], codeData.level~()))
+            fallthroughLabels.put(switchName.text~(), Label(labels[caseIndex + 1], codeData.level~()))
             codeData.fallthroughLabels`(fallthroughLabels)
         llvmIR += "\t##nreg##" + labels[caseIndex] + "##:\n"
         const lastIsTerminator Bool = compileCode(caseBlock.subBlocks~(), codeData, compiledData, llvmIR)
@@ -737,12 +737,12 @@ def compileEnumSwitch(switchBlocks Array, haveDefault Bool, write codeData CodeD
         switchBlock.next!(tokenIndex, ["("])
         switchName = switchBlock.getLowercaseName(tokenIndex, "switch")
         switchBlock.next!(tokenIndex, [")"])
-    const operand Operand = switchBlock.getExpression(tokenIndex).compileExpression(oType(const::emptyToken.replaceText("STD::Int"), false), codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
+    const operand Operand = switchBlock.getExpression(tokenIndex).compileExpression(OType(const::emptyToken.replaceText("STD::Int"), false), codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
     switchBlock.eol!(tokenIndex)
     const endLabel String = codeData.createLabel()
     if !switchName.empty?()
         var endLabels Map = codeData.endLabels`(nothing)
-        if !endLabels.put(switchName.text~(), label(endLabel, codeData.level~() + 1)).nothing?()
+        if !endLabels.put(switchName.text~(), Label(endLabel, codeData.level~() + 1)).nothing?()
             errorAlreadyExist(switchName, "operator")
         codeData.endLabels`(endLabels)
     var labels Array = []
@@ -773,7 +773,7 @@ def compileEnumSwitch(switchBlocks Array, haveDefault Bool, write codeData CodeD
         const allowFallthrough Bool = !switchName.empty?() && caseIndex + 1 != casesBlocks.length~()
         if allowFallthrough
             var fallthroughLabels Map = codeData.fallthroughLabels`(nothing)
-            fallthroughLabels.put(switchName.text~(), label(labels[caseIndex + 1], codeData.level~()))
+            fallthroughLabels.put(switchName.text~(), Label(labels[caseIndex + 1], codeData.level~()))
             codeData.fallthroughLabels`(fallthroughLabels)
         llvmIR += "\t##nreg##" + labels[caseIndex] + "##:\n"
         const lastIsTerminator Bool = compileCode(caseBlock.subBlocks~(), codeData, compiledData, llvmIR)
@@ -820,7 +820,7 @@ def compileTest(testBlock Block, write codeData CodeData, compiledData CData, wr
         const errorLabel String = codeData.createLabel()
         const notErrorLabel String = codeData.createLabel()
         var catchLabels Array = codeData.catchLabels`([])
-        catchLabels.addItem(label(errorLabel, codeData.level~() + 1))
+        catchLabels.addItem(Label(errorLabel, codeData.level~() + 1))
         codeData.catchLabels`(catchLabels)
         catchLabels = []
         const expectedType OType = expectedErrorCodes.empty?().select(const::boolType, const::anyType)
@@ -879,7 +879,7 @@ def compileTest(testBlock Block, write codeData CodeData, compiledData CData, wr
         const failCoordinates Token = testedResultOperand.code~()
         const failFileOperand Operand = stringToOperand(failCoordinates.replaceText(failCoordinates.fileName~()))
         const lineToken Token = failCoordinates.replaceText((failCoordinates.lineIndex~() + 1).toString())
-        const failLineOperand Operand = operand{
+        const failLineOperand Operand = Operand{
             (lineToken,
             enum::access_read,
             "[i64 ##tnum##STD::Int##, i64 " + integerToLLVMI64(lineToken) + "]",
@@ -899,7 +899,7 @@ def compileTryCatch(tryBlock, catchBlock Block, write codeData CodeData, compile
     const endLabel String = codeData.createLabel()
     codeData.level`(codeData.level~() + 1)
     var catchLabels Array = codeData.catchLabels`([])
-    catchLabels.addItem(label(catchLabel, codeData.level~()))
+    catchLabels.addItem(Label(catchLabel, codeData.level~()))
     codeData.catchLabels`(catchLabels)
     catchLabels = []
     var lastIsTerminator Bool = compileCode(tryBlock.subBlocks~(), codeData, compiledData, llvmIR)
@@ -929,7 +929,7 @@ def compileTryCatch(tryBlock, catchBlock Block, write codeData CodeData, compile
         const idRegister String = codeData.createRegister("call [2 x i64] @shar.error.get.id([2 x i64] " + errorRegister + ")", llvmIR)
         var namedOperands Map = codeData.namedOperands`(nothing)
         if !namedOperands.put{
-            (idName.text~(), namedOperand(codeData.level~(), operand(
+            (idName.text~(), NamedOperand(codeData.level~(), Operand(
                 idName,
                 enum::access_read,
                 idRegister,
@@ -941,7 +941,7 @@ def compileTryCatch(tryBlock, catchBlock Block, write codeData CodeData, compile
         codeData.namedOperands`(namedOperands)
     if !messageName.empty?()
         const idRegister String = codeData.createRegister("call [2 x i64] @shar.error.get.message([2 x i64] " + errorRegister + ")", llvmIR)
-        const messageOperand Operand = operand{
+        const messageOperand Operand = Operand{
             (messageName,
             enum::access_read,
             idRegister,
@@ -950,7 +950,7 @@ def compileTryCatch(tryBlock, catchBlock Block, write codeData CodeData, compile
         }
         messageOperand.useOperand(codeData, compiledData, llvmIR)
         var namedOperands Map = codeData.namedOperands`(nothing)
-        if !namedOperands.put(messageName.text~(), namedOperand(codeData.level~(), messageOperand)).nothing?()
+        if !namedOperands.put(messageName.text~(), NamedOperand(codeData.level~(), messageOperand)).nothing?()
             errorAlreadyExist(messageName, "constant")
         codeData.namedOperands`(namedOperands)
     llvmIR += "\tcall void @shar.error.free([2 x i64] " + errorRegister + ")\n"

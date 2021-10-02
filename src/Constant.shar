@@ -44,7 +44,7 @@ attach Constant to FieldValue
         return constant.typePut(3, new)
 
 #alwaysinline
-def constant(isExport Bool, name Token, type OType, value Expression) Constant
+def Constant(isExport Bool, name Token, type OType, value Expression) Constant
     return Constant.fromList({isExport, name, type, value})
 
 // The function partially compiles the constant.
@@ -56,7 +56,7 @@ def precompileConstant(constant Constant, write compiledData CData)
         constantsWithSameName = Map.createEmpty()
     if !constantsWithSameName.put{
         (compiledData.currentModule~(),
-        cConstant(constant.export?(),
+        CConstant(constant.export?(),
         compiledData.currentModule~() + "::" + constant.name~().text~(),
         "",
         constant.type~().toFull(compiledData))).nothing?()
@@ -69,7 +69,7 @@ def precompileConstant(constant Constant, write compiledData CData)
 #alwaysinline
 def compileConstant(constant Constant, write compiledData CData)
     var compiledConstant CConstant = compiledData.constants~()[constant.name~().text~()][compiledData.currentModule~()]
-    var codeData CodeData = codeData{
+    var codeData CodeData = CodeData{
         ("const::" + compiledData.currentModule~() + "::" + constant.name~().text~() /*functionNameForErrorMessage*/,
         Set.createEmpty() /*allThisGroups*/,
         OType.fromList({}) /*resultType*/,

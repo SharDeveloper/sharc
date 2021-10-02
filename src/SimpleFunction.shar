@@ -44,7 +44,7 @@ attach SimpleFunction to FieldFromCurrentModule
         return function.typePut(3, new)
 
 #alwaysinline
-def sFunction(attributes FAttributes, signature FSignature, llvmIR String, fromCurrentModule Bool) SimpleFunction
+def SimpleFunction(attributes FAttributes, signature FSignature, llvmIR String, fromCurrentModule Bool) SimpleFunction
     return SimpleFunction.fromList({attributes, signature, llvmIR, fromCurrentModule})
 
 attach SimpleFunction to BinarySerializable
@@ -64,7 +64,7 @@ attach SimpleFunction to BinarySerializable
             const attributes FAttributes = FAttributes.deserialize(bytes, position)
             const signature FSignature = FSignature.deserialize(bytes, position)
             const llvmIR String = String.deserialize(bytes, position)
-            return sFunction(attributes, signature, llvmIR, false)
+            return SimpleFunction(attributes, signature, llvmIR, false)
         catch id, message
             position = startPosition
             throw(id, message)

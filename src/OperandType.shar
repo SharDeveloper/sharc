@@ -5,13 +5,13 @@ type OType
     // type simpleType Token | groupType [Token]
     // optional? Bool
 
-const emptyOType OType = oType(const::emptyToken, false)
-const boolType OType = oType(const::emptyToken.replaceText("STD::Bool"), false)
-const anyType OType = oType([const::emptyToken.replaceText("STD::Any")], false)
-const intType OType = oType(const::emptyToken.replaceText("STD::Int"), false)
-const charType OType = oType(const::emptyToken.replaceText("STD::Char"), false)
-const stringType OType = oType(const::emptyToken.replaceText("STD::String"), false)
-const listType OType = oType(const::emptyToken.replaceText("STD::List"), false)
+const emptyOType OType = OType(const::emptyToken, false)
+const boolType OType = OType(const::emptyToken.replaceText("STD::Bool"), false)
+const anyType OType = OType([const::emptyToken.replaceText("STD::Any")], false)
+const intType OType = OType(const::emptyToken.replaceText("STD::Int"), false)
+const charType OType = OType(const::emptyToken.replaceText("STD::Char"), false)
+const stringType OType = OType(const::emptyToken.replaceText("STD::String"), false)
+const listType OType = OType(const::emptyToken.replaceText("STD::List"), false)
 
 attach OType to FieldType
     #alwaysinline
@@ -32,7 +32,7 @@ attach OType to FieldOptional
         return type.typePut(1, new)
 
 #alwaysinline
-def oType(type $Any, isOptional Bool) OType
+def OType(type $Any, isOptional Bool) OType
     return OType.fromList({type, isOptional})
 
 // The function finds out if the type is simple.
@@ -109,7 +109,7 @@ attach OType to ToFull
             if typeToken.text~() == "This"
                 result = type
             else
-                result = oType(typeToken.replaceText(compiledData.getType(typeToken, false).fullName~()), type.optional?())
+                result = OType(typeToken.replaceText(compiledData.getType(typeToken, false).fullName~()), type.optional?())
         case Array
             var oldGroupsArray Array = type.type~()
             var groupsSet Set = Set.createEmpty()
@@ -122,7 +122,7 @@ attach OType to ToFull
             parse _, groupName = groupsSet
                 newGroupsArray.addItem(groupName)
             newGroupsArray.sort(true)
-            result = oType(newGroupsArray, type.optional?())
+            result = OType(newGroupsArray, type.optional?())
         default
             unreachable()
         if (result.nothingType?() || result.anyType?()) && result.optional?()
