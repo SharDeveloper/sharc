@@ -154,7 +154,7 @@ attach CodeData to FieldThisTypeName
         return codeData.typePut(14, new)
 
 #alwaysinline
-def codeData(functionNameForErrorMessage String, allThisGroup Set, resultType OType, namedOperands Map, level, registerCounter Int, endLabels, nextLabels, fallthroughLabels Map, catchLabels, allocs, unneededAllocs Array, ownerNoThrow Bool, defaultFunctionName, thisTypeName String) CodeData
+def CodeData(functionNameForErrorMessage String, allThisGroup Set, resultType OType, namedOperands Map, level, registerCounter Int, endLabels, nextLabels, fallthroughLabels Map, catchLabels, allocs, unneededAllocs Array, ownerNoThrow Bool, defaultFunctionName, thisTypeName String) CodeData
     return CodeData.fromList({functionNameForErrorMessage, allThisGroup, resultType, namedOperands, level, registerCounter, endLabels, nextLabels, fallthroughLabels, catchLabels, allocs, unneededAllocs, ownerNoThrow, defaultFunctionName, thisTypeName})
 
 // The function creates ir code with allocations.

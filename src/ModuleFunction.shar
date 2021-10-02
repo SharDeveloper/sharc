@@ -64,7 +64,7 @@ attach ModuleFunction to FieldFinalFunction
         return function.typePut(5, new)
 
 #alwaysinline
-def moduleFunction(isExport Bool, name, module String, groups Array, thisType String, finalFunction SimpleFunction) ModuleFunction
+def ModuleFunction(isExport Bool, name, module String, groups Array, thisType String, finalFunction SimpleFunction) ModuleFunction
     return ModuleFunction.fromList({isExport, name, module, groups, thisType, finalFunction})
 
 attach ModuleFunction to BinarySerializable
@@ -98,7 +98,7 @@ attach ModuleFunction to BinarySerializable
                 groups.addItem(String.deserialize(bytes, position))
             const thisType String = String.deserialize(bytes, position)
             const finalFunction SimpleFunction = SimpleFunction.deserialize(bytes, position)
-            return moduleFunction(isExport, name, module, groups, thisType, finalFunction)
+            return ModuleFunction(isExport, name, module, groups, thisType, finalFunction)
         catch id, message
             position = startPosition
             throw(id, message)

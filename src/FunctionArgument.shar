@@ -33,5 +33,5 @@ attach FArgument to FieldType
         return argument.typePut(2, new)
 
 #alwaysinline
-def fArgument(access Int, name Token, type OType) FArgument
+def FArgument(access Int, name Token, type OType) FArgument
     return FArgument.fromList({access, name, type})

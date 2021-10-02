@@ -34,7 +34,7 @@ attach Type to FieldPrimitive
         return type.typePut(2, new)
 
 #alwaysinline
-def type(isExport Bool, name Token, isPrimitive Bool) Type
+def Type(isExport Bool, name Token, isPrimitive Bool) Type
     return Type.fromList({isExport, name, isPrimitive})
 
 // The function compiles the data in the type.
@@ -43,4 +43,4 @@ def compileType(type Type, write compiledData CData)
     groups.add("STD::Any")
     if !(compiledData.currentModule~() == "STD" && type.name~().text~() == "Nothing")
         groups.add(type.primitive?().select("STD::Primitive", "STD::Type"))
-    compiledData.addCType(cType(type.export?(), compiledData.currentModule~() + "::" + type.name~().text~(), groups))
+    compiledData.addCType(CType(type.export?(), compiledData.currentModule~() + "::" + type.name~().text~(), groups))

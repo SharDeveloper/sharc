@@ -24,7 +24,7 @@ attach Block to FieldSubBlocks
         return block.typePut(1, new)
 
 #alwaysinline
-def block(line, subBlocks Array) Block
+def Block(line, subBlocks Array) Block
     return Block.fromList({line, subBlocks})
 
 // The function receives the next token.
@@ -141,7 +141,7 @@ def toConstant(block Block) Constant
     block.next!(tokenIndex, ["="])
     const value Expression = block.getExpression(tokenIndex)
     block.eol!(tokenIndex)
-    return constant(isExport, name, type, value)
+    return Constant(isExport, name, type, value)
 
 // The function turns the block in which the type is stored into a type.
 #alwaysinline
@@ -157,9 +157,9 @@ def toType(block Block) Type
     var result Type = Type.fromList({})
     switch typeOfType
     case "type"
-        result = type(isExport, typeName, false)
+        result = Type(isExport, typeName, false)
     case "primitive"
-        result = type(isExport, typeName, true)
+        result = Type(isExport, typeName, true)
     default
         unreachable()
     return result
@@ -182,7 +182,7 @@ def toEnum(block Block) Enumeration
         if elements.contain?(newEnumElement)
             errorAlreadyExist(newEnumElement, "enumeration element")
         elements.addItem(newEnumElement)
-    return enumeration(isExport, elements)
+    return Enumeration(isExport, elements)
 
 // The function turns the block in which the group is stored into a group.
 #alwaysinline
@@ -201,7 +201,7 @@ def toGroup(block Block) Group
             if !block.next?(tokenIndex, [","])
                 end loop
     block.eol!(tokenIndex)
-    var result Group = group(isExport, groupName, subGroups, Map.createEmpty())
+    var result Group = Group(isExport, groupName, subGroups, Map.createEmpty())
     const subBlocks Array = block.subBlocks~()
     parse _, groupFunctionBlock = subBlocks
         result.addGroupFunction(groupFunctionBlock.toGroupFunction())
@@ -222,7 +222,7 @@ def toGroupFunction(block Block) GFunction
     tokenIndex--
     const functionType FSignature = block.getFunctionSignature(tokenIndex, true)
     this!(functionType)
-    return gFunction(name, functionType)
+    return GFunction(name, functionType)
 
 // The function gets the type of function.
 #alwaysinline
@@ -234,12 +234,12 @@ def getFunctionSignature(block Block, write tokenIndex Int, allowThis Bool) FSig
         for :(loop)
             const access Int = block.getAccess(tokenIndex)
             const argumentType OType = block.getOperandType(tokenIndex, allowThis)
-            arguments.addItem(fsArgument(access, argumentType))
+            arguments.addItem(FSArgument(access, argumentType))
             if !block.next?(tokenIndex, [","])
                 block.next!(tokenIndex, [")"])
                 end loop
     const resultType OType = block.getResultType(tokenIndex, allowThis)
-    return fSignature(coordinates, arguments, resultType)
+    return FSignature(coordinates, arguments, resultType)
 
 // The function gets the type of operand.
 #alwaysinline
@@ -260,11 +260,11 @@ def getOperandType(block Block, write tokenIndex Int, allowThis Bool) OType
                     end loop
         else
             groups = [block.getFullUppercaseName(tokenIndex, "group")]
-        result = oType(groups, optional)
+        result = OType(groups, optional)
     else
         tokenIndex--
         const typeName Token = block.getFullUppercaseName(tokenIndex, "type")
-        result = oType(typeName, optional)
+        result = OType(typeName, optional)
         if !allowThis && typeName.text~() == "This"
             errorNotExpectedToken(typeName, "")
     return result
@@ -538,7 +538,7 @@ def getResultType(block Block, write tokenIndex Int, allowThis Bool) OType
         const line Array = block.line~()
         var token Token = line[line.length~() - 1]
         token.addToColumnIndex(token.length~())
-        return oType(token.replaceText("STD::Nothing"), false)
+        return OType(token.replaceText("STD::Nothing"), false)
     return block.getOperandType(tokenIndex, allowThis)
 
 // The function turns the block in which the attributes of the function are stored into the attributes of the function.
@@ -649,7 +649,7 @@ def toFunction(block Block, attributes FAttributes, fromAttachment Bool) Functio
                 switch argumentName.text~()
                 case "var", "const", "enum", "for", "do", "parse", "gParse", "if", "elif", "select", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough", "nothing", "super"
                     errorInvalidName(argumentName, "function argument")
-                newArguments.addItem(fArgument(access, argumentName, OType.fromList({})))
+                newArguments.addItem(FArgument(access, argumentName, OType.fromList({})))
                 if !block.next?(tokenIndex, [","])
                     end loop
             const type OType = block.getOperandType(tokenIndex, !attributes.this~().empty?())
@@ -668,7 +668,7 @@ def toFunction(block Block, attributes FAttributes, fromAttachment Bool) Functio
                 end mainLoop
     const resultType OType = block.getResultType(tokenIndex, !attributes.this~().empty?())
     block.eol!(tokenIndex)
-    return function(attributes, isExport, name, arguments, resultType, block.subBlocks~())
+    return Function(attributes, isExport, name, arguments, resultType, block.subBlocks~())
 
 // The function turns a block in which information about what type to which group needs to be added is stored into a structure with this information.
 #alwaysinline
@@ -702,4 +702,4 @@ def toAttachment(block Block) Attachment
         const newFunction Function = subBlock.toFunction(functionAttributes, true)
         if !functions.put(newFunction.name~().text~(), newFunction).nothing?()
             errorAlreadyExist(newFunction.name~(), "function")
-    return attachment(typeName, groupName, functions)
+    return Attachment(typeName, groupName, functions)

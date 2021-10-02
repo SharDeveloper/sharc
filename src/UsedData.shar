@@ -104,5 +104,5 @@ attach UsedData to FieldGroupListConstants
         return usedData.typePut(9, new)
 
 #alwaysinline
-def usedData(enumerationsElements, constants, types, inGroups, functions, llvmConstants, llvmDeclares, groupsFunctions, groupsTypes, groupListConstants Map) UsedData
+def UsedData(enumerationsElements, constants, types, inGroups, functions, llvmConstants, llvmDeclares, groupsFunctions, groupsTypes, groupListConstants Map) UsedData
     return UsedData.fromList({enumerationsElements, constants, types, inGroups, functions, llvmConstants, llvmDeclares, groupsFunctions, groupsTypes, groupListConstants})

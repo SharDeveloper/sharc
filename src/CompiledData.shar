@@ -70,7 +70,7 @@ attach CData to FieldFunctions
         return data.typePut(5, new)
 
 #alwaysinline
-def cData(currentModule String, enumerationsElements, constants, types, groups, functions Map) CData
+def CData(currentModule String, enumerationsElements, constants, types, groups, functions Map) CData
     return CData.fromList({currentModule, enumerationsElements, constants, types, groups, functions})
 
 // The function loads data from modules into compiled data.
@@ -145,19 +145,19 @@ def loadModules(modulesFilesList Array, currentModule String) CData
                 if allFunctionsWithSameName.nothing?()
                     allFunctionsWithSameName = Map.createEmpty()
                 if function.owningGroups~().empty?()
-                    const cFunction CFunction = cFunction(function.export?(), functionModule + "::" + functionName, function.finalFunction~())
+                    const cFunction CFunction = CFunction(function.export?(), functionModule + "::" + functionName, function.finalFunction~())
                     newFunction = cFunction
                 else
                     var groupsFunctions <>CFunction = allFunctionsWithSameName[functionModule]
                     if groupsFunctions.nothing?()
-                        groupsFunctions = cFunction(function.export?(), functionModule + "::" + functionName, groupsFunctions(function.owningGroups~(), Map.createEmpty()))
+                        groupsFunctions = CFunction(function.export?(), functionModule + "::" + functionName, GroupsFunctions(function.owningGroups~(), Map.createEmpty()))
                     addFunctionToFunctionWithGroupsFunctions(groupsFunctions, function.thisType~(), function.finalFunction~())
                     newFunction = groupsFunctions
                 allFunctionsWithSameName.put(functionModule, newFunction)
                 functions.put(functionName, allFunctionsWithSameName)
         catch
             errorNotModule(moduleFileName)
-    return cData(currentModule, enumerationsElements, constants, types, groups, functions)
+    return CData(currentModule, enumerationsElements, constants, types, groups, functions)
 
 // The function returns the type with the specified name.
 def getType(compiledData CData, typeName Token, ignoreExport Bool) CType
@@ -260,7 +260,7 @@ def addRequiredFunction(write compiledData CData, group Group, function GFunctio
         allFunctionsWithSameName = Map.createEmpty()
     var groupFunctions Map = Map.createEmpty()
     groupFunctions.put{
-        ("-", sFunction(
+        ("-", SimpleFunction(
             const::defaultFAttributes,
             function.signature~().toFull(compiledData),
             "",
@@ -269,10 +269,10 @@ def addRequiredFunction(write compiledData CData, group Group, function GFunctio
     }
     if !allFunctionsWithSameName.put{
         (compiledData.currentModule~(),
-        cFunction(
+        CFunction(
             group.export?(),
             compiledData.currentModule~() + "::" + function.name~().text~(),
-            groupsFunctions([compiledData.currentModule~() + "::" + group.name~().text~()], groupFunctions)
+            GroupsFunctions([compiledData.currentModule~() + "::" + group.name~().text~()], groupFunctions)
         )).nothing?()
     }
         errorAlreadyExist(function.name~(), "function")
@@ -478,7 +478,7 @@ def createModule(compiledData CData, outputFile String)
                 parse thisType, simpleFunction = groupsFunctions.functions~()
                     if simpleFunction.fromCurrentModule?()
                         functions.addItem{
-                            (moduleFunction(
+                            (ModuleFunction(
                                 function.export?(),
                                 functionName,
                                 moduleName,
@@ -491,7 +491,7 @@ def createModule(compiledData CData, outputFile String)
                 const simpleFunction SimpleFunction = function.finalFunction~()
                 if simpleFunction.fromCurrentModule?()
                     functions.addItem{
-                        (moduleFunction(
+                        (ModuleFunction(
                             function.export?(),
                             functionName,
                             moduleName,
@@ -525,7 +525,7 @@ def createProgram(compiledData CData, outputFile String)
                 var groupTypes Set = groupsTypes.put(group, Set.createEmpty())
                 groupTypes.add(typeName)
                 groupsTypes.put(group, groupTypes)
-        usedData = usedData{
+        usedData = UsedData{
             (builtinEnumerationsElements(),
             Map.createEmpty(),
             alwaysUsedTypes,

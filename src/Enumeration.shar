@@ -23,5 +23,5 @@ attach Enumeration to FieldElements
         return enumeration.typePut(1, new)
 
 #alwaysinline
-def enumeration(isExport Bool, elements Array) Enumeration
+def Enumeration(isExport Bool, elements Array) Enumeration
     return Enumeration.fromList({isExport, elements})

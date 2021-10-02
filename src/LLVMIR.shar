@@ -206,7 +206,7 @@ def stringToOperand(string Token) Operand
         const llvmStringData String = stringToLLVMArray(string, llvmStringType)
         const llvmString String = "##llvmconst##>private unnamed_addr constant " + llvmStringType + " " + llvmStringData + ", align 8<##"
         value = "[i64 ##tnum##STD::String##, i64 ptrtoint (" + llvmStringType + "* " + llvmString + " to i64)]"
-    return operand(string, enum::access_read, value, oType(string.replaceText("STD::String"), false), true, true, false, false, false)
+    return Operand(string, enum::access_read, value, OType(string.replaceText("STD::String"), false), true, true, false, false, false)
 
 // The function creates the name of the constant in the llvm ir code.
 #alwaysinline

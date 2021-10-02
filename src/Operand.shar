@@ -90,7 +90,7 @@ attach Operand to FieldGlobalConstant
         return (operand.typePut(4, operand.typeGetItem(4) & (-17) | new.select(16, 0)) & 16) == 16
 
 #alwaysinline
-def operand(code Token, access Int, value String, type OType, isConstant, isUsed, isNamed, isArgument, isGlobalConstant Bool) Operand
+def Operand(code Token, access Int, value String, type OType, isConstant, isUsed, isNamed, isArgument, isGlobalConstant Bool) Operand
     return Operand.fromList({code, access, value, type, isConstant.select(1, 0) | isUsed.select(2, 0) | isNamed.select(4, 0) | isArgument.select(8, 0) | isGlobalConstant.select(16, 0)})
 
 // The function applies the "shar__to_const" function to the operand.

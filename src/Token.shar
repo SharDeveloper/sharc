@@ -8,8 +8,8 @@ type Token
     // lineIndex   Int
     // columnIndex Int
 
-const emptyToken Token = token("", "", 0, 0, 0)
-const llvmToken  Token = token("llvm", "", 0, 0, 0)
+const emptyToken Token = Token("", "", 0, 0, 0)
+const llvmToken  Token = Token("llvm", "", 0, 0, 0)
 
 attach Token to FieldText
     #alwaysinline
@@ -57,7 +57,7 @@ attach Token to FieldColumnIndex
         return token.typePut(4, new)
 
 #alwaysinline
-def token(text, fileName String, fileID, lineIndex, columnIndex Int) Token
+def Token(text, fileName String, fileID, lineIndex, columnIndex Int) Token
     return Token.fromList({text, fileName, fileID, lineIndex, columnIndex})
 
 #alwaysinline

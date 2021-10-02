@@ -34,7 +34,7 @@ attach CType to FieldGroups
         return type.typePut(2, new)
 
 #alwaysinline
-def cType(isExport Bool, fullName String, groups Set) CType
+def CType(isExport Bool, fullName String, groups Set) CType
     return CType.fromList({isExport, fullName, groups})
 
 attach CType to BinarySerializable
@@ -60,7 +60,7 @@ attach CType to BinarySerializable
             var groups Set = Set.createEmpty()
             for :(counter Int = 0) counter < groupsCount; counter++
                 groups.add(String.deserialize(bytes, position))
-            return cType(isExport, name, groups)
+            return CType(isExport, name, groups)
         catch id, message
             position = startPosition
             throw(id, message)

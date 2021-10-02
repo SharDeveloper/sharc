@@ -23,7 +23,7 @@ attach FSArgument to FieldType
         return argument.typePut(1, new)
 
 #alwaysinline
-def fsArgument(access Int, type OType) FSArgument
+def FSArgument(access Int, type OType) FSArgument
     return FSArgument.fromList({access, type})
 
 attach FSArgument to BinarySerializable
@@ -56,7 +56,7 @@ attach FSArgument to BinarySerializable
             default
                 throw(enum::error_outOfRange, "Out of range.")
             const oType OType = OType.deserialize(bytes, position)
-            return fsArgument(access, oType)
+            return FSArgument(access, oType)
         catch id, message
             position = startPosition
             throw(id, message)

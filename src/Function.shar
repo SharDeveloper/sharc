@@ -63,7 +63,7 @@ attach Function to FieldCode
         return function.typePut(5, new)
 
 #alwaysinline
-def function(attributes FAttributes, isExport Bool, name Token, arguments Array, resultType OType, code Array) Function
+def Function(attributes FAttributes, isExport Bool, name Token, arguments Array, resultType OType, code Array) Function
     return Function.fromList({attributes, isExport, name, arguments, resultType, code})
 
 // The function partially compiles the function that is determined when the type is added to the group.
@@ -86,7 +86,7 @@ def precompileAttachmentFunction(function Function, write compiledData CData, ty
             if !(argument.type~().anyType?() || argument.type~().simple?())
                 errorNothrowOnInvalidFunction(function.name~())
     var functions Map = groupsFunctions.functions`(nothing)
-    functions.put(type.fullName~(), sFunction(function.attributes~(), functionSignature, "", true))
+    functions.put(type.fullName~(), SimpleFunction(function.attributes~(), functionSignature, "", true))
     groupsFunctions.functions`(functions)
     compiledFunction.finalFunction`(groupsFunctions)
     compiledData.refitFunction(compiledFunction)
@@ -99,7 +99,7 @@ def precompileDefaultFunction(function Function, write compiledData CData)
     const functionSignature FSignature = function.getSignature().toFull(compiledData)
     functionSignature.this!()
     var mapWithDefaultFunction Map = Map.createEmpty()
-    mapWithDefaultFunction.put("+", sFunction(function.attributes~(), functionSignature, "", true))
+    mapWithDefaultFunction.put("+", SimpleFunction(function.attributes~(), functionSignature, "", true))
     var groupsFullNames Array = []
     do
         var allGroups Array = []
@@ -122,8 +122,8 @@ def precompileDefaultFunction(function Function, write compiledData CData)
         functionsWithSameName = Map.createEmpty()
     if !functionsWithSameName.put{
         (compiledData.currentModule~(),
-        cFunction(function.export?(), compiledData.currentModule~() + "::" + function.name~().text~(),
-        groupsFunctions(groupsFullNames, mapWithDefaultFunction))).nothing?()
+        CFunction(function.export?(), compiledData.currentModule~() + "::" + function.name~().text~(),
+        GroupsFunctions(groupsFullNames, mapWithDefaultFunction))).nothing?()
     }
         errorAlreadyExist(function.name~(), "function")
     allFunctions.put(function.name~().text~(), functionsWithSameName)
@@ -156,7 +156,7 @@ def precompileOverrideFunction(function Function, write compiledData CData)
         parse _, argument = arguments
             if !(argument.type~().anyType?() || argument.type~().simple?())
                 errorNothrowOnInvalidFunction(function.name~())
-    if !groupsFunctionsMap.put(thisType.fullName~(), sFunction(function.attributes~(), fullSignature, "", true)).nothing?()
+    if !groupsFunctionsMap.put(thisType.fullName~(), SimpleFunction(function.attributes~(), fullSignature, "", true)).nothing?()
         errorAlreadyExist(function.name~(), "function")
     groupsFunctions.functions`(groupsFunctionsMap)
     compiledFunction.finalFunction`(groupsFunctions)
@@ -193,8 +193,8 @@ def precompileSimpleFunction(function Function, write compiledData CData)
         functionsWithSameName = Map.createEmpty()
     if !functionsWithSameName.put{
         (compiledData.currentModule~(),
-        cFunction(function.export?(), compiledData.currentModule~() + "::" + function.name~().text~(),
-        sFunction(function.attributes~(), functionSignature, "", true))).nothing?()
+        CFunction(function.export?(), compiledData.currentModule~() + "::" + function.name~().text~(),
+        SimpleFunction(function.attributes~(), functionSignature, "", true))).nothing?()
     }
         errorAlreadyExist(function.name~(), "function")
     allFunctions.put(function.name~().text~(), functionsWithSameName)
@@ -206,7 +206,7 @@ def compileAttachmentFunction(function Function, write compiledData CData, type 
     const groupModule String = group.fullName~().splitByPart("::")[0]
     const fullFunctionName String = groupModule + "::" +function.name~().text~()
     var typeFunction SimpleFunction = compiledData.getFunction(function.name~().replaceText(fullFunctionName), false).finalFunction~().functions~()[type.fullName~()]
-    var codeData CodeData = codeData{
+    var codeData CodeData = CodeData{
         (fullFunctionName + " (" + type.fullName~() + ")" /*functionNameForErrorMessage*/,
         Set.createEmpty() /*allThisGroups*/,
         typeFunction.signature~().resultType~() /*resultType*/,
@@ -233,14 +233,14 @@ def compileAttachmentFunction(function Function, write compiledData CData, type 
         var namedOperands Map = Map.createEmpty()
         const arguments Array = typeFunction.signature~().arguments~()
         parse index, argument = arguments
-            const argumentOperand Operand = operand{
+            const argumentOperand Operand = Operand{
                 (function.arguments~()[index].name~(),
                 argument.access~(),
                 "%" + index.toString(),
                 argument.type~(),
                 false, true, true, true, false)
             }
-            namedOperands.put(argumentOperand.code~().text~(), namedOperand(0, argumentOperand))
+            namedOperands.put(argumentOperand.code~().text~(), NamedOperand(0, argumentOperand))
         codeData.namedOperands`(namedOperands)
         namedOperands = Map.createEmpty()
         const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, llvmIR)
@@ -281,7 +281,7 @@ def compileDefaultFunction(function Function, write compiledData CData)
         switch function.name~().text~()
         case "shar__rc_use", "shar__rc_free", "shar__to_const"
             memoryManagerFunction = true
-    var codeData CodeData = codeData{
+    var codeData CodeData = CodeData{
         (compiledData.currentModule~() + "::" + function.name~().text~()  + " (@)" /*functionNameForErrorMessage*/,
         allThisGroups /*allThisGroups*/,
         defaultFunction.signature~().resultType~() /*resultType*/,
@@ -308,14 +308,14 @@ def compileDefaultFunction(function Function, write compiledData CData)
         var namedOperands Map = Map.createEmpty()
         const arguments Array = defaultFunction.signature~().arguments~()
         parse index, argument = arguments
-            const argumentOperand Operand = operand{
+            const argumentOperand Operand = Operand{
                 (function.arguments~()[index].name~(),
                 argument.access~(),
                 "%" + index.toString(),
                 argument.type~(),
                 false, true, true, true, false)
             }
-            namedOperands.put(argumentOperand.code~().text~(), namedOperand(0, argumentOperand))
+            namedOperands.put(argumentOperand.code~().text~(), NamedOperand(0, argumentOperand))
         codeData.namedOperands`(namedOperands)
         namedOperands = Map.createEmpty()
         const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, llvmIR)
@@ -353,7 +353,7 @@ def compileOverrideFunction(function Function, write compiledData CData)
         switch function.name~().text~()
         case "shar__rc_use", "shar__rc_free", "shar__to_const"
             memoryManagerFunction = true
-    var codeData CodeData = codeData{
+    var codeData CodeData = CodeData{
         (fullFunctionName + " (" + typeFullName + ")" /*functionNameForErrorMessage*/,
         Set.createEmpty() /*allThisGroups*/,
         typeFunction.signature~().resultType~() /*resultType*/,
@@ -380,14 +380,14 @@ def compileOverrideFunction(function Function, write compiledData CData)
         var namedOperands Map = Map.createEmpty()
         const arguments Array = typeFunction.signature~().arguments~()
         parse index, argument = arguments
-            const argumentOperand Operand = operand{
+            const argumentOperand Operand = Operand{
                 (function.arguments~()[index].name~(),
                 argument.access~(),
                 "%" + index.toString(),
                 argument.type~(),
                 false, true, true, true, false)
             }
-            namedOperands.put(argumentOperand.code~().text~(), namedOperand(0, argumentOperand))
+            namedOperands.put(argumentOperand.code~().text~(), NamedOperand(0, argumentOperand))
         codeData.namedOperands`(namedOperands)
         namedOperands = Map.createEmpty()
         const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, llvmIR)
@@ -417,7 +417,7 @@ def compileOverrideFunction(function Function, write compiledData CData)
 def compileSimpleFunction(function Function, write compiledData CData)
     const fullFunctionName String = compiledData.currentModule~() + "::" +function.name~().text~()
     var simpleFunction SimpleFunction = compiledData.getFunction(function.name~().replaceText(fullFunctionName), false).finalFunction~()
-    var codeData CodeData = codeData{
+    var codeData CodeData = CodeData{
         (fullFunctionName /*functionNameForErrorMessage*/,
         Set.createEmpty() /*allThisGroups*/,
         simpleFunction.signature~().resultType~() /*resultType*/,
@@ -444,14 +444,14 @@ def compileSimpleFunction(function Function, write compiledData CData)
         var namedOperands Map = Map.createEmpty()
         const arguments Array = simpleFunction.signature~().arguments~()
         parse index, argument = arguments
-            const argumentOperand Operand = operand{
+            const argumentOperand Operand = Operand{
                 (function.arguments~()[index].name~(),
                 argument.access~(),
                 "%" + index.toString(),
                 argument.type~(),
                 false, true, true, true, false)
             }
-            namedOperands.put(argumentOperand.code~().text~(), namedOperand(0, argumentOperand))
+            namedOperands.put(argumentOperand.code~().text~(), NamedOperand(0, argumentOperand))
         codeData.namedOperands`(namedOperands)
         namedOperands = Map.createEmpty()
         const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, llvmIR)
@@ -478,5 +478,5 @@ def getSignature(function Function) FSignature
     var arguments Array = []
     const functionArguments Array = function.arguments~()
     parse _, argument = functionArguments
-        arguments.addItem(fsArgument(argument.access~(), argument.type~()))
-    return fSignature(function.name~().replaceText("("), arguments, function.resultType~())
+        arguments.addItem(FSArgument(argument.access~(), argument.type~()))
+    return FSignature(function.name~().replaceText("("), arguments, function.resultType~())
