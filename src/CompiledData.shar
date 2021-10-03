@@ -816,6 +816,7 @@ def builtinLLVMDeclaredFunctions() Map
         "shar__get__random__number", "declare i64 @shar__get__random__number() local_unnamed_addr nounwind",
         "shar__get__cryptographic__random__number", "declare i64 @shar__get__cryptographic__random__number() local_unnamed_addr nounwind",
         "shar__get__current__time", "declare i64 @shar__get__current__time() local_unnamed_addr nounwind",
+        "shar__get__current__utc__time", "declare i64 @shar__get__current__utc__time() local_unnamed_addr nounwind",
         "shar__load__lib", "declare i1 @shar__load__lib(i64, i16* nocapture readonly, i8** nocapture) local_unnamed_addr nounwind",
         "shar__get__from__lib", "declare i1 @shar__get__from__lib(i64, i16* nocapture readonly, i8*, i8** nocapture) local_unnamed_addr nounwind",
         "shar__unload__lib", "declare i1 @shar__unload__lib(i8*) local_unnamed_addr nounwind",
