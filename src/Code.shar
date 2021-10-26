@@ -917,12 +917,16 @@ def compileTryCatch(tryBlock, catchBlock Block, write codeData CodeData, compile
     const errorRegister String = codeData.createRegister("load [2 x i64], [2 x i64]* %##reg##0##, align 8", llvmIR)
     var idName Token = const::emptyToken
     var messageName Token = const::emptyToken
+    var dataName Token = const::emptyToken
     if !catchBlock.eol?(1)
         if !catchBlock.next?(tokenIndex, ["_"])
             idName = catchBlock.getLowercaseName(tokenIndex, "constant")
         catchBlock.next!(tokenIndex, [","])
         if !catchBlock.next?(tokenIndex, ["_"])
             messageName = catchBlock.getLowercaseName(tokenIndex, "constant")
+        catchBlock.next!(tokenIndex, [","])
+        if !catchBlock.next?(tokenIndex, ["_"])
+            dataName = catchBlock.getLowercaseName(tokenIndex, "constant")
         catchBlock.eol!(tokenIndex)
     codeData.level`(codeData.level~() + 1)
     if !idName.empty?()
@@ -952,6 +956,20 @@ def compileTryCatch(tryBlock, catchBlock Block, write codeData CodeData, compile
         var namedOperands Map = codeData.namedOperands`(nothing)
         if !namedOperands.put(messageName.text~(), NamedOperand(codeData.level~(), messageOperand)).nothing?()
             errorAlreadyExist(messageName, "constant")
+        codeData.namedOperands`(namedOperands)
+    if !dataName.empty?()
+        const dataRegister String = codeData.createRegister("call [2 x i64] @shar.error.get.data([2 x i64] " + errorRegister + ")", llvmIR)
+        const dataOperand Operand = Operand{
+            (dataName,
+            enum::access_read,
+            dataRegister,
+            const::anyType,
+            false, false, true, false, false)
+        }
+        dataOperand.useOperand(codeData, compiledData, llvmIR)
+        var namedOperands Map = codeData.namedOperands`(nothing)
+        if !namedOperands.put(dataName.text~(), NamedOperand(codeData.level~(), dataOperand)).nothing?()
+            errorAlreadyExist(dataName, "constant")
         codeData.namedOperands`(namedOperands)
     llvmIR += "\tcall void @shar.error.free([2 x i64] " + errorRegister + ")\n"
     lastIsTerminator = compileCode(catchBlock.subBlocks~(), codeData, compiledData, llvmIR)

@@ -585,4 +585,4 @@ def checkOperandForError(operand Operand, write codeData CodeData, compiledData 
 // The function creates an operand with an error.
 #alwaysinline
 def createError(id, message String) String
-    return "[i64 ##tnum##STD::Error##, i64 ptrtoint ([3 x i64]* ##llvmconst##>private unnamed_addr constant [3 x i64] [i64 " + id + ", i64 ptrtoint (##this##" + message + "## to i64), i64 0], align 8<## to i64)]"
+    return "[i64 ##tnum##STD::Error##, i64 ptrtoint ([5 x i64]* ##llvmconst##>private unnamed_addr constant [5 x i64] [i64 " + id + ", i64 ptrtoint (##this##" + message + "## to i64), i64 0, i64 0, i64 0], align 8<## to i64)]"
