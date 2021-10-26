@@ -268,3 +268,8 @@ def errorIgnoreNoThrowInModule()
 def errorFunctionCannotBeAWorker(function Token)
     (function.coordinatesToString() + "The worker function must have an input and output, and must not be part of any group.").printlnAsError()
     fail()
+
+#cold
+def errorIncorrectMain()
+    ("The \qMain::main\q function must have no arguments, must not be related to any group, cannot have \qcold\q and \qworker\q attributes, and its result must be the \qSTD::Nothing\q type.").printlnAsError()
+    fail()

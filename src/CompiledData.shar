@@ -539,7 +539,18 @@ def createProgram(compiledData CData, outputFile String)
         }
     var mainFunctionMayThrow Bool = true
     try
-        mainFunctionMayThrow = !compiledData.getFunction(const::emptyToken.replaceText("Main::main"), true).finalFunction~().attributes~().nothrow?()
+        const mainFunction CFunction = compiledData.getFunction(const::emptyToken.replaceText("Main::main"), true)
+        if {
+            !(
+                mainFunction.finalFunction~().type?(SimpleFunction) &&
+                !mainFunction.finalFunction~().attributes~().cold?() &&
+                !mainFunction.finalFunction~().attributes~().worker?() &&
+                mainFunction.finalFunction~().signature~().arguments~().length~() == 0 &&
+                mainFunction.finalFunction~().signature~().resultType~().nothingType?()
+            )
+        }
+            errorIncorrectMain()
+        mainFunctionMayThrow = !mainFunction.finalFunction~().attributes~().nothrow?()
     catch
         errorNotFoundMainFunction()
     compilingFunctions.add(const::emptyToken.replaceText("Main::main0".addItem$(mainFunctionMayThrow.select('1', '0'))))
