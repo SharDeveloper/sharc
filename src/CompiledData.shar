@@ -553,7 +553,7 @@ def createProgram(compiledData CData, outputFile String)
         mainFunctionMayThrow = !mainFunction.finalFunction~().attributes~().nothrow?()
     catch
         errorNotFoundMainFunction()
-    compilingFunctions.add(const::emptyToken.replaceText("Main::main0".addItem$(mainFunctionMayThrow.select('1', '0'))))
+    compilingFunctions.add(const::emptyToken.replaceText("Main::main0".addItem$((mainFunctionMayThrow || const::ignoreNoThrow).select('1', '0'))))
     for :(loop)
         for !compilingConstants.empty?()
             var constantName Token = const::emptyToken
