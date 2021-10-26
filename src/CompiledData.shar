@@ -844,6 +844,7 @@ def builtinLLVMDeclaredFunctions() Map
         "shar__yield", "declare void @shar__yield() local_unnamed_addr nounwind",
         "shar__sleep", "declare void @shar__sleep(i64) local_unnamed_addr nounwind",
         "shar__get__threads__number", "declare i64 @shar__get__threads__number() local_unnamed_addr nounwind",
+        "shar__get__pipeline__items__count", "declare i64 @shar__get__pipeline__items__count(i64) local_unnamed_addr nounwind",
         "shar__get__language__code", "declare i16 @shar__get__language__code() local_unnamed_addr nounwind",
         "shar__init", "declare void @shar__init(i32, i8**) local_unnamed_addr nounwind",
         "shar__enable__threads", "declare void @shar__enable__threads() local_unnamed_addr nounwind",
