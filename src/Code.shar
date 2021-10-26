@@ -940,11 +940,11 @@ def compileTryCatch(tryBlock, catchBlock Block, write codeData CodeData, compile
             errorAlreadyExist(idName, "constant")
         codeData.namedOperands`(namedOperands)
     if !messageName.empty?()
-        const idRegister String = codeData.createRegister("call [2 x i64] @shar.error.get.message([2 x i64] " + errorRegister + ")", llvmIR)
+        const messageRegister String = codeData.createRegister("call [2 x i64] @shar.error.get.message([2 x i64] " + errorRegister + ")", llvmIR)
         const messageOperand Operand = Operand{
             (messageName,
             enum::access_read,
-            idRegister,
+            messageRegister,
             const::stringType,
             false, false, true, false, false)
         }
