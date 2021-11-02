@@ -819,6 +819,7 @@ def builtinLLVMDeclaredFunctions() Map
         "shar__read__directory", "declare i1 @shar__read__directory(i64, i64, i64* nocapture, i16** nocapture, i8* nocapture) local_unnamed_addr nounwind",
         "shar__close__directory", "declare void @shar__close__directory(i64) local_unnamed_addr nounwind",
         "shar__make__directory", "declare i1 @shar__make__directory(i64, i16* nocapture readonly, i1) local_unnamed_addr nounwind",
+        "shar__get__tmp__dir__name", "declare void @shar__get__tmp__dir__name(i64, i64* nocapture, i16** nocapture) local_unnamed_addr nounwind",
         "shar__print__string", "declare void @shar__print__string(i64, i16* nocapture readonly) local_unnamed_addr nounwind",
         "shar__println__string", "declare void @shar__println__string(i64, i16* nocapture readonly) local_unnamed_addr nounwind",
         "shar__print__as__error", "declare void @shar__print__as__error(i64, i16* nocapture readonly) local_unnamed_addr nounwind",
