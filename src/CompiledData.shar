@@ -1037,7 +1037,7 @@ def builtinFunctions(mainFunctionMayThrow Bool) String
         "\tstore i64 %27, i64* %40, align 8\n"
         "\t%41 = getelementptr i64, i64* %39, i64 2\n"
         "\t%42 = bitcast i64* %41 to i16*\n"
-        "\t%43 = getelementptr i16, i16* %42, i64 %21\n"
+        "\t%43 = getelementptr i16, i16* %42, i64 %23\n"
         "\tcall void @llvm.memcpy.i16.i16.i64(i16* nonnull align 2 %43, i16* nonnull align 2 %17, i64 %15, i1 0)\n"
         "\t%44 = getelementptr i64, i64* %4, i64 2\n"
         "\t%45 = load i64, i64* %44, align 8\n"
