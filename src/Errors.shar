@@ -273,3 +273,8 @@ def errorFunctionCannotBeAWorker(function Token)
 def errorIncorrectMain()
     ("The \qMain::main\q function must have no arguments, must not be related to any group, cannot have \qcold\q and \qworker\q attributes, and its result must be the \qSTD::Nothing\q type.").printlnAsError()
     fail()
+
+#cold
+def errorNotFoundTypeInModules(fullTypeName String)
+    ("After loading all the models, information about the \q" + fullTypeName + "\q type was found, then the type itself is not in any module.").printlnAsError()
+    fail()
