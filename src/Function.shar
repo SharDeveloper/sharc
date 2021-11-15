@@ -73,7 +73,7 @@ def precompileAttachmentFunction(function Function, write compiledData CData, ty
         errorFunctionCannotBeAWorker(function.name~())
     if !group.functions~()[function.name~().text~()]
         errorNoFunctionInGroup(function.name~(), group.fullName~())
-    const groupModule String = group.fullName~().splitByPart("::")[0]
+    const groupModule String = group.fullName~().split(':')[0]
     var compiledFunction CFunction = compiledData.borrowFunction(function.name~().replaceText(groupModule + "::" +function.name~().text~()))
     var groupsFunctions GroupsFunctions = compiledFunction.finalFunction`(nothing)
     const requireFunction SimpleFunction = groupsFunctions.functions~()["-"]
@@ -203,7 +203,7 @@ def precompileSimpleFunction(function Function, write compiledData CData)
 // A function compiles a function that is defined when a type is added to a group.
 #alwaysinline
 def compileAttachmentFunction(function Function, write compiledData CData, type CType, group CGroup)
-    const groupModule String = group.fullName~().splitByPart("::")[0]
+    const groupModule String = group.fullName~().split(':')[0]
     const fullFunctionName String = groupModule + "::" +function.name~().text~()
     var typeFunction SimpleFunction = compiledData.getFunction(function.name~().replaceText(fullFunctionName), false).finalFunction~().functions~()[type.fullName~()]
     var codeData CodeData = CodeData{
