@@ -80,6 +80,7 @@ def loadModules(modulesFilesList Array, currentModule String) CData
     var types Map = Map()
     var groups Map = Map()
     var functions Map = Map()
+    var alienTypesAddedToGroups Set = Set()
     var loadedModules Map = Map()
     const moduleSignature Bytes = moduleSignature()
     parse _, moduleFileName = modulesFilesList
@@ -154,8 +155,28 @@ def loadModules(modulesFilesList Array, currentModule String) CData
                     newFunction = groupsFunctions
                 allFunctionsWithSameName.put(functionModule, newFunction)
                 functions.put(functionName, allFunctionsWithSameName)
+            length = Int.deserialize(module, position)
+            for :(counter Int = 0) counter < length; counter++
+                alienTypesAddedToGroups.add(String.deserialize(module, position))
         catch
             errorNotModule(moduleFileName)
+        parse _, typeAndGroup = alienTypesAddedToGroups
+            const splitedTypeAndGroups Array = typeAndGroup.split(' ')
+            const fullTypeName String = splitedTypeAndGroups[0]
+            const groupName String = splitedTypeAndGroups[1]
+            const moduleNameTypeName Array = fullTypeName.splitByPart("::")
+            const typeModuleName String = moduleNameTypeName[0]
+            const shortTypeName String = moduleNameTypeName[1]
+            try
+                var allTypesWithSameName Map = types.put(shortTypeName, Map())
+                var type CType = allTypesWithSameName.put(typeModuleName, CType.fromList({}))
+                var typeGroups Set = type.groups`(nothing)
+                typeGroups.add(groupName)
+                type.groups`(typeGroups)
+                allTypesWithSameName.put(typeModuleName, type)
+                types.put(shortTypeName, allTypesWithSameName)
+            catch
+                errorNotFoundTypeInModules(fullTypeName)
     return CData(currentModule, enumerationsElements, constants, types, groups, functions)
 
 // The function returns the type with the specified name.
@@ -436,6 +457,7 @@ def createModule(compiledData CData, outputFile String)
     const currentModuleName String = compiledData.currentModule~()
     currentModuleName.serialize(fileData)
     var elements Map = Map()
+    var alienTypesAddedToGroups Set = Set()
     parse elementName, elementsWithName = compiledData.enumerationsElements~()
         parse moduleName, isExport = elementsWithName
             if moduleName == currentModuleName
@@ -457,6 +479,9 @@ def createModule(compiledData CData, outputFile String)
         parse moduleName, type = typesWithName
             if moduleName == currentModuleName
                 types.addItem(type)
+            else
+                parse _, newGroup = type.newGroups~()
+                    alienTypesAddedToGroups.add(type.fullName~() + " " + newGroup)
     types.length~().serialize(fileData)
     parse _, type = types
         type.serialize(fileData)
@@ -502,6 +527,9 @@ def createModule(compiledData CData, outputFile String)
     functions.length~().serialize(fileData)
     parse _, function = functions
         function.serialize(fileData)
+    alienTypesAddedToGroups.length~().serialize(fileData)
+    parse _, typeAndGroup = alienTypesAddedToGroups
+        typeAndGroup.serialize(fileData)
     const file <>File = openFile(outputFile, enum::fmode_write)
     if file.nothing?() || writeDataToFile(file, fileData.length~(), fileData) != fileData.length~()
         errorCanNotWriteToFile(outputFile)

@@ -283,3 +283,7 @@ group FieldDefaultFunctionName
 group FieldThisTypeName
     thisTypeName~(This) $Any
     thisTypeName`(write This, $Any) $Any
+
+group FieldNewGroups
+    newGroups~(This) $Any
+    newGroups`(write This, $Any) $Any

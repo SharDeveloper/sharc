@@ -5,6 +5,7 @@ type CType
     // export?    Bool
     // fullName   String
     // groups     Set of String
+    // newGroups  [String]
 
 attach CType to FieldExport
     #alwaysinline
@@ -33,9 +34,18 @@ attach CType to FieldGroups
     def groups`(write type CType, new <>Set) <>Set
         return type.typePut(2, new)
 
+attach CType to FieldNewGroups
+    #alwaysinline
+    def newGroups~(type CType) Array
+        return type.typeGetItem(3)
+
+    #alwaysinline
+    def newGroups`(write type CType, new Array) Array
+        return type.typePut(3, new)
+
 #alwaysinline
 def CType(isExport Bool, fullName String, groups Set) CType
-    return CType.fromList({isExport, fullName, groups})
+    return CType.fromList({isExport, fullName, groups, []})
 
 attach CType to BinarySerializable
     #alwaysinline
