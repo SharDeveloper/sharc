@@ -87,7 +87,13 @@ def callFunction(functionName Token, arguments Array, write codeData CodeData, c
         var thisIndexInArguments Int = -1
         parse :(parse) _, index = argumentsWithThisTypeIndexes
             const argument Operand = arguments[index]
-            if argument.type~().simple?() && !(argument.type~().nothingType?() && argumentsFromSignature[index].type~().optional?())
+            if {
+                argument.type~().simple?() &&
+                !(
+                    (argumentsFromSignature[index].type~().optional?() && argument.type~().nothingType?()) ||
+                    (argument.type~().optional?() && groupsFunctions.groups~() == ["STD::Any"])
+                )
+            }
                 thisIndexInArguments = index
                 functionThisType = argument.type~()
                 end parse
