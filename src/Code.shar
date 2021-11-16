@@ -21,6 +21,8 @@ def compileCode(code Array, write codeData CodeData, compiledData CData, write l
             compileExpressionFromBlock(currentBlock, codeData, compiledData, llvmIR).freeOperand(codeData, compiledData, llvmIR)
         else
             switch currentBlock.line~()[0].text~()
+            case "=>"
+                compilePatternMatching(currentBlock, codeData, compiledData, llvmIR)
             case "const"
                 compileConstantDefine(currentBlock, codeData, compiledData, llvmIR)
             case "end"
@@ -123,67 +125,252 @@ def compileExpressionFromBlock(blockWithExpression Block, write codeData CodeDat
     blockWithExpression.eol!(tokenIndex)
     return result
 
+// => x, y, z = {1, 2, 3}
+def compilePatternMatching(block Block, write codeData CodeData, compiledData CData, write llvmIR String)
+    block.noSubBlocks!()
+    var tokenIndex Int = 1
+    var names Array = []
+    for :(loop)
+        const variableName Token = block.next?(tokenIndex, ["_"]).select(block.line~()[tokenIndex - 1], block.getLowercaseName(tokenIndex, "variable"))
+        if variableName.text~() != "_" && names.contain?(variableName)
+            errorAlreadyExist(variableName, "variable")
+        names.addItem(variableName)
+        if !block.next?(tokenIndex, [","])
+            block.next!(tokenIndex, ["="])
+            end loop
+    const allValues Operand = block.getExpression(tokenIndex).compileExpression(const::anyType, codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
+    block.eol!(tokenIndex)
+    var values Array = allValues.named?().select([], [allValues])
+    parse index, name = names
+        if name.text~() != "_"
+            const indexAsString String = index.toString()
+            const value Operand = {
+                callFunction(
+                    block.line~()[0].replaceText("STD::shar__sugar__patternMatch"),
+                    [
+                        allValues,
+                        Operand(
+                            name.replaceText(indexAsString),
+                            enum::access_read,
+                            "[i64 ##tnum##STD::Int##, i64 " + indexAsString + "]",
+                            OType(name.replaceText("STD::Int"), false),
+                            true, true, false, false, false
+                        )
+                    ],
+                    codeData, compiledData, values, false, llvmIR
+                )
+            }
+            const variableOperand <>NamedOperand = codeData.namedOperands~()[name.text~()]
+            if variableOperand.nothing?() || variableOperand.operand~().access~() != enum::access_write
+                errorNotFound(name, "variable")
+            value.runtimeTypesCompatibleCheck(variableOperand.operand~().type~(), codeData, compiledData, values, llvmIR)
+            values.addItem(value)
+    if !allValues.named?()
+        allValues.freeOperand(codeData, compiledData, llvmIR)
+    var valueIndex Int = allValues.named?().select(0, 1)
+    parse _, name = names
+        if name.text~() != "_"
+            const operand Operand = codeData.namedOperands~()[name.text~()].operand~()
+            const value Operand = values[valueIndex]
+            valueIndex++
+            operand.freeOperand(codeData, compiledData, llvmIR)
+            llvmIR += "\tstore [2 x i64] " + value.value~() + ", [2 x i64]* " + operand.value~() + ", align 8\n"
+
 // The function creates a new constant in the function.
 def compileConstantDefine(block Block, write codeData CodeData, compiledData CData, write llvmIR String)
     block.noSubBlocks!()
     var tokenIndex Int = 1
-    const constantName Token = block.getLowercaseName(tokenIndex, "constant")
-    switch constantName.text~()
-    case "var", "const", "enum", "for", "do", "parse", "gParse", "if", "elif", "select", "super", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough", "nothing"
-        errorInvalidName(constantName, "constant")
-    const type OType = block.getOperandType(tokenIndex, !codeData.allThisGroups~().empty?()).toFull(compiledData)
-    block.next!(tokenIndex, ["="])
-    var constantValue Operand = block.getExpression(tokenIndex).compileExpression(type, codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
-    block.eol!(tokenIndex)
-    if constantValue.named?()
-        constantValue.useOperand(codeData, compiledData, llvmIR)
-    if constantValue.Main::constant?() && constantValue.type~().typeEq?(type, true)
-        constantValue.code`(constantName)
-        constantValue.named`(true)
-        constantValue.used`(false)
+    if block.next?(tokenIndex, ["{"])
+        var names Array = []
+        var types Array = []
+        for :(loop)
+            const name Token = block.next?(tokenIndex, ["_"]).select(block.line~()[tokenIndex - 1], block.getLowercaseName(tokenIndex, "constant"))
+            switch name.text~()
+            case "var", "const", "enum", "for", "do", "parse", "gParse", "if", "elif", "select", "super", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough", "nothing"
+                errorInvalidName(name, "constant")
+            if name.text~() != "_" && names.contain?(name)
+                errorAlreadyExist(name, "constant")
+            names.addItem(name)
+            if !block.next?(tokenIndex, [","])
+                const type OType = block.getOperandType(tokenIndex, !codeData.allThisGroups~().empty?()).toFull(compiledData)
+                types += Array.repeat(type, names.length~() - types.length~())
+                if block.next?(tokenIndex, ["}"])
+                    end loop
+                block.next!(tokenIndex, [","])
+        block.next!(tokenIndex, ["="])
+        const allValues Operand = block.getExpression(tokenIndex).compileExpression(const::anyType, codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
+        block.eol!(tokenIndex)
+        var values Array = allValues.named?().select([], [allValues])
+        parse index, name = names
+            if name.text~() != "_"
+                const indexAsString String = index.toString()
+                const value Operand = {
+                    callFunction(
+                        block.line~()[0].replaceText("STD::shar__sugar__patternMatch"),
+                        [
+                            allValues,
+                            Operand(
+                                name.replaceText(indexAsString),
+                                enum::access_read,
+                                "[i64 ##tnum##STD::Int##, i64 " + indexAsString + "]",
+                                OType(name.replaceText("STD::Int"), false),
+                                true, true, false, false, false
+                            )
+                        ],
+                        codeData, compiledData, values, false, llvmIR
+                    )
+                }
+                value.runtimeTypesCompatibleCheck(types[index], codeData, compiledData, values, llvmIR)
+                values.addItem(value)
+        if !allValues.named?()
+            allValues.freeOperand(codeData, compiledData, llvmIR)
+        var valueIndex Int = allValues.named?().select(0, 1)
+        parse index, name = names
+            if name.text~() != "_"
+                var value Operand = values[valueIndex]
+                const type OType = types[index]
+                valueIndex++
+                if value.Main::constant?() && value.type~().typeEq?(type, true)
+                    value.code`(name)
+                    value.named`(true)
+                    value.used`(false)
+                else
+                    value = Operand{
+                        (name,
+                        enum::access_read,
+                        value.value~(),
+                        type,
+                        false, false, true, false, false)
+                    }
+                var namedOperands Map = codeData.namedOperands`(nothing)
+                if !namedOperands.put(name.text~(), NamedOperand(codeData.level~(), value)).nothing?()
+                    errorAlreadyExist(name, "constant")
+                codeData.namedOperands`(namedOperands)
     else
-        constantValue = Operand{
-            (constantName,
-            enum::access_read,
-            constantValue.value~(),
-            type,
-            false, false, true, false, false)
-        }
-    var namedOperands Map = codeData.namedOperands`(nothing)
-    if !namedOperands.put(constantName.text~(), NamedOperand(codeData.level~(), constantValue)).nothing?()
-        errorAlreadyExist(constantName, "constant")
-    codeData.namedOperands`(namedOperands)
+        const name Token = block.getLowercaseName(tokenIndex, "constant")
+        switch name.text~()
+        case "var", "const", "enum", "for", "do", "parse", "gParse", "if", "elif", "select", "super", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough", "nothing"
+            errorInvalidName(name, "constant")
+        const type OType = block.getOperandType(tokenIndex, !codeData.allThisGroups~().empty?()).toFull(compiledData)
+        block.next!(tokenIndex, ["="])
+        var value Operand = block.getExpression(tokenIndex).compileExpression(type, codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
+        block.eol!(tokenIndex)
+        if value.named?()
+            value.useOperand(codeData, compiledData, llvmIR)
+        if value.Main::constant?() && value.type~().typeEq?(type, true)
+            value.code`(name)
+            value.named`(true)
+            value.used`(false)
+        else
+            value = Operand{
+                (name,
+                enum::access_read,
+                value.value~(),
+                type,
+                false, false, true, false, false)
+            }
+        var namedOperands Map = codeData.namedOperands`(nothing)
+        if !namedOperands.put(name.text~(), NamedOperand(codeData.level~(), value)).nothing?()
+            errorAlreadyExist(name, "constant")
+        codeData.namedOperands`(namedOperands)
 
 // The function creates a new variable in the function.
 def compileVariableDefine(block Block, write codeData CodeData, compiledData CData, write llvmIR String)
     block.noSubBlocks!()
     var tokenIndex Int = 1
-    const variableName Token = block.getLowercaseName(tokenIndex, "variable")
-    switch variableName.text~()
-    case "var", "const", "enum", "for", "do", "parse", "gParse", "if", "elif", "select", "super", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough", "nothing"
-        errorInvalidName(variableName, "variable")
-    const type OType = block.getOperandType(tokenIndex, !codeData.allThisGroups~().empty?()).toFull(compiledData)
-    block.next!(tokenIndex, ["="])
-    var variableValue Operand = block.getExpression(tokenIndex).compileExpression(type, codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
-    block.eol!(tokenIndex)
-    if variableValue.named?()
-        variableValue.useOperand(codeData, compiledData, llvmIR)
-    const mutableRegister String = codeData.newAlloc()
-    llvmIR += "\tstore [2 x i64] " + variableValue.value~() + ", [2 x i64]* " + mutableRegister + ", align 8\n"
-    var namedOperands Map = codeData.namedOperands`(nothing)
-    if !namedOperands.put{
-        (variableName.text~(),
-        NamedOperand(codeData.level~(),
-        Operand(
-            variableName,
-            enum::access_write,
-            mutableRegister,
-            type,
-            false, false, true, false, false
-        ))).nothing?()
-    }
-        errorAlreadyExist(variableName, "variable")
-    codeData.namedOperands`(namedOperands)
+    if block.next?(tokenIndex, ["{"])
+        var names Array = []
+        var types Array = []
+        for :(loop)
+            const name Token = block.next?(tokenIndex, ["_"]).select(block.line~()[tokenIndex - 1], block.getLowercaseName(tokenIndex, "variable"))
+            switch name.text~()
+            case "var", "const", "enum", "for", "do", "parse", "gParse", "if", "elif", "select", "super", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough", "nothing"
+                errorInvalidName(name, "variable")
+            if name.text~() != "_" && names.contain?(name)
+                errorAlreadyExist(name, "variable")
+            names.addItem(name)
+            if !block.next?(tokenIndex, [","])
+                const type OType = block.getOperandType(tokenIndex, !codeData.allThisGroups~().empty?()).toFull(compiledData)
+                types += Array.repeat(type, names.length~() - types.length~())
+                if block.next?(tokenIndex, ["}"])
+                    end loop
+                block.next!(tokenIndex, [","])
+        block.next!(tokenIndex, ["="])
+        const allValues Operand = block.getExpression(tokenIndex).compileExpression(const::anyType, codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
+        block.eol!(tokenIndex)
+        var values Array = allValues.named?().select([], [allValues])
+        parse index, name = names
+            if name.text~() != "_"
+                const indexAsString String = index.toString()
+                const value Operand = {
+                    callFunction(
+                        block.line~()[0].replaceText("STD::shar__sugar__patternMatch"),
+                        [
+                            allValues,
+                            Operand(
+                                name.replaceText(indexAsString),
+                                enum::access_read,
+                                "[i64 ##tnum##STD::Int##, i64 " + indexAsString + "]",
+                                OType(name.replaceText("STD::Int"), false),
+                                true, true, false, false, false
+                            )
+                        ],
+                        codeData, compiledData, values, false, llvmIR
+                    )
+                }
+                value.runtimeTypesCompatibleCheck(types[index], codeData, compiledData, values, llvmIR)
+                values.addItem(value)
+        if !allValues.named?()
+            allValues.freeOperand(codeData, compiledData, llvmIR)
+        var valueIndex Int = allValues.named?().select(0, 1)
+        parse index, name = names
+            if name.text~() != "_"
+                var value Operand = values[valueIndex]
+                const type OType = types[index]
+                valueIndex++
+                const mutableRegister String = codeData.newAlloc()
+                llvmIR += "\tstore [2 x i64] " + value.value~() + ", [2 x i64]* " + mutableRegister + ", align 8\n"
+                var namedOperands Map = codeData.namedOperands`(nothing)
+                if !namedOperands.put{
+                    (name.text~(),
+                    NamedOperand(codeData.level~(),
+                    Operand(
+                        name,
+                        enum::access_write,
+                        mutableRegister,
+                        type,
+                        false, false, true, false, false
+                    ))).nothing?()
+                }
+                    errorAlreadyExist(name, "variable")
+                codeData.namedOperands`(namedOperands)
+    else
+        const name Token = block.getLowercaseName(tokenIndex, "variable")
+        switch name.text~()
+        case "var", "const", "enum", "for", "do", "parse", "gParse", "if", "elif", "select", "super", "true", "false", "switch", "tSwitch", "eSwitch", "case", "default", "fallthrough", "nothing"
+            errorInvalidName(name, "variable")
+        const type OType = block.getOperandType(tokenIndex, !codeData.allThisGroups~().empty?()).toFull(compiledData)
+        block.next!(tokenIndex, ["="])
+        var value Operand = block.getExpression(tokenIndex).compileExpression(type, codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
+        block.eol!(tokenIndex)
+        if value.named?()
+            value.useOperand(codeData, compiledData, llvmIR)
+        const mutableRegister String = codeData.newAlloc()
+        llvmIR += "\tstore [2 x i64] " + value.value~() + ", [2 x i64]* " + mutableRegister + ", align 8\n"
+        var namedOperands Map = codeData.namedOperands`(nothing)
+        if !namedOperands.put{
+            (name.text~(),
+            NamedOperand(codeData.level~(),
+            Operand(
+                name,
+                enum::access_write,
+                mutableRegister,
+                type,
+                false, false, true, false, false
+            ))).nothing?()
+        }
+            errorAlreadyExist(name, "variable")
+        codeData.namedOperands`(namedOperands)
 
 // The function compiles the 'end' statement.
 def compileEnd(block Block, write codeData CodeData, compiledData CData, write llvmIR String)
