@@ -1004,6 +1004,7 @@ def compileTest(testBlock Block, write codeData CodeData, compiledData CData, wr
                     end loop
             testedExpressionBlock.eol!(tokenIndex)
         const okLabel String = codeData.createLabel()
+        const endOkLabel String = codeData.createLabel()
         const errorLabel String = codeData.createLabel()
         const notErrorLabel String = codeData.createLabel()
         var catchLabels Array = codeData.catchLabels`([])
@@ -1029,12 +1030,12 @@ def compileTest(testBlock Block, write codeData CodeData, compiledData CData, wr
             testedResultValueI1 = codeData.createRegister("trunc i64 " + testedResultValueI64 + " to i1", llvmIR)
         else
             testedResultOperand.freeOperand(codeData, compiledData, llvmIR)
-        llvmIR += "\tbr label %##reg##" + notErrorLabel + "##\n"
+            llvmIR += "\tbr label %##reg##" + endOkLabel + "##\n\t##nreg##" + endOkLabel + "##:\n"
+        llvmIR += "\tbr label %##reg##" + notErrorLabel + "##\n\t##nreg##" + errorLabel + "##:\n"
         catchLabels = codeData.catchLabels`([])
         catchLabels.delete(catchLabels.length~() - 1, 1)
         codeData.catchLabels`(catchLabels)
         catchLabels = []
-        llvmIR += "\t##nreg##" + errorLabel + "##:\n"
         const errorRegister String = codeData.createRegister("load [2 x i64], [2 x i64]* %##reg##0##, align 8", llvmIR)
         var isExpectedErrorRegister String = ""
         if !expectedErrorCodes.empty?()
@@ -1054,7 +1055,7 @@ def compileTest(testBlock Block, write codeData CodeData, compiledData CData, wr
         }
         const testResultOkRegisterValue String = expectedErrorCodes.empty?().select{
             ("phi i1 [" + testedResultValueI1 + ", %##reg##" + okLabel + "##], [0, %##reg##" + errorLabel + "##]",
-            "phi i1 [0, %##reg##" + okLabel + "##], [" + isExpectedErrorRegister + ", %##reg##" + errorLabel + "##]")
+            "phi i1 [0, %##reg##" + endOkLabel + "##], [" + isExpectedErrorRegister + ", %##reg##" + errorLabel + "##]")
         }
         const testResultOkRegister String = codeData.createRegister(testResultOkRegisterValue, llvmIR)
         const successLabel String = codeData.createLabel()
