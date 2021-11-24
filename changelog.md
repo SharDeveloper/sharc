@@ -1,3 +1,10 @@
+# 0.4
+- Added pattern matching.
+- Added the ability to transfer data to the catcher when throwing exceptions.
+- Added additional syntactic sugar. (a\[b:\], a[:b\])
+- Many bug fixes.
+- Minor code improvements.
+
 # 0.3.1
 - Fixed a problem with applications crashing when an exception occurs when executing a global constant code.
 - Fixed problem with joining splitted strings.
