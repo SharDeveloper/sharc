@@ -71,6 +71,6 @@ attach CType to BinarySerializable
             for :(counter Int = 0) counter < groupsCount; counter++
                 groups.add(String.deserialize(bytes, position))
             return CType(isExport, name, groups)
-        catch id, message
+        catch id, message, data
             position = startPosition
-            throw(id, message)
+            throw(id, message, data)

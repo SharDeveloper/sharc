@@ -54,12 +54,12 @@ attach FSArgument to BinarySerializable
             case 2
                 access = enum::access_write
             default
-                throw(enum::error_outOfRange, "Out of range.")
+                throw(enum::error_outOfRange, "Out of range.", nothing)
             const oType OType = OType.deserialize(bytes, position)
             return FSArgument(access, oType)
-        catch id, message
+        catch id, message, data
             position = startPosition
-            throw(id, message)
+            throw(id, message, data)
 
 // The function finds out if the arguments are compatible.
 #alwaysinline

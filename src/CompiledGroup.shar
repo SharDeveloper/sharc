@@ -79,9 +79,9 @@ attach CGroup to BinarySerializable
             for :(counter Int = 0) counter < functionsCount; counter++
                 functions.add(String.deserialize(bytes, position))
             return CGroup(isExport, name, subGroups, functions)
-        catch id, message
+        catch id, message, data
             position = startPosition
-            throw(id, message)
+            throw(id, message, data)
 
 // The function imports data from one group to another.
 #alwaysinline

@@ -69,9 +69,9 @@ attach CConstant to BinarySerializable
             const llvmIR String = String.deserialize(bytes, position)
             const oType OType = OType.deserialize(bytes, position)
             return CConstant(isExport, name, llvmIR, oType)
-        catch id, message
+        catch id, message, data
             position = startPosition
-            throw(id, message)
+            throw(id, message, data)
 
 // The function generates llvm ir code for a constant.
 def constantToFinalLLVMIR(compiledData CData, constantName Token, write compilingConstants, write compilingFunctions Set, write usedData UsedData)

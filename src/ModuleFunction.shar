@@ -99,6 +99,6 @@ attach ModuleFunction to BinarySerializable
             const thisType String = String.deserialize(bytes, position)
             const finalFunction SimpleFunction = SimpleFunction.deserialize(bytes, position)
             return ModuleFunction(isExport, name, module, groups, thisType, finalFunction)
-        catch id, message
+        catch id, message, data
             position = startPosition
-            throw(id, message)
+            throw(id, message, data)

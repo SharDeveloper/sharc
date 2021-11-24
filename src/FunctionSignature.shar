@@ -82,9 +82,9 @@ attach FSignature to BinarySerializable
                 arguments.addItem(FSArgument.deserialize(bytes, position))
             const resultType OType = OType.deserialize(bytes, position)
             return FSignature(const::emptyToken, arguments, resultType)
-        catch id, message
+        catch id, message, data
             position = startPosition
-            throw(id, message)
+            throw(id, message, data)
 
 attach FSignature to ToFull
     #alwaysinline

@@ -65,6 +65,6 @@ attach SimpleFunction to BinarySerializable
             const signature FSignature = FSignature.deserialize(bytes, position)
             const llvmIR String = String.deserialize(bytes, position)
             return SimpleFunction(attributes, signature, llvmIR, false)
-        catch id, message
+        catch id, message, data
             position = startPosition
-            throw(id, message)
+            throw(id, message, data)

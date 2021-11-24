@@ -95,9 +95,9 @@ attach OType to BinarySerializable
                 result.type`(groups)
             result.optional`(Bool.deserialize(bytes, position))
             return result
-        catch id, message
+        catch id, message, data
             position = startPosition
-            throw(id, message)
+            throw(id, message, data)
 
 attach OType to ToFull
     #alwaysinline
