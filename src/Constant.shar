@@ -90,7 +90,7 @@ def compileConstant(constant Constant, write compiledData CData)
     const constOperand Operand = constant.value~().compileExpression(compiledConstant.type~(), codeData, compiledData, [], llvmIR)
     llvmIR = codeData.allocsToIR() + llvmIR
     constOperand.operandToConst(codeData, compiledData, llvmIR)
-    llvmIR += "\tret [2 x i64] " + constOperand.value~() + "\n"
+    llvmIR += "\tret {i64, i32} " + constOperand.value~() + "\n"
     llvmIR.sharRegistersToLLVMRegisters(1, constant.name~())
     var constants Map = compiledData.constants`(nothing)
     var constantsWithSameName <>Map = constants.put(constant.name~().text~(), Map())

@@ -244,14 +244,14 @@ def compileAttachmentFunction(function Function, write compiledData CData, type 
         codeData.namedOperands`(namedOperands)
         namedOperands = Map()
         const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, llvmIR)
-        llvmIR = "\t%##nreg##0## = alloca [2 x i64], align 8\n" + codeData.allocsToIR() + llvmIR
+        llvmIR = "\t%##nreg##0## = alloca {i64, i32}, align 8\n" + codeData.allocsToIR() + llvmIR
         if !lastIsTerminator
             var irPart String = ""
             codeData.freeLevel(1, compiledData, irPart)
             if typeFunction.signature~().resultType~().nothingType?()
-                irPart += "\tret [2 x i64] zeroinitializer\n"
+                irPart += "\tret {i64, i32} zeroinitializer\n"
             else
-                irPart += "\tret [2 x i64] " + createError("1", "The function did not return any value.\\n<- " + codeData.functionNameForErrorMessage~()) + "\n"
+                irPart += "\tret {i64, i32} " + createError("1", "The function did not return any value.\\n<- " + codeData.functionNameForErrorMessage~()) + "\n"
             llvmIR += irPart
         codeData.allOperandsUsed!()
     llvmIR.sharRegistersToLLVMRegisters(typeFunction.signature~().arguments~().length~() + 1, function.name~())
@@ -319,14 +319,14 @@ def compileDefaultFunction(function Function, write compiledData CData)
         codeData.namedOperands`(namedOperands)
         namedOperands = Map()
         const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, llvmIR)
-        llvmIR = "\t%##nreg##0## = alloca [2 x i64], align 8\n" + codeData.allocsToIR() + llvmIR
+        llvmIR = "\t%##nreg##0## = alloca {i64, i32}, align 8\n" + codeData.allocsToIR() + llvmIR
         if !lastIsTerminator
             var irPart String = ""
             codeData.freeLevel(1, compiledData, irPart)
             if defaultFunction.signature~().resultType~().nothingType?()
-                irPart += "\tret [2 x i64] zeroinitializer\n"
+                irPart += "\tret {i64, i32} zeroinitializer\n"
             else
-                irPart += "\tret [2 x i64] " + createError("1", "The function did not return any value.\\n<- " + codeData.functionNameForErrorMessage~()) + "\n"
+                irPart += "\tret {i64, i32} " + createError("1", "The function did not return any value.\\n<- " + codeData.functionNameForErrorMessage~()) + "\n"
             llvmIR += irPart
         codeData.allOperandsUsed!()
     llvmIR.sharRegistersToLLVMRegisters(defaultFunction.signature~().arguments~().length~() + 1, function.name~())
@@ -391,14 +391,14 @@ def compileOverrideFunction(function Function, write compiledData CData)
         codeData.namedOperands`(namedOperands)
         namedOperands = Map()
         const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, llvmIR)
-        llvmIR = "\t%##nreg##0## = alloca [2 x i64], align 8\n" + codeData.allocsToIR() + llvmIR
+        llvmIR = "\t%##nreg##0## = alloca {i64, i32}, align 8\n" + codeData.allocsToIR() + llvmIR
         if !lastIsTerminator
             var irPart String = ""
             codeData.freeLevel(1, compiledData, irPart)
             if typeFunction.signature~().resultType~().nothingType?()
-                irPart += "\tret [2 x i64] zeroinitializer\n"
+                irPart += "\tret {i64, i32} zeroinitializer\n"
             else
-                irPart += "\tret [2 x i64] " + createError("1", "The function did not return any value.\\n<- " + codeData.functionNameForErrorMessage~()) + "\n"
+                irPart += "\tret {i64, i32} " + createError("1", "The function did not return any value.\\n<- " + codeData.functionNameForErrorMessage~()) + "\n"
             llvmIR += irPart
         codeData.allOperandsUsed!()
     llvmIR.sharRegistersToLLVMRegisters(typeFunction.signature~().arguments~().length~() + 1, function.name~())
@@ -455,14 +455,14 @@ def compileSimpleFunction(function Function, write compiledData CData)
         codeData.namedOperands`(namedOperands)
         namedOperands = Map()
         const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, llvmIR)
-        llvmIR = "\t%##nreg##0## = alloca [2 x i64], align 8\n" + codeData.allocsToIR() + llvmIR
+        llvmIR = "\t%##nreg##0## = alloca {i64, i32}, align 8\n" + codeData.allocsToIR() + llvmIR
         if !lastIsTerminator
             var irPart String = ""
             codeData.freeLevel(1, compiledData, irPart)
             if simpleFunction.signature~().resultType~().nothingType?()
-                irPart += "\tret [2 x i64] zeroinitializer\n"
+                irPart += "\tret {i64, i32} zeroinitializer\n"
             else
-                irPart += "\tret [2 x i64] " + createError("1", "The function did not return any value.\\n<- " + codeData.functionNameForErrorMessage~()) + "\n"
+                irPart += "\tret {i64, i32} " + createError("1", "The function did not return any value.\\n<- " + codeData.functionNameForErrorMessage~()) + "\n"
             llvmIR += irPart
         codeData.allOperandsUsed!()
     llvmIR.sharRegistersToLLVMRegisters(simpleFunction.signature~().arguments~().length~() + 1, function.name~())

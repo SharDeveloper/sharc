@@ -116,13 +116,14 @@ def createArrayInLLVMIR(write codeData CodeData, itemsTypeNumberRegister String,
     const lengthPointerRegister String = codeData.createRegister("getelementptr i64, i64* " + memoryRegister + ", i64 1", llvmIR)
     llvmIR += "\tstore i64 " + arrayLength.toString() + ", i64* " + lengthPointerRegister + ", align 8\n"
     const typePointerRegister String = codeData.createRegister("getelementptr i64, i64* " + memoryRegister + ", i64 2", llvmIR)
-    llvmIR += "\tstore i64 " + itemsTypeNumberRegister + ", i64* " + typePointerRegister + ", align 8\n"
+    const itemsTypeNumberRegisterI32 String = codeData.createRegister("zext i32 " + itemsTypeNumberRegister + " to i64", llvmIR)
+    llvmIR += "\tstore i64 " + itemsTypeNumberRegisterI32 + ", i64* " + typePointerRegister + ", align 8\n"
     parse index, item = items
-        const itemValueRegister String = codeData.createRegister("extractvalue [2 x i64] " + item.value~() + ", 1", llvmIR)
+        const itemValueRegister String = codeData.createRegister("extractvalue {i64, i32} " + item.value~() + ", 0", llvmIR)
         const itemPointerRegister String = codeData.createRegister("getelementptr i64, i64* " + memoryRegister + ", i64 " + (index + 3).toString(), llvmIR)
         llvmIR += "\tstore i64 " + itemValueRegister + ", i64* " + itemPointerRegister + ", align 8\n"
     const memoryAsI64Register String = codeData.createRegister("ptrtoint i64* " + memoryRegister + " to i64", llvmIR)
-    const arrayRegister String = codeData.createRegister("insertvalue [2 x i64] [i64 ##tnum##STD::Array##, i64 0], i64 " + memoryAsI64Register + ", 1", llvmIR)
+    const arrayRegister String = codeData.createRegister("insertvalue {i64, i32} {i64 0, i32 ##tnum##STD::Array##}, i64 " + memoryAsI64Register + ", 0", llvmIR)
     return arrayRegister
 
 // The function turns a character from source into a number for llvm ir.
@@ -171,19 +172,21 @@ def integerToLLVMI64(integer Token) String
 // The function creates llvm code that creates a list.
 def createListInLLVMIR(write codeData CodeData, items Array, write llvmIR String) String
     const listLength Int = items.length~()
-    const memoryRegister String = codeData.createRegister("call i64* @shar.malloc(i64 " + (listLength * 16 + 16).toString() + ")", llvmIR)
+    const memoryRegister String = codeData.createRegister("call i64* @shar.malloc(i64 " + (listLength * 12 + 16).toString() + ")", llvmIR)
     llvmIR += "\tstore i64 1, i64* " + memoryRegister + ", align 8\n"
     const lengthPointerRegister String = codeData.createRegister("getelementptr i64, i64* " + memoryRegister + ", i64 1", llvmIR)
     llvmIR += "\tstore i64 " + listLength.toString() + ", i64* " + lengthPointerRegister + ", align 8\n"
+    const itemsRegisterI64 String = codeData.createRegister("getelementptr i64, i64* " + memoryRegister + ", i64 2", llvmIR)
+    const itemsRegister String = codeData.createRegister("bitcast i64* " + itemsRegisterI64 + " to <{i64, i32}>*", llvmIR)
     parse index, item = items
-        const itemTypeRegister String = codeData.createRegister("extractvalue [2 x i64] " + item.value~() + ", 0", llvmIR)
-        const itemTypePointerRegister String = codeData.createRegister("getelementptr i64, i64* " + memoryRegister + ", i64 " + (index * 2 + 2).toString(), llvmIR)
-        llvmIR += "\tstore i64 " + itemTypeRegister + ", i64* " + itemTypePointerRegister + ", align 8\n"
-        const itemValueRegister String = codeData.createRegister("extractvalue [2 x i64] " + item.value~() + ", 1", llvmIR)
-        const itemValuePointerRegister String = codeData.createRegister("getelementptr i64, i64* " + memoryRegister + ", i64 " + (index * 2 + 3).toString(), llvmIR)
-        llvmIR += "\tstore i64 " + itemValueRegister + ", i64* " + itemValuePointerRegister + ", align 8\n"
+        const itemValueRegister String = codeData.createRegister("extractvalue {i64, i32} " + item.value~() + ", 0", llvmIR)
+        const itemTypeRegister String = codeData.createRegister("extractvalue {i64, i32} " + item.value~() + ", 1", llvmIR)
+        const packetItem_onlyValue String = codeData.createRegister("insertvalue <{i64, i32}> zeroinitializer, i64 " + itemValueRegister + ", 0", llvmIR)
+        const packetItem String = codeData.createRegister("insertvalue <{i64, i32}> " + packetItem_onlyValue + ", i32 " + itemTypeRegister + ", 1", llvmIR)
+        const itemInListPointer String = codeData.createRegister("getelementptr <{i64, i32}>, <{i64, i32}>* " + itemsRegister + ", i64 " + index.toString(), llvmIR)
+        llvmIR += "\tstore <{i64, i32}> " + packetItem + ", <{i64, i32}>* " + itemInListPointer + ", align 4\n"
     const memoryAsI64Register String = codeData.createRegister("ptrtoint i64* " + memoryRegister + " to i64", llvmIR)
-    const listRegister String = codeData.createRegister("insertvalue [2 x i64] [i64 ##tnum##STD::List##, i64 0], i64 " + memoryAsI64Register + ", 1", llvmIR)
+    const listRegister String = codeData.createRegister("insertvalue {i64, i32} {i64 0, i32 ##tnum##STD::List##}, i64 " + memoryAsI64Register + ", 0", llvmIR)
     return listRegister
 
 // The function turns a real number from source into a real number for llvm ir.
@@ -200,12 +203,12 @@ def realToLLVMDouble(real Token) String
 def stringToOperand(string Token) Operand
     var value String = ""
     if string.empty?()
-        value  = "[i64 ##tnum##STD::String##, i64 ptrtoint ([8 x i16]* @empty.string to i64)]"
+        value  = "{i64 ptrtoint ([8 x i16]* @empty.string to i64), i32 ##tnum##STD::String##}"
     else
         var llvmStringType String = ""
         const llvmStringData String = stringToLLVMArray(string, llvmStringType)
         const llvmString String = "##llvmconst##>private unnamed_addr constant " + llvmStringType + " " + llvmStringData + ", align 8<##"
-        value = "[i64 ##tnum##STD::String##, i64 ptrtoint (" + llvmStringType + "* " + llvmString + " to i64)]"
+        value = "{i64 ptrtoint (" + llvmStringType + "* " + llvmString + " to i64), i32 ##tnum##STD::String##}"
     return Operand(string, enum::access_read, value, OType(string.replaceText("STD::String"), false), true, true, false, false, false)
 
 // The function creates the name of the constant in the llvm ir code.
@@ -439,11 +442,11 @@ def toFinalLLVMIR(llvmIR String, errorCoordinates Token, compiledData CData, thi
                                         const fullFunctionName String = functionName[0 : functionName.length~() - 2] + "." + fullTypeName + functionVariant
                                         compilingFunctions.add(const::emptyToken.replaceText(fullFunctionName))
                             typesNumbers.addItem(Int.fromString(typeNumber))
-                constantTypeAndName = "[" + (typesNumbers.length~() + 1).toString() + " x i64]"
-                var constantValue String = "private unnamed_addr constant " + constantTypeAndName + " [i64 " + typesNumbers.length~().toString()
+                constantTypeAndName = "[" + (typesNumbers.length~() + 1).toString() + " x i32]"
+                var constantValue String = "private unnamed_addr constant " + constantTypeAndName + " [i32 " + typesNumbers.length~().toString()
                 parse _, typeNumber = typesNumbers
-                    constantValue += ", i64 " + typeNumber.toString()
-                constantValue += "], align 8"
+                    constantValue += ", i32 " + typeNumber.toString()
+                constantValue += "], align 4"
                 var usedLLVMConstants Map = usedData.llvmConstants`(nothing)
                 const constantName String = "@lc." + usedLLVMConstants.length~().toString()
                 usedLLVMConstants.put(constantValue, constantName)

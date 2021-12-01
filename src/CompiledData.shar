@@ -627,7 +627,7 @@ def createProgram(compiledData CData, outputFile String)
                 const errorConstantName String = "@lc." + idCounter.toString()
                 idCounter++
                 llvmIR += errorConstantName + " = private unnamed_addr constant [5 x i64] [i64 0, i64 ptrtoint (" + llvmStringType + "* " + stringConstantName + " to i64), i64 0, i64 0, i64 0], align 8\n"
-                genericFunctionsErrors.put(functionName, "[i64 1, i64 ptrtoint([5 x i64]* " + errorConstantName + " to i64)]")
+                genericFunctionsErrors.put(functionName, "{i64 ptrtoint([5 x i64]* " + errorConstantName + " to i64), i32 1}")
     do
         var typesArray Array = Array.repeat("", usedData.types~().length~())
         parse typeName, typeNumber = usedData.types~()
@@ -642,7 +642,7 @@ def createProgram(compiledData CData, outputFile String)
             typesArray.setItem{
                 (index,
                 stringConstantName + " = private unnamed_addr constant " + llvmStringType + " " + llvmStringData + ", align 8\n"
-                "@ctn." + typeNumber + " = private unnamed_addr constant [2 x i64] [i64 4, i64 ptrtoint(" + llvmStringType + "* " + stringConstantName + " to i64)], align 8\n")
+                "@ctn." + typeNumber + " = private unnamed_addr constant {i64, i32} {i64 ptrtoint(" + llvmStringType + "* " + stringConstantName + " to i64), i32 4}, align 8\n")
             }
         parse _, line = typesArray
             llvmIR += line
@@ -651,7 +651,7 @@ def createProgram(compiledData CData, outputFile String)
         var constantsInitFunction String = "define private void @constnants.init() nounwind noinline{\n"
         var registerNumber Int = 1
         parse constantName, code = usedData.constants~()
-            constantsInitFunction += "\t%" + registerNumber.toString() + " = call [2 x i64] @get.c." + constantName.replacePart$("::", ".") + "() noinline\n"
+            constantsInitFunction += "\t%" + registerNumber.toString() + " = call {i64, i32} @get.c." + constantName.replacePart$("::", ".") + "() noinline\n"
             llvmIR += code + "\n"
             registerNumber++
         llvmIR += constantsInitFunction + "\tret void\n}\n\n" + builtinFunctions(mainFunctionMayThrow)
@@ -681,17 +681,17 @@ def createProgram(compiledData CData, outputFile String)
                     const typePointerRegister String = typeRegister
                     typeRegister = (newRegisterNumber + 1).toString()
                     llvmIR += {
-                        "\t%" + typePointerRegister + " = getelementptr [2 x i64], [2 x i64]* %" + thisTypeArgumentIndex + ", i64 0, i32 0\n"
-                        "\t%" + typeRegister + " = load i64, i64* %" + typePointerRegister + "\n"
+                        "\t%" + typePointerRegister + " = getelementptr {i64, i32}, {i64, i32}* %" + thisTypeArgumentIndex + ", i64 0, i32 1\n"
+                        "\t%" + typeRegister + " = load i32, i32* %" + typePointerRegister + ", align 4\n"
                     }
                     newRegisterNumber += 2
                 else
-                    llvmIR += "\t%" + typeRegister + " = extractvalue [2 x i64] %" + thisTypeArgumentIndex + ", 0\n"
+                    llvmIR += "\t%" + typeRegister + " = extractvalue {i64, i32} %" + thisTypeArgumentIndex + ", 1\n"
                     newRegisterNumber++
-                llvmIR += "\tswitch i64 %" + typeRegister + ", label %" + newRegisterNumber.toString() + " [\n"
+                llvmIR += "\tswitch i32 %" + typeRegister + ", label %" + newRegisterNumber.toString() + " [\n"
                 brs = "\t" + newRegisterNumber.toString() + ":\n"
                 newRegisterNumber++
-            brs += "\tret [2 x i64] " + genericFunctionsErrors[functionName] + "\n"
+            brs += "\tret {i64, i32} " + genericFunctionsErrors[functionName] + "\n"
             if !typesInGroups.empty?()
                 // [[ (number | 0x4000000000000000).toString(), numberAsString, name] ...]
                 var typesInGroupsArray Array = []
@@ -705,20 +705,20 @@ def createProgram(compiledData CData, outputFile String)
                     typesInGroupsArray.addItem([(typeNumber | 0x4000000000000000).toString(), typeNumberAsString, typeName])
                 typesInGroupsArray.sort(true)
                 var llvmArgumentsInCall String = "("
-                const splitedLLVmFunctionType Array = llvmFunctionType.split(']')
+                const splitedLLVmFunctionType Array = llvmFunctionType.split('}')
                 parse argumentRegisterNumber, afterTypePart = splitedLLVmFunctionType[2 : splitedLLVmFunctionType.length~()]
-                    llvmArgumentsInCall += (afterTypePart[0] == '*').select("[2 x i64]* %", "[2 x i64] %") + argumentRegisterNumber.toString() + ", "
+                    llvmArgumentsInCall += (afterTypePart[0] == '*').select("{i64, i32}* %", "{i64, i32} %") + argumentRegisterNumber.toString() + ", "
                 llvmArgumentsInCall.copy(llvmArgumentsInCall.length~() - 2, ")\n", 0, 2)
                 parse _, type = typesInGroupsArray
                     const newRegister String = newRegisterNumber.toString()
                     newRegisterNumber++
                     const resultRegister String = newRegisterNumber.toString()
                     newRegisterNumber++
-                    llvmIR += "\t\ti64 " + type[1] + ", label %" + newRegister + "\n"
+                    llvmIR += "\t\ti32 " + type[1] + ", label %" + newRegister + "\n"
                     brs += {
                         "\t" + newRegister + ":\n"
-                        "\t%" + resultRegister + " = call [2 x i64] " + createFunctionLLVMName(functionName, type[2], functionVariant[0] == '1', functionVariant[1] == '1', false) + llvmArgumentsInCall +
-                        "\tret [2 x i64] %" + resultRegister + "\n"
+                        "\t%" + resultRegister + " = call {i64, i32} " + createFunctionLLVMName(functionName, type[2], functionVariant[0] == '1', functionVariant[1] == '1', false) + llvmArgumentsInCall +
+                        "\tret {i64, i32} %" + resultRegister + "\n"
                     }
                 llvmIR += "\t]\n" + brs
             llvmIR += "}\n\n"
@@ -726,7 +726,7 @@ def createProgram(compiledData CData, outputFile String)
             llvmIR += functionCode
     genericFunctionsErrors = Map()
     parse groupsAsString, functionName = usedData.inGroups~()
-        llvmIR += "define private i1 " + functionName + "(i64) alwaysinline nounwind readnone{\n"
+        llvmIR += "define private i1 " + functionName + "(i32) alwaysinline nounwind readnone{\n"
         const groups Array = groupsAsString.split(',')
         var allTypes Set = usedData.groupsTypes~()[groups[groups.length~() - 1]]
         for :(groupIndex Int = 0) groupIndex < groups.length~() - 1; groupIndex++
@@ -750,9 +750,9 @@ def createProgram(compiledData CData, outputFile String)
                     unreachable()
                 typesNumbersInGroups.addItem(typeNumber)
             typesNumbersInGroups.sort(true)
-            functionBody = "\tswitch i64 %0, label %false [\n"
+            functionBody = "\tswitch i32 %0, label %false [\n"
             parse _, typeNumber = typesNumbersInGroups
-                functionBody += "\t\ti64 " + typeNumber.toString() + ", label %true\n"
+                functionBody += "\t\ti32 " + typeNumber.toString() + ", label %true\n"
             functionBody += {
                 "\t]\n"
                 "\ttrue:\n"
@@ -761,7 +761,7 @@ def createProgram(compiledData CData, outputFile String)
                 "\tret i1 0\n"
             }
         llvmIR += functionBody + "}\n\n"
-    llvmIR += "define private [2 x i64] @shar.type.number.to.type.name(i64) nounwind readnone{\n\tswitch i64 %0, label %notype [\n"
+    llvmIR += "define private {i64, i32} @shar.type.number.to.type.name(i32) nounwind readnone{\n\tswitch i32 %0, label %notype [\n"
     do
         var labelNumber Int = 2
         var labelsCode String = ""
@@ -769,7 +769,7 @@ def createProgram(compiledData CData, outputFile String)
         for :(index Int = 0) index < usedData.types~().length~(); index++
             const typeNumber String = index.toString()
             const label String = labelNumber.toString()
-            llvmIR += "\t\ti64 " + typeNumber + ", label %" + label + "\n"
+            llvmIR += "\t\ti32 " + typeNumber + ", label %" + label + "\n"
             labelsCode += "\t" + label + ":\n\tbr label %end\n"
             phiCode += "[@ctn." + typeNumber + ", %" + label + "], "
             labelNumber++
@@ -781,9 +781,9 @@ def createProgram(compiledData CData, outputFile String)
             "\tnotype:\n"
             "\tbr label %end\n"
             "\tend:\n"
-            "\t%" + phiRegisterNumber + " = phi [2 x i64]* " + phiCode + "[@shar.empty.string, %notype]\n"
-            "\t%" + resultRegisterNumber + " = load [2 x i64], [2 x i64]* %" + phiRegisterNumber + ", align 8\n"
-            "\tret [2 x i64] %" + resultRegisterNumber + "\n}\n\n"
+            "\t%" + phiRegisterNumber + " = phi {i64, i32}* " + phiCode + "[@shar.empty.string, %notype]\n"
+            "\t%" + resultRegisterNumber + " = load {i64, i32}, {i64, i32}* %" + phiRegisterNumber + ", align 8\n"
+            "\tret {i64, i32} %" + resultRegisterNumber + "\n}\n\n"
         }
     parse _, declare = usedData.llvmDeclares~()
         llvmIR += declare + "\n"
@@ -865,10 +865,10 @@ def builtinLLVMDeclaredFunctions() Map
         "shar__pipeline__get__data__for__free", "declare i64 @shar__pipeline__get__data__for__free(i64) local_unnamed_addr nounwind",
         "shar__pipeline__get__count__for__free", "declare i64 @shar__pipeline__get__count__for__free(i64) local_unnamed_addr nounwind",
         "shar__create__pipeline", "declare i64 @shar__create__pipeline() local_unnamed_addr nounwind",
-        "shar__pipeline__push", "declare void @shar__pipeline__push(i64, [2 x i64]) local_unnamed_addr nounwind",
-        "shar__pipeline__pop", "declare [2 x i64] @shar__pipeline__pop(i64) local_unnamed_addr nounwind",
+        "shar__pipeline__push", "declare void @shar__pipeline__push(i64, {i64, i32}) local_unnamed_addr nounwind",
+        "shar__pipeline__pop", "declare {i64, i32} @shar__pipeline__pop(i64) local_unnamed_addr nounwind",
         "shar__destroy__pipeline", "declare void @shar__destroy__pipeline(i64) local_unnamed_addr nounwind",
-        "shar__create__worker", "declare void @shar__create__worker([2 x i64] ([2 x i64], [2 x i64])*, [2 x i64], [2 x i64], [2 x i64] ([2 x i64])*) local_unnamed_addr nounwind",
+        "shar__create__worker", "declare void @shar__create__worker({i64, i32} ({i64, i32}, {i64, i32})*, {i64, i32}, {i64, i32}, {i64, i32} ({i64, i32})*) local_unnamed_addr nounwind",
         "shar__yield", "declare void @shar__yield() local_unnamed_addr nounwind",
         "shar__sleep", "declare void @shar__sleep(i64) local_unnamed_addr nounwind",
         "shar__get__threads__number", "declare i64 @shar__get__threads__number() local_unnamed_addr nounwind",
@@ -893,7 +893,7 @@ def builtinLLVMDeclaredFunctions() Map
 def builtinConstants() String
     return {
         "@empty.string = private unnamed_addr constant [8 x i16] zeroinitializer, align 8\n"
-        "@shar.empty.string = private unnamed_addr constant [2 x i64] [i64 4, i64 ptrtoint ([8 x i16]* @empty.string to i64)], align 8\n"
+        "@shar.empty.string = private unnamed_addr constant {i64, i32} {i64 ptrtoint ([8 x i16]* @empty.string to i64), i32 4}, align 8\n"
         "@empty.list = private unnamed_addr constant [2 x i64] zeroinitializer, align 8\n"
         "@empty.array = private unnamed_addr constant [3 x i64] zeroinitializer, align 8\n"
         "@not.enough.memory.message = private unnamed_addr constant [20 x i8] c\qNot enough memory.\\0A\\00\q, align 1\n"
@@ -906,14 +906,14 @@ def builtinFunctions(mainFunctionMayThrow Bool) String
         "\tcall void @shar__init(i32 %0, i8** %1)\n"
         "\tcall void @constnants.init()\n"
         "\tcall void @shar__enable__threads()\n"
-        "\t%3 = call [2 x i64] " + createFunctionLLVMName("Main::main", "", false, mainFunctionMayThrow || const::ignoreNoThrow, false) + "()\n"
-        "\t%4 = extractvalue [2 x i64] %3, 0\n"
-        "\t%5 = icmp eq i64 %4, 1\n"
+        "\t%3 = call {i64, i32} " + createFunctionLLVMName("Main::main", "", false, mainFunctionMayThrow || const::ignoreNoThrow, false) + "()\n"
+        "\t%4 = extractvalue {i64, i32} %3, 1\n"
+        "\t%5 = icmp eq i32 %4, 1\n"
         "\tbr i1 %5, label %6, label %23\n"
         "\t6:\n"
-        "\t%7 = call [2 x i64] @shar.error.get.data([2 x i64] %3)\n"
-        "\t%8 = call [2 x i64] " + createFunctionLLVMName("STD::shar__rc_free", "", const::ignoreNoThrow, const::ignoreNoThrow, false) + "([2 x i64] %7)\n"
-        "\t%9 = extractvalue [2 x i64] %3, 1\n"
+        "\t%7 = call {i64, i32} @shar.error.get.data({i64, i32} %3)\n"
+        "\t%8 = call {i64, i32} " + createFunctionLLVMName("STD::shar__rc_free", "", const::ignoreNoThrow, const::ignoreNoThrow, false) + "({i64, i32} %7)\n"
+        "\t%9 = extractvalue {i64, i32} %3, 0\n"
         "\t%10 = inttoptr i64 %9 to i64*\n"
         "\t%11 = load i64, i64* %10, align 8\n"
         "\t%12 = icmp eq i64 %11, 2\n"
@@ -968,51 +968,52 @@ def builtinFunctions(mainFunctionMayThrow Bool) String
         "\tcall void @free(i8* %2)\n"
         "\tret void\n"
         "}\n\n"
-        "define private [2 x i64] @shar.error.get.id([2 x i64]) alwaysinline nounwind {\n"
-        "\t%2 = extractvalue [2 x i64] %0, 1\n"
+        "define private {i64, i32} @shar.error.get.id({i64, i32}) alwaysinline nounwind {\n"
+        "\t%2 = extractvalue {i64, i32} %0, 0\n"
         "\t%3 = inttoptr i64 %2 to i64*\n"
         "\t%4 = load i64, i64* %3, align 8\n"
-        "\t%5 = insertvalue [2 x i64] [i64 3, i64 0], i64 %4, 1\n"
-        "\tret [2 x i64] %5\n"
+        "\t%5 = insertvalue {i64, i32} {i64 0, i32 3}, i64 %4, 0\n"
+        "\tret {i64, i32} %5\n"
         "}\n\n"
-        "define private [2 x i64] @shar.error.get.message([2 x i64]) alwaysinline nounwind {\n"
-        "\t%2 = extractvalue [2 x i64] %0, 1\n"
+        "define private {i64, i32} @shar.error.get.message({i64, i32}) alwaysinline nounwind {\n"
+        "\t%2 = extractvalue {i64, i32} %0, 0\n"
         "\t%3 = inttoptr i64 %2 to i64*\n"
         "\t%4 = getelementptr i64, i64* %3, i64 1\n"
         "\t%5 = load i64, i64* %4, align 8\n"
-        "\t%6 = insertvalue [2 x i64] [i64 4, i64 0], i64 %5, 1\n"
-        "\tret [2 x i64] %6\n"
+        "\t%6 = insertvalue {i64, i32} {i64 0, i32 4}, i64 %5, 0\n"
+        "\tret {i64, i32} %6\n"
         "}\n\n"
-        "define private [2 x i64] @shar.error.get.data([2 x i64]) alwaysinline nounwind {\n"
-        "\t%2 = extractvalue [2 x i64] %0, 1\n"
+        "define private {i64, i32} @shar.error.get.data({i64, i32}) alwaysinline nounwind {\n"
+        "\t%2 = extractvalue {i64, i32} %0, 0\n"
         "\t%3 = inttoptr i64 %2 to i64*\n"
         "\t%4 = getelementptr i64, i64* %3, i64 3\n"
         "\t%5 = getelementptr i64, i64* %3, i64 4\n"
         "\t%6 = load i64, i64* %4, align 8\n"
         "\t%7 = load i64, i64* %5, align 8\n"
-        "\t%8 = insertvalue [2 x i64] undef, i64 %6, 0\n"
-        "\t%9 = insertvalue [2 x i64] %8, i64 %7, 1\n"
-        "\tret [2 x i64] %9\n"
+        "\t%8 = trunc i64 %6 to i32\n"
+        "\t%9 = insertvalue {i64, i32} undef, i64 %7, 0\n"
+        "\t%10 = insertvalue {i64, i32} %9, i32 %8, 1\n"
+        "\tret {i64, i32} %10\n"
         "}\n\n"
-        "define private void @shar.error.free([2 x i64]) noinline nounwind {\n"
-        "\t%2 = extractvalue [2 x i64] %0, 1\n"
+        "define private void @shar.error.free({i64, i32}) noinline nounwind {\n"
+        "\t%2 = extractvalue {i64, i32} %0, 0\n"
         "\t%3 = inttoptr i64 %2 to i64*\n"
         "\t%4 = getelementptr i64, i64* %3, i64 2\n"
         "\t%5 = load i64, i64* %4, align 8\n"
         "\t%6 = trunc i64 %5 to i1\n"
         "\tbr i1 %6, label %7, label %12\n"
         "\t7:\n"
-        "\t%8 = call [2 x i64] @shar.error.get.message([2 x i64] %0)\n"
-        "\t%9 = call [2 x i64] " + createFunctionLLVMName("STD::shar__rc_free", "STD::String", const::ignoreNoThrow, const::ignoreNoThrow, false) + "([2 x i64] %8)\n"
-        "\t%10 = call [2 x i64] @shar.error.get.data([2 x i64] %0)\n"
-        "\t%11 = call [2 x i64] " + createFunctionLLVMName("STD::shar__rc_free", "", const::ignoreNoThrow, const::ignoreNoThrow, false) + "([2 x i64] %10)\n"
+        "\t%8 = call {i64, i32} @shar.error.get.message({i64, i32} %0)\n"
+        "\t%9 = call {i64, i32} " + createFunctionLLVMName("STD::shar__rc_free", "STD::String", const::ignoreNoThrow, const::ignoreNoThrow, false) + "({i64, i32} %8)\n"
+        "\t%10 = call {i64, i32} @shar.error.get.data({i64, i32} %0)\n"
+        "\t%11 = call {i64, i32} " + createFunctionLLVMName("STD::shar__rc_free", "", const::ignoreNoThrow, const::ignoreNoThrow, false) + "({i64, i32} %10)\n"
         "\tcall void @shar.free(i64* %3)\n"
         "\tbr label %12\n"
         "\t12:\n"
         "\tret void\n"
         "}\n\n"
-        "define private [2 x i64] @shar.error.add.to.message([2 x i64], i64) noinline nounwind {\n"
-        "\t%3 = extractvalue [2 x i64] %0, 1\n"
+        "define private {i64, i32} @shar.error.add.to.message({i64, i32}, i64) noinline nounwind {\n"
+        "\t%3 = extractvalue {i64, i32} %0, 0\n"
         "\t%4 = inttoptr i64 %3 to i64*\n"
         "\t%5 = load i64, i64* %4, align 8\n"
         "\t%6 = icmp eq i64 %5, 2\n"
@@ -1090,10 +1091,10 @@ def builtinFunctions(mainFunctionMayThrow Bool) String
         "\t%59 = ptrtoint i64* %39 to i64\n"
         "\tstore i64 %59, i64* %58, align 8\n"
         "\t%60 = ptrtoint i64* %57 to i64\n"
-        "\t%61 = insertvalue [2 x i64] %0, i64 %60, 1\n"
+        "\t%61 = insertvalue {i64, i32} %0, i64 %60, 0\n"
         "\tbr label %62\n"
         "\t62:\n"
-        "\t%63 = phi [2 x i64] [%0, %2], [%61, %56]\n"
-        "\tret [2 x i64] %63\n"
+        "\t%63 = phi {i64, i32} [%0, %2], [%61, %56]\n"
+        "\tret {i64, i32} %63\n"
         "}\n\n"
     }

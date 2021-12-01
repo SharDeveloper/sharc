@@ -214,16 +214,16 @@ def callFunction(functionName Token, arguments Array, write codeData CodeData, c
             if argumentWithCorrectAccess.type~().simple?() && !argumentWithCorrectAccess.Main::constant?()
                 var typeRegister String = ""
                 if argumentWithCorrectAccess.access~() == enum::access_write
-                    const typePointerRegister String = codeData.createRegister("getelementptr [2 x i64], [2 x i64]* " + argumentWithCorrectAccess.value~() + ", i64 0, i32 0", assumes)
-                    typeRegister = codeData.createRegister("load i64, i64* " + typePointerRegister + ", align 8", assumes)
+                    const typePointerRegister String = codeData.createRegister("getelementptr {i64, i32}, {i64, i32}* " + argumentWithCorrectAccess.value~() + ", i64 0, i32 1", assumes)
+                    typeRegister = codeData.createRegister("load i32, i32* " + typePointerRegister + ", align 4", assumes)
                 else
-                    typeRegister = codeData.createRegister("extractvalue [2 x i64] " + argumentWithCorrectAccess.value~() + ", 0", assumes)
-                var trueRegister String = codeData.createRegister("icmp eq i64 " + typeRegister + ", ##tnum##" + oTypeToToken(argumentWithCorrectAccess.type~(), false).text~() + "##", assumes)
+                    typeRegister = codeData.createRegister("extractvalue {i64, i32} " + argumentWithCorrectAccess.value~() + ", 1", assumes)
+                var trueRegister String = codeData.createRegister("icmp eq i32 " + typeRegister + ", ##tnum##" + oTypeToToken(argumentWithCorrectAccess.type~(), false).text~() + "##", assumes)
                 if argumentWithCorrectAccess.type~().optional?()
-                    const isNothingRegister String = codeData.createRegister("icmp eq i64 " + typeRegister + ", 0", assumes)
+                    const isNothingRegister String = codeData.createRegister("icmp eq i32 " + typeRegister + ", 0", assumes)
                     trueRegister = codeData.createRegister("or i1 " + trueRegister + ", " + isNothingRegister, assumes)
                 assumes += "\tcall void @llvm.assume(i1 " + trueRegister + ")\n"
-            functionCallIRCode += (argumentFromSignature.access~() == enum::access_write).select("[2 x i64]* ", "[2 x i64] ") + argumentWithCorrectAccess.value~() + ", "
+            functionCallIRCode += (argumentFromSignature.access~() == enum::access_write).select("{i64, i32}* ", "{i64, i32} ") + argumentWithCorrectAccess.value~() + ", "
         functionCallIRCode.delete(functionCallIRCode.length~() - 2, 2)
         var codeText String = code.text`("")
         codeText.delete(codeText.length~() - 2, 2)
@@ -240,17 +240,17 @@ def callFunction(functionName Token, arguments Array, write codeData CodeData, c
     llvmIR += assumes
     if isWorker
         llvmIR += {
-            "\tcall void @shar__create__worker([2 x i64] ([2 x i64], [2 x i64])* ##" + functionCallPrefix + function.fullName~() +
-            "##, [2 x i64] " + arguments[0].toReadOnly(codeData, llvmIR).value~() +
-            ", [2 x i64] " + arguments[1].toReadOnly(codeData, llvmIR).value~() +
-            ", [2 x i64] ([2 x i64])* ##ancntfunc##STD::shar__rc_free##)\n"
+            "\tcall void @shar__create__worker({i64, i32} ({i64, i32}, {i64, i32})* ##" + functionCallPrefix + function.fullName~() +
+            "##, {i64, i32} " + arguments[0].toReadOnly(codeData, llvmIR).value~() +
+            ", {i64, i32} " + arguments[1].toReadOnly(codeData, llvmIR).value~() +
+            ", {i64, i32} ({i64, i32})* ##ancntfunc##STD::shar__rc_free##)\n"
         }
     code.addChar(')')
     const result Operand = Operand{
         (code, enum::access_read,
         isWorker.select
             ("zeroinitializer",
-            codeData.createRegister("call [2 x i64] ##" + functionCallPrefix + functionCallIRCode + ")", llvmIR)),
+            codeData.createRegister("call {i64, i32} ##" + functionCallPrefix + functionCallIRCode + ")", llvmIR)),
         resultType, false, true, false, false, false)
     }
     if needFreeArguments
@@ -275,19 +275,19 @@ def runtimeCheckFunctionArguments(arguments Array, write codeData CodeData, writ
             var argumentTypeRegister String = ""
             const indexAsString String = index.toString()
             if argument.access~() == enum::access_write
-                const pointerRegister String = codeData.createRegister("getelementptr [2 x i64], [2 x i64]* %" + indexAsString + ", i64 0, i32 0", llvmIR)
-                argumentTypeRegister = codeData.createRegister("load i64, i64* " + pointerRegister + ", align 8", llvmIR)
+                const pointerRegister String = codeData.createRegister("getelementptr {i64, i32}, {i64, i32}* %" + indexAsString + ", i64 0, i32 1", llvmIR)
+                argumentTypeRegister = codeData.createRegister("load i32, i32* " + pointerRegister + ", align 4", llvmIR)
             else
-                const typeRegister String = codeData.createRegister("extractvalue [2 x i64] %" + indexAsString + ", 0", llvmIR)
+                const typeRegister String = codeData.createRegister("extractvalue {i64, i32} %" + indexAsString + ", 1", llvmIR)
                 argumentTypeRegister = typeRegister
             const typeAsString String = oTypeToToken(argument.type~(), false).text~()
             const typeIsCorrectRegisterValue String = argument.type~().simple?().select{
-                ("icmp eq i64 " + argumentTypeRegister + ", ##tnum##" + typeAsString + "##",
-                "call i1 ##ingroups##" + typeAsString[2 : typeAsString.length~() - 1] + "##(i64 " + argumentTypeRegister + ")")
+                ("icmp eq i32 " + argumentTypeRegister + ", ##tnum##" + typeAsString + "##",
+                "call i1 ##ingroups##" + typeAsString[2 : typeAsString.length~() - 1] + "##(i32 " + argumentTypeRegister + ")")
             }
             var typeIsCorrectRegister String = codeData.createRegister(typeIsCorrectRegisterValue, llvmIR)
             if argument.type~().optional?()
-                const typeIsNothingRegister String = codeData.createRegister("icmp eq i64 " + argumentTypeRegister + ", 0", llvmIR)
+                const typeIsNothingRegister String = codeData.createRegister("icmp eq i32 " + argumentTypeRegister + ", 0", llvmIR)
                 typeIsCorrectRegister = codeData.createRegister("or i1 " + typeIsCorrectRegister + ", " + typeIsNothingRegister, llvmIR)
             resultI1 = resultI1.empty?().select(typeIsCorrectRegister, codeData.createRegister("and i1 " + resultI1 + ", " + typeIsCorrectRegister, llvmIR))
     if !resultI1.empty?()
@@ -302,7 +302,7 @@ def runtimeCheckFunctionArguments(arguments Array, write codeData CodeData, writ
             "\tbr i1 " + allOkRegister + ", label %##reg##" + allOkLabel + "##, label %##reg##" + invalidTypeErrorLabel + "##\n"
             "\t##nreg##" + invalidTypeErrorLabel + "##:\n"
         }
-        llvmIR += "\tret [2 x i64] " + createError("0", "Invalid type.\\n<- " + codeData.functionNameForErrorMessage~()) + "\n\t##nreg##" + allOkLabel + "##:\n"
+        llvmIR += "\tret {i64, i32} " + createError("0", "Invalid type.\\n<- " + codeData.functionNameForErrorMessage~()) + "\n\t##nreg##" + allOkLabel + "##:\n"
 
 // The function generates llvm ir code for a function.
 def functionToFinalLLVMIR(compiledData CData, functionAndTypeName Token, write compilingConstants, write compilingFunctions Set, write usedData UsedData)
@@ -353,8 +353,8 @@ def functionToFinalLLVMIR(compiledData CData, functionAndTypeName Token, write c
                     compilingFunctions.add(const::emptyToken.replaceText(fullFunctionName))
                 const maybeSimpleFunction <>SimpleFunction = groupsFunctions.functions~()["-"]
                 simpleFunction = maybeSimpleFunction.nothing?().select(groupsFunctions.functions~()["+"], maybeSimpleFunction)
-            var llvmFunctionSignature String = "define private [2 x i64] " + createFunctionLLVMName(functionName.text~(), "", functionVariant[0] == '1', functionVariant[1] == '1', false) + "("
-            var llvmFunctionType String = "[2 x i64] ("
+            var llvmFunctionSignature String = "define private {i64, i32} " + createFunctionLLVMName(functionName.text~(), "", functionVariant[0] == '1', functionVariant[1] == '1', false) + "("
+            var llvmFunctionType String = "{i64, i32} ("
             var thisTypeArgumentIndex Int = -1
             parse index, argument = simpleFunction.signature~().arguments~()
                 if argument.type~().this?() && !argument.type~().optional?()
@@ -362,10 +362,10 @@ def functionToFinalLLVMIR(compiledData CData, functionAndTypeName Token, write c
                         thisTypeArgumentIndex = index
                     elif argument.access~() != enum::access_write && simpleFunction.signature~().arguments~()[thisTypeArgumentIndex].access~() == enum::access_write
                         thisTypeArgumentIndex = index
-                llvmFunctionType += (argument.access~() == enum::access_write).select("[2 x i64]* noalias, ", "[2 x i64], ")
+                llvmFunctionType += (argument.access~() == enum::access_write).select("{i64, i32}* noalias, ", "{i64, i32}, ")
             const thisTypeArgumentIsMutable String = (simpleFunction.signature~().arguments~()[thisTypeArgumentIndex].access~() == enum::access_write).select("1", "0")
             llvmFunctionType.delete(llvmFunctionType.length~() - 2, 2)
-            llvmFunctionSignature += llvmFunctionType[11 : llvmFunctionType.length~()]
+            llvmFunctionSignature += llvmFunctionType[12 : llvmFunctionType.length~()]
             var usedFunctions Map = usedData.functions`(nothing)
             usedFunctions.put(isSuperFunction.select(functionAndTypeName.text~()[1 : functionAndTypeName.text~().length~()], functionAndTypeName.text~()), "|" + thisTypeArgumentIndex.toString() + "|" + (simpleFunction.signature~().arguments~().length~() + 1).toString() + "|" + groupsListAsString + "|" + llvmFunctionType + ")*|" + llvmFunctionSignature + ") nounwind {\n|" + thisTypeArgumentIsMutable)
             usedData.functions`(usedFunctions)
@@ -382,10 +382,10 @@ def functionToFinalLLVMIR(compiledData CData, functionAndTypeName Token, write c
                 if maybeSimpleFunction.nothing?()
                     errorNotFound(functionAndTypeName, "function")
             simpleFunction = maybeSimpleFunction
-    var llvmFunction String = "define private [2 x i64] " + createFunctionLLVMName(functionName.text~(), typeName.text~(), functionVariant[0] == '1', functionVariant[1] == '1', isSuperFunction) + "("
+    var llvmFunction String = "define private {i64, i32} " + createFunctionLLVMName(functionName.text~(), typeName.text~(), functionVariant[0] == '1', functionVariant[1] == '1', isSuperFunction) + "("
     if !simpleFunction.signature~().arguments~().empty?()
         parse _, argument = simpleFunction.signature~().arguments~()
-            llvmFunction += (argument.access~() == enum::access_write).select("[2 x i64]* noalias, ", "[2 x i64], ")
+            llvmFunction += (argument.access~() == enum::access_write).select("{i64, i32}* noalias, ", "{i64, i32}, ")
         llvmFunction.delete(llvmFunction.length~() - 2, 2)
     var inlineAttribute String = ""
     const attributes FAttributes = simpleFunction.attributes~()

@@ -152,7 +152,7 @@ def compilePatternMatching(block Block, write codeData CodeData, compiledData CD
                         Operand(
                             name.replaceText(indexAsString),
                             enum::access_read,
-                            "[i64 ##tnum##STD::Int##, i64 " + indexAsString + "]",
+                            "{i64 " + indexAsString + ", i32 ##tnum##STD::Int##}",
                             OType(name.replaceText("STD::Int"), false),
                             true, true, false, false, false
                         )
@@ -174,7 +174,7 @@ def compilePatternMatching(block Block, write codeData CodeData, compiledData CD
             const value Operand = values[valueIndex]
             valueIndex++
             operand.freeOperand(codeData, compiledData, llvmIR)
-            llvmIR += "\tstore [2 x i64] " + value.value~() + ", [2 x i64]* " + operand.value~() + ", align 8\n"
+            llvmIR += "\tstore {i64, i32} " + value.value~() + ", {i64, i32}* " + operand.value~() + ", align 8\n"
 
 // The function creates a new constant in the function.
 def compileConstantDefine(block Block, write codeData CodeData, compiledData CData, write llvmIR String)
@@ -212,7 +212,7 @@ def compileConstantDefine(block Block, write codeData CodeData, compiledData CDa
                             Operand(
                                 name.replaceText(indexAsString),
                                 enum::access_read,
-                                "[i64 ##tnum##STD::Int##, i64 " + indexAsString + "]",
+                                "{i64 " + indexAsString + ", i32 ##tnum##STD::Int##}",
                                 OType(name.replaceText("STD::Int"), false),
                                 true, true, false, false, false
                             )
@@ -310,7 +310,7 @@ def compileVariableDefine(block Block, write codeData CodeData, compiledData CDa
                             Operand(
                                 name.replaceText(indexAsString),
                                 enum::access_read,
-                                "[i64 ##tnum##STD::Int##, i64 " + indexAsString + "]",
+                                "{i64 " + indexAsString + ", i32 ##tnum##STD::Int##}",
                                 OType(name.replaceText("STD::Int"), false),
                                 true, true, false, false, false
                             )
@@ -329,7 +329,7 @@ def compileVariableDefine(block Block, write codeData CodeData, compiledData CDa
                 const type OType = types[index]
                 valueIndex++
                 const mutableRegister String = codeData.newAlloc()
-                llvmIR += "\tstore [2 x i64] " + value.value~() + ", [2 x i64]* " + mutableRegister + ", align 8\n"
+                llvmIR += "\tstore {i64, i32} " + value.value~() + ", {i64, i32}* " + mutableRegister + ", align 8\n"
                 var namedOperands Map = codeData.namedOperands`(nothing)
                 if !namedOperands.put{
                     (name.text~(),
@@ -356,7 +356,7 @@ def compileVariableDefine(block Block, write codeData CodeData, compiledData CDa
         if value.named?()
             value.useOperand(codeData, compiledData, llvmIR)
         const mutableRegister String = codeData.newAlloc()
-        llvmIR += "\tstore [2 x i64] " + value.value~() + ", [2 x i64]* " + mutableRegister + ", align 8\n"
+        llvmIR += "\tstore {i64, i32} " + value.value~() + ", {i64, i32}* " + mutableRegister + ", align 8\n"
         var namedOperands Map = codeData.namedOperands`(nothing)
         if !namedOperands.put{
             (name.text~(),
@@ -426,7 +426,7 @@ def compileFor(block Block, write codeData CodeData, compiledData CData, write l
             if value.named?()
                 value.useOperand(codeData, compiledData, llvmIR)
             const mutableRegister String = codeData.newAlloc()
-            llvmIR += "\tstore [2 x i64] " + value.value~() + ", [2 x i64]* " + mutableRegister + ", align 8\n"
+            llvmIR += "\tstore {i64, i32} " + value.value~() + ", {i64, i32}* " + mutableRegister + ", align 8\n"
             var namedOperands Map = codeData.namedOperands`(nothing)
             if !namedOperands.put{
                 (forName.text~(),
@@ -460,7 +460,7 @@ def compileFor(block Block, write codeData CodeData, compiledData CData, write l
         llvmIR += "\tbr label %##reg##" + codeStartLabel + "##\n"
     else
         const predicate Operand = block.getExpression(tokenIndex).compileExpression(const::boolType, codeData, compiledData, [], llvmIR).toReadOnly(codeData, llvmIR)
-        const predicateI64Register String = codeData.createRegister("extractvalue [2 x i64] " + predicate.value~() + ", 1", llvmIR)
+        const predicateI64Register String = codeData.createRegister("extractvalue {i64, i32} " + predicate.value~() + ", 0", llvmIR)
         const predicateI1Register String = codeData.createRegister("trunc i64 " + predicateI64Register + " to i1", llvmIR)
         llvmIR += "\tbr i1 " + predicateI1Register + ", label %##reg##" + codeStartLabel + "##, label %##reg##" + endLabel + "##\n"
     llvmIR += "\t##nreg##" + codeStartLabel + "##:\n"
@@ -558,7 +558,7 @@ def compileParse(block Block, write codeData CodeData, compiledData CData, write
     var hiddenIndex Operand = callFunction(const::emptyToken.replaceText("STD::parse__init"), [parsedOperand], codeData, compiledData, [], false, llvmIR)
     const hiddenIndexVariableName String = parsedHideName + ".index"
     const indexMutableRegister String = codeData.newAlloc()
-    llvmIR += "\tstore [2 x i64] " + hiddenIndex.value~() + ", [2 x i64]* " + indexMutableRegister + ", align 8\n"
+    llvmIR += "\tstore {i64, i32} " + hiddenIndex.value~() + ", {i64, i32}* " + indexMutableRegister + ", align 8\n"
     hiddenIndex = Operand{
         (const::emptyToken.replaceText(hiddenIndexVariableName),
         enum::access_write,
@@ -586,7 +586,7 @@ def compileParse(block Block, write codeData CodeData, compiledData CData, write
         codeData.nextLabels`(nextLabels)
     llvmIR += "\tbr label %##reg##" + parseStartLabel + "##\n\t##nreg##" + parseStartLabel + "##:\n"
     const predicate Operand = callFunction(const::emptyToken.replaceText("STD::parse__predicate"), [parsedOperand, hiddenIndex], codeData, compiledData, [], false, llvmIR)
-    const predicateI64Register String = codeData.createRegister("extractvalue [2 x i64] " + predicate.value~() + ", 1", llvmIR)
+    const predicateI64Register String = codeData.createRegister("extractvalue {i64, i32} " + predicate.value~() + ", 0", llvmIR)
     const predicateI1Register String = codeData.createRegister("trunc i64 " + predicateI64Register + " to i1", llvmIR)
     llvmIR += "\tbr i1 " + predicateI1Register + ", label %##reg##" + codeStartLabel + "##, label %##reg##" + endLabel + "##\n\t##nreg##" + codeStartLabel + "##:\n"
     if !keyName.empty?()
@@ -642,20 +642,20 @@ def compileGroupParse(block Block, write codeData CodeData, compiledData CData, 
     const nextLabel String = codeData.createLabel()
     const endLabel String = codeData.createLabel()
     llvmIR += "\tbr label %##reg##" + parseStartLabel + "##\n\t##nreg##" + parseStartLabel + "##:\n"
-    const countAndTypesRegister String = codeData.createRegister("bitcast ##glist##" + groupFullName + "## to i64*", llvmIR)
-    const countRegister String = codeData.createRegister("load i64, i64* " + countAndTypesRegister + ", align 8", llvmIR)
+    const countAndTypesRegister String = codeData.createRegister("bitcast ##glist##" + groupFullName + "## to i32*", llvmIR)
+    const countRegister String = codeData.createRegister("load i32, i32* " + countAndTypesRegister + ", align 4", llvmIR)
     llvmIR += "\tbr label %##reg##" + loopStartLabel + "##\n\t##nreg##" + loopStartLabel + "##:\n"
     const incTypeIndex String = codeData.registerCounter~().toString()
     codeData.registerCounter`(codeData.registerCounter~() + 1)
-    const typeIndex String = codeData.createRegister("phi i64 [1, %##reg##" + parseStartLabel + "##], [%##reg##" + incTypeIndex + "##, %##reg##" + nextLabel + "##]", llvmIR)
-    const needToStartCode String = codeData.createRegister("icmp ule i64 " + typeIndex + ", " + countRegister, llvmIR)
+    const typeIndex String = codeData.createRegister("phi i32 [1, %##reg##" + parseStartLabel + "##], [%##reg##" + incTypeIndex + "##, %##reg##" + nextLabel + "##]", llvmIR)
+    const needToStartCode String = codeData.createRegister("icmp ule i32 " + typeIndex + ", " + countRegister, llvmIR)
     llvmIR += {
         "\tbr i1 " + needToStartCode + ", label %##reg##" + codeStartLabel + "##, label %##reg##" + endLabel + "##\n"
         "\t##nreg##" + codeStartLabel + "##:\n"
     }
-    const typeI64PointerRegister String = codeData.createRegister("getelementptr i64, i64* " + countAndTypesRegister + ", i64 " + typeIndex, llvmIR)
-    const typeI64Register String = codeData.createRegister("load i64, i64* " + typeI64PointerRegister + ", align 8", llvmIR)
-    const typeRegister String = codeData.createRegister("insertvalue [2 x i64] zeroinitializer, i64 " + typeI64Register + ", 0", llvmIR)
+    const typeI64PointerRegister String = codeData.createRegister("getelementptr i32, i32* " + countAndTypesRegister + ", i64 " + typeIndex, llvmIR)
+    const typeI64Register String = codeData.createRegister("load i32, i32* " + typeI64PointerRegister + ", align 4", llvmIR)
+    const typeRegister String = codeData.createRegister("insertvalue {i64, i32} zeroinitializer, i32 " + typeI64Register + ", 1", llvmIR)
     var namedOperands Map = codeData.namedOperands`(nothing)
     if !namedOperands.put{
         (typeConstantName.text~(),
@@ -699,7 +699,7 @@ def compileGroupParse(block Block, write codeData CodeData, compiledData CData, 
     codeData.deleteLevel(codeData.level~())
     llvmIR += {
         "\t##nreg##" + nextLabel + "##:\n"
-        "\t%##nreg##" + incTypeIndex + "## = add i64 1, " + typeIndex + "\n"
+        "\t%##nreg##" + incTypeIndex + "## = add i32 1, " + typeIndex + "\n"
         "\tbr label %##reg##" + loopStartLabel + "##\n\t##nreg##" + endLabel + "##:\n"
     }
     namedOperands = codeData.namedOperands`(nothing)
@@ -733,7 +733,7 @@ def compileIf(ifBlocks Array, write codeData CodeData, compiledData CData, write
         default
             errorNotExpectedToken(firstToken, "else")
         if !predicate.empty?()
-            predicate = codeData.createRegister("extractvalue [2 x i64] " + predicate + ", 1", llvmIR)
+            predicate = codeData.createRegister("extractvalue {i64, i32} " + predicate + ", 0", llvmIR)
             predicate = codeData.createRegister("trunc i64 " + predicate + " to i1", llvmIR)
             llvmIR += "\tbr i1 " + predicate + ", label %##reg##" + trueLabel + "##, label %##reg##" + falseLabel + "##\n\t##nreg##" + trueLabel + "##:\n"
         codeData.level`(codeData.level~() + 1)
@@ -764,7 +764,7 @@ def compileReturn(block Block, write codeData CodeData, compiledData CData, writ
                 codeData.namedOperands`(namedOperands)
         returnLLVMValue = returnValue.value~()
     codeData.freeLevel(1, compiledData, llvmIR)
-    llvmIR += "\tret [2 x i64] " + returnLLVMValue + "\n"
+    llvmIR += "\tret {i64, i32} " + returnLLVMValue + "\n"
     if !enslavedOperand.toList().empty?()
         var namedOperands Map = codeData.namedOperands`(nothing)
         namedOperands.put(enslavedOperand.operand~().code~().text~(), enslavedOperand)
@@ -887,10 +887,10 @@ def compileTypeSwitch(switchBlocks Array, haveDefault Bool, write codeData CodeD
                 if caseBlock.eol?(tokenIndex)
                     end loop
                 caseBlock.next!(tokenIndex, [","])
-    const operandTypeNumber String = codeData.createRegister("extractvalue [2 x i64] " + operand.value~() + ", 0", llvmIR)
-    llvmIR += "\tswitch i64 " + operandTypeNumber + ", label %##reg##" + haveDefault.select(labels[labels.length~() - 1], endLabel) + "## [\n"
+    const operandTypeNumber String = codeData.createRegister("extractvalue {i64, i32} " + operand.value~() + ", 1", llvmIR)
+    llvmIR += "\tswitch i32 " + operandTypeNumber + ", label %##reg##" + haveDefault.select(labels[labels.length~() - 1], endLabel) + "## [\n"
     parse caseIndex, caseType = allTypes
-        llvmIR += "\t\ti64 ##tnum##" + caseType + "##, label %##reg##" + labels[casesLabelsIndexes[caseIndex]] + "##\n"
+        llvmIR += "\t\ti32 ##tnum##" + caseType + "##, label %##reg##" + labels[casesLabelsIndexes[caseIndex]] + "##\n"
     llvmIR += "\t]\n"
     parse caseIndex, caseBlock = casesBlocks
         codeData.level`(codeData.level~() + 1)
@@ -950,7 +950,7 @@ def compileEnumSwitch(switchBlocks Array, haveDefault Bool, write codeData CodeD
                 if caseBlock.eol?(tokenIndex)
                     end loop
                 caseBlock.next!(tokenIndex, [","])
-    const operandAsI64 String = codeData.createRegister("extractvalue [2 x i64] " + operand.value~() + ", 1", llvmIR)
+    const operandAsI64 String = codeData.createRegister("extractvalue {i64, i32} " + operand.value~() + ", 0", llvmIR)
     llvmIR += "\tswitch i64 " + operandAsI64 + ", label %##reg##" + haveDefault.select(labels[labels.length~() - 1], endLabel) + "## [\n"
     parse caseIndex, element = enumElements
         llvmIR += "\t\ti64 ##enum##" + element + "##, label %##reg##" + labels[casesLabelsIndexes[caseIndex]] + "##\n"
@@ -1019,10 +1019,10 @@ def compileTest(testBlock Block, write codeData CodeData, compiledData CData, wr
             var testedResultValueI64 String = ""
             eSwitch testedResultOperand.access~()
             case access_write
-                const testedResultValueI64Pointer String = codeData.createRegister("getelementptr [2 x i64], [2 x i64]* " + testedResultOperand.value~() + ", i64 0, i32 1", llvmIR)
+                const testedResultValueI64Pointer String = codeData.createRegister("getelementptr {i64, i32}, {i64, i32}* " + testedResultOperand.value~() + ", i64 0, i32 0", llvmIR)
                 testedResultValueI64 = codeData.createRegister("load i64, i64* " + testedResultValueI64Pointer + ", align 8", llvmIR)
             case access_read
-                testedResultValueI64 = codeData.createRegister("extractvalue [2 x i64] " + testedResultOperand.value~() + ", 1", llvmIR)
+                testedResultValueI64 = codeData.createRegister("extractvalue {i64, i32} " + testedResultOperand.value~() + ", 0", llvmIR)
             case access_noread
                 errorWrongAccess(testedResultOperand.code~(), "read", "no read")
             default
@@ -1036,11 +1036,11 @@ def compileTest(testBlock Block, write codeData CodeData, compiledData CData, wr
         catchLabels.delete(catchLabels.length~() - 1, 1)
         codeData.catchLabels`(catchLabels)
         catchLabels = []
-        const errorRegister String = codeData.createRegister("load [2 x i64], [2 x i64]* %##reg##0##, align 8", llvmIR)
+        const errorRegister String = codeData.createRegister("load {i64, i32}, {i64, i32}* %##reg##0##, align 8", llvmIR)
         var isExpectedErrorRegister String = ""
         if !expectedErrorCodes.empty?()
-            const errorID String = codeData.createRegister("call [2 x i64] @shar.error.get.id([2 x i64] " + errorRegister + ")", llvmIR)
-            const errorIDRegister String = codeData.createRegister("extractvalue [2 x i64] " + errorID + ", 1", llvmIR)
+            const errorID String = codeData.createRegister("call {i64, i32} @shar.error.get.id({i64, i32} " + errorRegister + ")", llvmIR)
+            const errorIDRegister String = codeData.createRegister("extractvalue {i64, i32} " + errorID + ", 0", llvmIR)
             parse _, errorCode = expectedErrorCodes
                 const errorEnumFullName String = compiledData.getEnumElementFullName(errorCode, false)
                 const isErrorRegister String = codeData.createRegister("icmp eq i64 " + errorIDRegister + ", ##enum##" + errorEnumFullName + "##", llvmIR)
@@ -1049,7 +1049,7 @@ def compileTest(testBlock Block, write codeData CodeData, compiledData CData, wr
                 else
                     isExpectedErrorRegister = codeData.createRegister("or i1 " + isExpectedErrorRegister + ", " + isErrorRegister, llvmIR)
         llvmIR += {
-            "\tcall void @shar.error.free([2 x i64] " + errorRegister + ")\n"
+            "\tcall void @shar.error.free({i64, i32} " + errorRegister + ")\n"
             "\tbr label %##reg##" + notErrorLabel + "##\n"
             "\t##nreg##" + notErrorLabel + "##:\n"
         }
@@ -1070,7 +1070,7 @@ def compileTest(testBlock Block, write codeData CodeData, compiledData CData, wr
         const failLineOperand Operand = Operand{
             (lineToken,
             enum::access_read,
-            "[i64 ##tnum##STD::Int##, i64 " + integerToLLVMI64(lineToken) + "]",
+            "{i64 " + integerToLLVMI64(lineToken) + ", i32 ##tnum##STD::Int##}",
             const::intType,
             true, true, false, false, false)
         }
@@ -1102,7 +1102,7 @@ def compileTryCatch(tryBlock, catchBlock Block, write codeData CodeData, compile
     llvmIR += "\t##nreg##" + catchLabel + "##:\n"
     var tokenIndex Int = 0
     catchBlock.next!(tokenIndex, ["catch"])
-    const errorRegister String = codeData.createRegister("load [2 x i64], [2 x i64]* %##reg##0##, align 8", llvmIR)
+    const errorRegister String = codeData.createRegister("load {i64, i32}, {i64, i32}* %##reg##0##, align 8", llvmIR)
     var idName Token = const::emptyToken
     var messageName Token = const::emptyToken
     var dataName Token = const::emptyToken
@@ -1118,7 +1118,7 @@ def compileTryCatch(tryBlock, catchBlock Block, write codeData CodeData, compile
         catchBlock.eol!(tokenIndex)
     codeData.level`(codeData.level~() + 1)
     if !idName.empty?()
-        const idRegister String = codeData.createRegister("call [2 x i64] @shar.error.get.id([2 x i64] " + errorRegister + ")", llvmIR)
+        const idRegister String = codeData.createRegister("call {i64, i32} @shar.error.get.id({i64, i32} " + errorRegister + ")", llvmIR)
         var namedOperands Map = codeData.namedOperands`(nothing)
         if !namedOperands.put{
             (idName.text~(), NamedOperand(codeData.level~(), Operand(
@@ -1132,7 +1132,7 @@ def compileTryCatch(tryBlock, catchBlock Block, write codeData CodeData, compile
             errorAlreadyExist(idName, "constant")
         codeData.namedOperands`(namedOperands)
     if !messageName.empty?()
-        const messageRegister String = codeData.createRegister("call [2 x i64] @shar.error.get.message([2 x i64] " + errorRegister + ")", llvmIR)
+        const messageRegister String = codeData.createRegister("call {i64, i32} @shar.error.get.message({i64, i32} " + errorRegister + ")", llvmIR)
         const messageOperand Operand = Operand{
             (messageName,
             enum::access_read,
@@ -1146,7 +1146,7 @@ def compileTryCatch(tryBlock, catchBlock Block, write codeData CodeData, compile
             errorAlreadyExist(messageName, "constant")
         codeData.namedOperands`(namedOperands)
     if !dataName.empty?()
-        const dataRegister String = codeData.createRegister("call [2 x i64] @shar.error.get.data([2 x i64] " + errorRegister + ")", llvmIR)
+        const dataRegister String = codeData.createRegister("call {i64, i32} @shar.error.get.data({i64, i32} " + errorRegister + ")", llvmIR)
         const dataOperand Operand = Operand{
             (dataName,
             enum::access_read,
@@ -1159,7 +1159,7 @@ def compileTryCatch(tryBlock, catchBlock Block, write codeData CodeData, compile
         if !namedOperands.put(dataName.text~(), NamedOperand(codeData.level~(), dataOperand)).nothing?()
             errorAlreadyExist(dataName, "constant")
         codeData.namedOperands`(namedOperands)
-    llvmIR += "\tcall void @shar.error.free([2 x i64] " + errorRegister + ")\n"
+    llvmIR += "\tcall void @shar.error.free({i64, i32} " + errorRegister + ")\n"
     lastIsTerminator = compileCode(catchBlock.subBlocks~(), codeData, compiledData, llvmIR)
     if !lastIsTerminator
         codeData.freeLevel(codeData.level~(), compiledData, llvmIR)
@@ -1199,11 +1199,11 @@ def compileVariableSet(block Block, write codeData CodeData, compiledData CData,
     if variableValue.named?()
         variableValue.useOperand(codeData, compiledData, llvmIR)
     variableOperand.operand~().freeOperand(codeData, compiledData, llvmIR)
-    llvmIR += "\tstore [2 x i64] " + variableValue.value~() + ", [2 x i64]* " + variableOperand.operand~().value~() + ", align 8\n"
+    llvmIR += "\tstore {i64, i32} " + variableValue.value~() + ", {i64, i32}* " + variableOperand.operand~().value~() + ", align 8\n"
 
 // The function creates a llvm ir "switch" statement for the type "STD::Int".
 def createIntSwitch(casesBlocks Array, operand Operand, haveDefault Bool, labels Array, endLabel String, write codeData CodeData, write llvmIR String)
-    const operandValue String = codeData.createRegister("extractvalue [2 x i64] " + operand.value~() + ", 1", llvmIR)
+    const operandValue String = codeData.createRegister("extractvalue {i64, i32} " + operand.value~() + ", 0", llvmIR)
     llvmIR += "\tswitch i64 " + operandValue + ", label "
     const caseIndexEdge Int = casesBlocks.length~() + haveDefault.select(-1, 0)
     llvmIR += "%##reg##" + haveDefault.select(labels[labels.length~() - 1], endLabel) + "## [\n"
@@ -1268,7 +1268,7 @@ def createStringSwitch(casesBlocks Array, operand Operand, haveDefault Bool, lab
             allCasesWithSameLength += [rawString, currentLabel]
         casesByLength.put(currentLength, allCasesWithSameLength)
     lengths.sort(true)
-    const stringPointerAsI64Register String = codeData.createRegister("extractvalue [2 x i64] " + operand.value~() + ", 1", llvmIR)
+    const stringPointerAsI64Register String = codeData.createRegister("extractvalue {i64, i32} " + operand.value~() + ", 0", llvmIR)
     const stringPointerI64Register String = codeData.createRegister("inttoptr i64 " + stringPointerAsI64Register + " to i64*", llvmIR)
     const stringLengthPointerRegister String = codeData.createRegister("getelementptr i64, i64* " + stringPointerI64Register + ", i64 1", llvmIR)
     const stringLengthRegister String = codeData.createRegister("load i64, i64* " + stringLengthPointerRegister + ", align 8", llvmIR)
@@ -1367,7 +1367,7 @@ def toRawString(string Token) String
 
 // The function creates a llvm ir "switch" statement for the type "STD::Char".
 def createCharSwitch(casesBlocks Array, operand Operand, haveDefault Bool, labels Array, endLabel String, write codeData CodeData, write llvmIR String)
-    const operandValue String = codeData.createRegister("extractvalue [2 x i64] " + operand.value~() + ", 1", llvmIR)
+    const operandValue String = codeData.createRegister("extractvalue {i64, i32} " + operand.value~() + ", 0", llvmIR)
     const operandValueI16 String = codeData.createRegister("trunc i64 " + operandValue + " to i16", llvmIR)
     llvmIR += "\tswitch i16 " + operandValueI16 + ", label "
     const caseIndexEdge Int = casesBlocks.length~() + haveDefault.select(-1, 0)

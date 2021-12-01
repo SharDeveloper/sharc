@@ -105,8 +105,8 @@ def operandToConst(operand Operand, write codeData CodeData, compiledData CData,
         if mutOperand.type~().simple?() && mutOperand.type~().optional?()
             const functionLabel String = codeData.createLabel()
             endLabel = codeData.createLabel()
-            const typeRegister String = codeData.createRegister("extractvalue [2 x i64] " + mutOperand.value~() + ", 0", llvmIR)
-            const isNothing String = codeData.createRegister("icmp eq i64 " + typeRegister + ", 0", llvmIR)
+            const typeRegister String = codeData.createRegister("extractvalue {i64, i32} " + mutOperand.value~() + ", 1", llvmIR)
+            const isNothing String = codeData.createRegister("icmp eq i32 " + typeRegister + ", 0", llvmIR)
             llvmIR += "\tbr i1 " + isNothing + ", label %##reg##" + endLabel + "##, label %##reg##" + functionLabel + "##\n\t##nreg##" + functionLabel + "##:\n"
             var type OType = mutOperand.type`(nothing)
             type.optional`(false)
@@ -127,8 +127,8 @@ def freeOperand(operand Operand, write codeData CodeData, compiledData CData, wr
         if mutOperand.type~().simple?() && mutOperand.type~().optional?()
             const functionLabel String = codeData.createLabel()
             endLabel = codeData.createLabel()
-            const typeRegister String = codeData.createRegister("extractvalue [2 x i64] " + mutOperand.value~() + ", 0", llvmIR)
-            const isNothing String = codeData.createRegister("icmp eq i64 " + typeRegister + ", 0", llvmIR)
+            const typeRegister String = codeData.createRegister("extractvalue {i64, i32} " + mutOperand.value~() + ", 1", llvmIR)
+            const isNothing String = codeData.createRegister("icmp eq i32 " + typeRegister + ", 0", llvmIR)
             llvmIR += "\tbr i1 " + isNothing + ", label %##reg##" + endLabel + "##, label %##reg##" + functionLabel + "##\n\t##nreg##" + functionLabel + "##:\n"
             var type OType = mutOperand.type`(nothing)
             type.optional`(false)
@@ -149,8 +149,8 @@ def useOperand(operand Operand, write codeData CodeData, compiledData CData, wri
         if mutOperand.type~().simple?() && mutOperand.type~().optional?()
             const functionLabel String = codeData.createLabel()
             endLabel = codeData.createLabel()
-            const typeRegister String = codeData.createRegister("extractvalue [2 x i64] " + mutOperand.value~() + ", 0", llvmIR)
-            const isNothing String = codeData.createRegister("icmp eq i64 " + typeRegister + ", 0", llvmIR)
+            const typeRegister String = codeData.createRegister("extractvalue {i64, i32} " + mutOperand.value~() + ", 1", llvmIR)
+            const isNothing String = codeData.createRegister("icmp eq i32 " + typeRegister + ", 0", llvmIR)
             llvmIR += "\tbr i1 " + isNothing + ", label %##reg##" + endLabel + "##, label %##reg##" + functionLabel + "##\n\t##nreg##" + functionLabel + "##:\n"
             var type OType = mutOperand.type`(nothing)
             type.optional`(false)
@@ -167,13 +167,13 @@ def toNoRead(operand Operand, write codeData CodeData, write llvmIR String) Oper
     case access_noread
         nothing
     case access_read
-        const newValue String = codeData.createRegister("insertvalue [2 x i64] " + result.value~() + ", i64 0, 1", llvmIR)
+        const newValue String = codeData.createRegister("insertvalue {i64, i32} " + result.value~() + ", i64 0, 0", llvmIR)
         result.value`(newValue)
         result.access`(enum::access_noread)
     case access_write
-        const typePointer String = codeData.createRegister("getelementptr [2 x i64], [2 x i64]* " + result.value~() + ", i64 0, i32 0", llvmIR)
-        const typeRegister String = codeData.createRegister("load i64, i64* " + typePointer + ", align 8", llvmIR)
-        const newValue String = codeData.createRegister("insertvalue [2 x i64] zeroinitializer, i64 " + typeRegister + ", 0", llvmIR)
+        const typePointer String = codeData.createRegister("getelementptr {i64, i32}, {i64, i32}* " + result.value~() + ", i64 0, i32 1", llvmIR)
+        const typeRegister String = codeData.createRegister("load i32, i32* " + typePointer + ", align 4", llvmIR)
+        const newValue String = codeData.createRegister("insertvalue {i64, i32} zeroinitializer, i32 " + typeRegister + ", 1", llvmIR)
         result.value`(newValue)
         result.access`(enum::access_noread)
     default
@@ -189,7 +189,7 @@ def toReadOnly(operand Operand, write codeData CodeData, write llvmIR String) Op
     case access_read
         return operand
     case access_write
-        const newValue String = codeData.createRegister("load [2 x i64], [2 x i64]* " + operand.value~() + ", align 8", llvmIR)
+        const newValue String = codeData.createRegister("load {i64, i32}, {i64, i32}* " + operand.value~() + ", align 8", llvmIR)
         var result Operand = operand
         result.access`(enum::access_read)
         result.value`(newValue)
@@ -273,11 +273,11 @@ def runtimeTypeCheck(operand Operand, expectedType OType, expectedTypeNumber Str
         llvmIR += "\tbr i1 ##flag##nothrow##, label %##reg##" + okLabel + "##, label %##reg##" + checkLabel + "##\n\t##nreg##" + checkLabel + "##:\n"
         var typeRegister String = ""
         if operand.access~() == enum::access_write
-            const typePointerRegister String = codeData.createRegister("getelementptr [2 x i64], [2 x i64]* " + operand.value~() + ", i64 0, i32 0", llvmIR)
-            typeRegister = codeData.createRegister("load i64, i64* " + typePointerRegister + ", align 8", llvmIR)
+            const typePointerRegister String = codeData.createRegister("getelementptr {i64, i32}, {i64, i32}* " + operand.value~() + ", i64 0, i32 1", llvmIR)
+            typeRegister = codeData.createRegister("load i32, i32* " + typePointerRegister + ", align 4", llvmIR)
         else
-            typeRegister = codeData.createRegister("extractvalue [2 x i64] " + operand.value~() + ", 0", llvmIR)
-        const comparisonRegister String = codeData.createRegister("icmp eq i64 " + typeRegister + ", " + expectedTypeNumber, llvmIR)
+            typeRegister = codeData.createRegister("extractvalue {i64, i32} " + operand.value~() + ", 1", llvmIR)
+        const comparisonRegister String = codeData.createRegister("icmp eq i32 " + typeRegister + ", " + expectedTypeNumber, llvmIR)
         const likelyRegister String = comparisonRegister.likelyI1Register(codeData, llvmIR)
         llvmIR += "\tbr i1 " + likelyRegister + ", label %##reg##" + okLabel + "##, label %##reg##" + throwLabel + "##\n\t##nreg##" + throwLabel + "##:\n"
         createInvalidTypeThrow(codeData, compiledData, freedOnError, llvmIR)
@@ -447,14 +447,14 @@ def runtimeTypesCompatibleCheck(operand Operand, expectedType OType, write codeD
         llvmIR += "\tbr i1 ##flag##nothrow##, label %##reg##" + okLabel + "##, label %##reg##" + checkLabel + "##\n\t##nreg##" + checkLabel + "##:\n"
         var operandTypeRegister String = ""
         if operand.access~() == enum::access_write
-            const operandTypePointerRegister String = codeData.createRegister("getelementptr [2 x i64], [2 x i64]* " + operand.value~() + ", i64 0, i32 0", llvmIR)
-            operandTypeRegister = codeData.createRegister("load i64, i64* " + operandTypePointerRegister + ", align 8", llvmIR)
+            const operandTypePointerRegister String = codeData.createRegister("getelementptr {i64, i32}, {i64, i32}* " + operand.value~() + ", i64 0, i32 1", llvmIR)
+            operandTypeRegister = codeData.createRegister("load i32, i32* " + operandTypePointerRegister + ", align 4", llvmIR)
         else
-            operandTypeRegister = codeData.createRegister("extractvalue [2 x i64] " + operand.value~() + ", 0", llvmIR)
+            operandTypeRegister = codeData.createRegister("extractvalue {i64, i32} " + operand.value~() + ", 1", llvmIR)
         if runTimeEqTypes
-            typeIsCorrectRegister = codeData.createRegister("icmp eq i64 " + operandTypeRegister + ", ##tnum##" + oTypeToToken(expectedType, false).text~() + "##", llvmIR)
+            typeIsCorrectRegister = codeData.createRegister("icmp eq i32 " + operandTypeRegister + ", ##tnum##" + oTypeToToken(expectedType, false).text~() + "##", llvmIR)
         if runTimeOperandIsNothing || runTimeOperandIsNotNothing
-            const oredRegister String = codeData.createRegister("icmp " + runTimeOperandIsNothing.select("eq", "ne") + " i64 " + operandTypeRegister + ", 0", llvmIR)
+            const oredRegister String = codeData.createRegister("icmp " + runTimeOperandIsNothing.select("eq", "ne") + " i32 " + operandTypeRegister + ", 0", llvmIR)
             if typeIsCorrectRegister.empty?()
                 typeIsCorrectRegister = oredRegister
             else
@@ -463,7 +463,7 @@ def runtimeTypesCompatibleCheck(operand Operand, expectedType OType, write codeD
             var groups String = oTypeToToken(expectedType, false).text~()
             groups.copySelf(2, 0, groups.length~() - 3)
             delete(groups, groups.length~() - 3, 3)
-            const oredRegister String  = codeData.createRegister("call i1 ##ingroups##" + groups + "##(i64 " + operandTypeRegister + ")", llvmIR)
+            const oredRegister String  = codeData.createRegister("call i1 ##ingroups##" + groups + "##(i32 " + operandTypeRegister + ")", llvmIR)
             if typeIsCorrectRegister.empty?()
                 typeIsCorrectRegister = oredRegister
             else
@@ -565,24 +565,24 @@ def checkOperandForError(operand Operand, write codeData CodeData, compiledData 
     const errorLabel String = codeData.createLabel()
     const okLabel String = codeData.createLabel()
     llvmIR += "\tbr i1 ##flag##nothrow##, label %##reg##" + okLabel + "##, label %##reg##" + checkLabel + "##\n\t##nreg##" + checkLabel + "##:\n"
-    const typeNumberRegister String = codeData.createRegister("extractvalue [2 x i64] " + operand.value~() + ", 0", llvmIR)
-    const cmpI1Register String = codeData.createRegister("icmp eq i64 " + typeNumberRegister + ", ##tnum##STD::Error##", llvmIR)
+    const typeNumberRegister String = codeData.createRegister("extractvalue {i64, i32} " + operand.value~() + ", 1", llvmIR)
+    const cmpI1Register String = codeData.createRegister("icmp eq i32 " + typeNumberRegister + ", ##tnum##STD::Error##", llvmIR)
     const unlikelyRegister String = cmpI1Register.unlikelyI1Register(codeData, llvmIR)
     llvmIR += "\tbr i1 " + unlikelyRegister + ", label %##reg##" + errorLabel + "##, label %##reg##" + okLabel + "##\n\t##nreg##" + errorLabel + "##:\n"
     parse _, freedOperand = freedOnError
         freedOperand.freeOperand(codeData, compiledData, llvmIR)
     if codeData.catchLabels~().empty?()
         freeLevel(codeData, 1, compiledData, llvmIR)
-        const newErrorRegister String = codeData.createRegister("call [2 x i64] @shar.error.add.to.message([2 x i64] " + operand.value~() + ", i64 ptrtoint (##this##\\n<- " + codeData.functionNameForErrorMessage~() + "## to i64))", llvmIR)
-        llvmIR += "\tret [2 x i64] " + newErrorRegister + "\n"
+        const newErrorRegister String = codeData.createRegister("call {i64, i32} @shar.error.add.to.message({i64, i32} " + operand.value~() + ", i64 ptrtoint (##this##\\n<- " + codeData.functionNameForErrorMessage~() + "## to i64))", llvmIR)
+        llvmIR += "\tret {i64, i32} " + newErrorRegister + "\n"
     else
         const catchLabels Array = codeData.catchLabels~()
         const catchLabel Label = catchLabels[catchLabels.length~() - 1]
         freeLevel(codeData, catchLabel.level~(), compiledData, llvmIR)
-        llvmIR += "\tstore [2 x i64] " + operand.value~() + ", [2 x i64]* %##reg##0##, align 8\n\tbr label %##reg##" + catchLabel.label~() + "##\n"
+        llvmIR += "\tstore {i64, i32} " + operand.value~() + ", {i64, i32}* %##reg##0##, align 8\n\tbr label %##reg##" + catchLabel.label~() + "##\n"
     llvmIR += "\t##nreg##" + okLabel + "##:\n"
 
 // The function creates an operand with an error.
 #alwaysinline
 def createError(id, message String) String
-    return "[i64 ##tnum##STD::Error##, i64 ptrtoint ([5 x i64]* ##llvmconst##>private unnamed_addr constant [5 x i64] [i64 " + id + ", i64 ptrtoint (##this##" + message + "## to i64), i64 0, i64 0, i64 0], align 8<## to i64)]"
+    return "{i64 ptrtoint ([5 x i64]* ##llvmconst##>private unnamed_addr constant [5 x i64] [i64 " + id + ", i64 ptrtoint (##this##" + message + "## to i64), i64 0, i64 0, i64 0], align 8<## to i64), i32 ##tnum##STD::Error##}"
