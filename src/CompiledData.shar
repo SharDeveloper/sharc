@@ -985,116 +985,121 @@ def builtinFunctions(mainFunctionMayThrow Bool) String
         "}\n\n"
         "define private {i64, i32} @shar.error.get.data({i64, i32}) alwaysinline nounwind {\n"
         "\t%2 = extractvalue {i64, i32} %0, 0\n"
-        "\t%3 = inttoptr i64 %2 to i64*\n"
-        "\t%4 = getelementptr i64, i64* %3, i64 3\n"
-        "\t%5 = getelementptr i64, i64* %3, i64 4\n"
-        "\t%6 = load i64, i64* %4, align 8\n"
-        "\t%7 = load i64, i64* %5, align 8\n"
-        "\t%8 = trunc i64 %6 to i32\n"
-        "\t%9 = insertvalue {i64, i32} undef, i64 %7, 0\n"
-        "\t%10 = insertvalue {i64, i32} %9, i32 %8, 1\n"
+        "\t%3 = inttoptr i64 %2 to i32*\n"
+        "\t%4 = getelementptr i32, i32* %3, i64 5\n"
+        "\t%5 = getelementptr i32, i32* %3, i64 6\n"
+        "\t%6 = bitcast i32* %5 to i64*\n"
+        "\t%7 = load i32, i32* %4, align 4\n"
+        "\t%8 = load i64, i64* %6, align 8\n"
+        "\t%9 = insertvalue {i64, i32} undef, i64 %8, 0\n"
+        "\t%10 = insertvalue {i64, i32} %9, i32 %7, 1\n"
         "\tret {i64, i32} %10\n"
         "}\n\n"
         "define private void @shar.error.free({i64, i32}) noinline nounwind {\n"
         "\t%2 = extractvalue {i64, i32} %0, 0\n"
-        "\t%3 = inttoptr i64 %2 to i64*\n"
-        "\t%4 = getelementptr i64, i64* %3, i64 2\n"
-        "\t%5 = load i64, i64* %4, align 8\n"
-        "\t%6 = trunc i64 %5 to i1\n"
-        "\tbr i1 %6, label %7, label %12\n"
+        "\t%3 = inttoptr i64 %2 to i32*\n"
+        "\t%4 = getelementptr i32, i32* %3, i64 4\n"
+        "\t%5 = load i32, i32* %4, align 4\n"
+        "\t%6 = trunc i32 %5 to i1\n"
+        "\tbr i1 %6, label %7, label %13\n"
         "\t7:\n"
         "\t%8 = call {i64, i32} @shar.error.get.message({i64, i32} %0)\n"
         "\t%9 = call {i64, i32} " + createFunctionLLVMName("STD::shar__rc_free", "STD::String", const::ignoreNoThrow, const::ignoreNoThrow, false) + "({i64, i32} %8)\n"
         "\t%10 = call {i64, i32} @shar.error.get.data({i64, i32} %0)\n"
         "\t%11 = call {i64, i32} " + createFunctionLLVMName("STD::shar__rc_free", "", const::ignoreNoThrow, const::ignoreNoThrow, false) + "({i64, i32} %10)\n"
-        "\tcall void @shar.free(i64* %3)\n"
-        "\tbr label %12\n"
-        "\t12:\n"
+        "\t%12 = bitcast i32* %3 to i64*\n"
+        "\tcall void @shar.free(i64* %12)\n"
+        "\tbr label %13\n"
+        "\t13:\n"
         "\tret void\n"
         "}\n\n"
         "define private {i64, i32} @shar.error.add.to.message({i64, i32}, i64) noinline nounwind {\n"
-        "\t%3 = extractvalue {i64, i32} %0, 0\n"
-        "\t%4 = inttoptr i64 %3 to i64*\n"
-        "\t%5 = load i64, i64* %4, align 8\n"
-        "\t%6 = icmp eq i64 %5, 2\n"
-        "\t%7 = icmp eq i64 %5, 3\n"
-        "\t%8 = or i1 %6, %7\n"
-        "\t%9 = inttoptr i64 %1 to i64*\n"
-        "\t%10 = getelementptr i64, i64* %9, i64 1\n"
-        "\t%11 = load i64, i64* %10, align 8\n"
-        "\t%12 = icmp eq i64 %11, 0\n"
-        "\t%13 = or i1 %8, %12\n"
-        "\tbr i1 %13, label %62, label %14\n"
+        "\t%3 = extractvalue {i64, i32} %0, 0\n"               // error i64
+        "\t%4 = inttoptr i64 %3 to i64*\n"                     // error i64*
+        "\t%5 = load i64, i64* %4, align 8\n"                  // error id
+        "\t%6 = icmp eq i64 %5, 2\n"                           // error id == 2
+        "\t%7 = icmp eq i64 %5, 3\n"                           // error id == 3
+        "\t%8 = or i1 %6, %7\n"                                // error id == 2 || error id == 3
+        "\t%9 = inttoptr i64 %1 to i64*\n"                     // added string i64*
+        "\t%10 = getelementptr i64, i64* %9, i64 1\n"          // added string length pointer
+        "\t%11 = load i64, i64* %10, align 8\n"                // added string length
+        "\t%12 = icmp eq i64 %11, 0\n"                         // added string is empty?
+        "\t%13 = or i1 %8, %12\n"                              // not need add string
+        "\tbr i1 %13, label %64, label %14\n"
         "\t14:\n"
-        "\t%15 = mul i64 %11, 2\n"
-        "\t%16 = getelementptr i64, i64* %9, i64 2\n"
-        "\t%17 = bitcast i64* %16 to i16*\n"
-        "\t%18 = getelementptr i64, i64* %4, i64 1\n"
-        "\t%19 = load i64, i64* %18, align 8\n"
-        "\t%20 = inttoptr i64 %19 to i64*\n"
-        "\t%21 = load i64, i64* %20, align 8\n"
-        "\t%22 = getelementptr i64, i64* %20, i64 1\n"
-        "\t%23 = load i64, i64* %22, align 8\n"
-        "\t%24 = mul i64 %23, 2\n"
-        "\t%25 = getelementptr i64, i64* %20, i64 2\n"
-        "\t%26 = bitcast i64* %25 to i16*\n"
-        "\t%27 = add i64 %11, %23\n"
-        "\t%28 = add i64 %27, 8\n"
-        "\t%29 = mul i64 %28, 2\n"
-        "\tswitch i64 %21, label %30 [\n"
+        "\t%15 = mul i64 %11, 2\n"                             // added string chars size in bytes
+        "\t%16 = getelementptr i64, i64* %9, i64 2\n"          // added chars i64*
+        "\t%17 = bitcast i64* %16 to i16*\n"                   // added chars i16*
+        "\t%18 = getelementptr i64, i64* %4, i64 1\n"          // error message pointer
+        "\t%19 = load i64, i64* %18, align 8\n"                // error message i64
+        "\t%20 = inttoptr i64 %19 to i64*\n"                   // error message i64*
+        "\t%21 = load i64, i64* %20, align 8\n"                // error message counter
+        "\t%22 = getelementptr i64, i64* %20, i64 1\n"         // error message length pointer
+        "\t%23 = load i64, i64* %22, align 8\n"                // error message length
+        "\t%24 = mul i64 %23, 2\n"                             // error message chars size in bytes
+        "\t%25 = getelementptr i64, i64* %20, i64 2\n"         // error message chars i64*
+        "\t%26 = bitcast i64* %25 to i16*\n"                   // error message chars
+        "\t%27 = add i64 %11, %23\n"                           // new message length
+        "\t%28 = add i64 %27, 8\n"                             // new message length + 8
+        "\t%29 = mul i64 %28, 2\n"                             // new message size in bytes
+        "\tswitch i64 %21, label %30 [\n"                      // switch error message counter
         "\t\ti64 0, label %32\n"
         "\t\ti64 1, label %36\n"
         "\t]\n"
-        "\t30:\n"
-        "\t%31 = sub i64 %21, 1\n"
-        "\tstore i64 %31, i64* %20, align 8\n"
+        "\t30:\n"                                              // error message counter > 1
+        "\t%31 = sub i64 %21, 1\n"                             // error message counter - 1
+        "\tstore i64 %31, i64* %20, align 8\n"                 // save error message counter
         "\tbr label %32\n"
-        "\t32:\n"
-        "\t%33 = call i64* @shar.malloc(i64 %29)\n"
-        "\tstore i64 1, i64* %33, align 8\n"
-        "\t%34 = getelementptr i64, i64* %33, i64 2\n"
-        "\t%35 = bitcast i64* %34 to i16*\n"
+        "\t32:\n"                                              // error message counter == 0
+        "\t%33 = call i64* @shar.malloc(i64 %29)\n"            // new error message mem
+        "\tstore i64 1, i64* %33, align 8\n"                   // save new error message counter
+        "\t%34 = getelementptr i64, i64* %33, i64 2\n"         // new error message chars i64*
+        "\t%35 = bitcast i64* %34 to i16*\n"                   // new error message chars
+                                                               // copy old message chars to new message
         "\tcall void @llvm.memcpy.i16.i16.i64(i16* nonnull align 2 %35, i16* nonnull align 2 %26, i64 %24, i1 0)\n"
         "\tbr label %38\n"
-        "\t36:\n"
-        "\t%37 = call i64* @shar.realloc(i64* %20, i64 %29)\n"
+        "\t36:\n"                                              // error message counter == 1
+        "\t%37 = call i64* @shar.realloc(i64* %20, i64 %29)\n" // enlarge memory message
         "\tbr label %38\n"
         "\t38:\n"
-        "\t%39 = phi i64* [%33, %32], [%37, %36]\n"
-        "\t%40 = getelementptr i64, i64* %39, i64 1\n"
-        "\tstore i64 %27, i64* %40, align 8\n"
-        "\t%41 = getelementptr i64, i64* %39, i64 2\n"
-        "\t%42 = bitcast i64* %41 to i16*\n"
-        "\t%43 = getelementptr i16, i16* %42, i64 %23\n"
+        "\t%39 = phi i64* [%33, %32], [%37, %36]\n"            // new error message mem
+        "\t%40 = getelementptr i64, i64* %39, i64 1\n"         // new error message length pointer
+        "\tstore i64 %27, i64* %40, align 8\n"                 // save new message length
+        "\t%41 = getelementptr i64, i64* %39, i64 2\n"         // new error message chars i64*
+        "\t%42 = bitcast i64* %41 to i16*\n"                   // new error message chars
+        "\t%43 = getelementptr i16, i16* %42, i64 %23\n"       // end of old message in new message
+                                                               // add new chars
         "\tcall void @llvm.memcpy.i16.i16.i64(i16* nonnull align 2 %43, i16* nonnull align 2 %17, i64 %15, i1 0)\n"
-        "\t%44 = getelementptr i64, i64* %4, i64 2\n"
-        "\t%45 = load i64, i64* %44, align 8\n"
-        "\t%46 = trunc i64 %45 to i1\n"
-        "\tbr i1 %46, label %56, label %47\n"
-        "\t47:\n"
-        "\t%48 = call i64* @shar.malloc(i64 40)\n"
-        "\tstore i64 %5, i64* %48, align 8\n"
-        "\t%49 = getelementptr i64, i64* %48, i64 2\n"
-        "\tstore i64 1, i64* %49, align 8\n"
-        "\t%50 = getelementptr i64, i64* %4, i64 3\n"
-        "\t%51 = load i64, i64* %50, align 8\n"
-        "\t%52 = getelementptr i64, i64* %48, i64 3\n"
-        "\tstore i64 %51, i64* %52, align 8\n"
-        "\t%53 = getelementptr i64, i64* %4, i64 4\n"
-        "\t%54 = load i64, i64* %53, align 8\n"
-        "\t%55 = getelementptr i64, i64* %48, i64 4\n"
-        "\tstore i64 %54, i64* %55, align 8\n"
-        "\tbr label %56\n"
-        "\t56:\n"
-        "\t%57 = phi i64* [%4, %38], [%48, %47]\n"
-        "\t%58 = getelementptr i64, i64* %57, i64 1\n"
-        "\t%59 = ptrtoint i64* %39 to i64\n"
-        "\tstore i64 %59, i64* %58, align 8\n"
-        "\t%60 = ptrtoint i64* %57 to i64\n"
-        "\t%61 = insertvalue {i64, i32} %0, i64 %60, 0\n"
-        "\tbr label %62\n"
-        "\t62:\n"
-        "\t%63 = phi {i64, i32} [%0, %2], [%61, %56]\n"
-        "\tret {i64, i32} %63\n"
+        "\t%44 = getelementptr i64, i64* %4, i64 2\n"          // error mutable flag pointer i64*
+        "\t%45 = bitcast i64* %44 to i32*\n"                   // error mutable flag pointer i32*
+        "\t%46 = load i32, i32* %45, align 4\n"                // error mutable flag i32
+        "\t%47 = trunc i32 %46 to i1\n"                        // error mutable flag
+        "\tbr i1 %47, label %58, label %48\n"
+        "\t48:\n"                                              // error is ro
+        "\t%49 = call i64* @shar.malloc(i64 36)\n"             // new error mem
+        "\tstore i64 %5, i64* %49, align 8\n"                  // save error id to new mem
+        "\t%50 = getelementptr i64, i64* %49, i64 2\n"         // mutable flag in new mem pointer i64*
+        "\t%51 = bitcast i64* %50 to i32*\n"                   // mutable flag in new mem pointer i32*
+        "\tstore i32 1, i32* %51, align 4\n"                   // save mutable flag to new mem
+        "\t%52 = getelementptr i32, i32* %45, i64 1\n"         // data type pointer in old error
+        "\t%53 = load i32, i32* %52, align 4\n"                // data type
+        "\t%54 = getelementptr i32, i32* %51, i64 1\n"         // data type pointer in new error
+        "\tstore i32 %53, i32* %54, align 4\n"                 // save data type to new error
+        "\t%55 = getelementptr i64, i64* %4, i64 3\n"          // data value pointer in old error
+        "\t%56 = load i64, i64* %55, align 8\n"                // data value
+        "\t%57 = getelementptr i64, i64* %49, i64 3\n"         // data value pointer in new error
+        "\tstore i64 %56, i64* %57, align 8\n"                 // save data value to new error
+        "\tbr label %58\n"
+        "\t58:\n"
+        "\t%59 = phi i64* [%4, %38], [%49, %48]\n"             // error mem
+        "\t%60 = getelementptr i64, i64* %59, i64 1\n"         // error message pointer
+        "\t%61 = ptrtoint i64* %39 to i64\n"                   // new error message i64
+        "\tstore i64 %61, i64* %60, align 8\n"                 // save new message to error
+        "\t%62 = ptrtoint i64* %59 to i64\n"                   // error mem i64
+        "\t%63 = insertvalue {i64, i32} %0, i64 %62, 0\n"      // error {i64, i32}
+        "\tbr label %64\n"
+        "\t64:\n"
+        "\t%65 = phi {i64, i32} [%0, %2], [%63, %58]\n"        // result
+        "\tret {i64, i32} %65\n"
         "}\n\n"
     }
