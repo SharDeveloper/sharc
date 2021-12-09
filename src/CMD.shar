@@ -102,15 +102,13 @@ def getCMDAndData() CMDData
             const argument String = getCMDLineArgument(index)
             switch argument
             case "-h", "--help"
-                if cmd == enum::cmd_noCMD
-                    cmd = enum::cmd_showHelp
-                else
+                if cmd != enum::cmd_noCMD
                     errorArgNotAlone(argument)
+                cmd = enum::cmd_showHelp
             case "-v", "--version"
-                if cmd == enum::cmd_noCMD
-                    cmd = enum::cmd_showVersion
-                else
+                if cmd != enum::cmd_noCMD
                     errorArgNotAlone(argument)
+                cmd = enum::cmd_showVersion
             case "-s", "--sources"
                 currentlyReceived = enum::cr_sources
             case "-m", "--modules"
@@ -127,15 +125,14 @@ def getCMDAndData() CMDData
             default
                 if argument[0] == '-' || currentlyReceived == enum::cr_nothing
                     errorUnknownCMDLineArgument(argument)
-                else
-                    eSwitch currentlyReceived
-                    case cr_sources
-                        sources.addItem(argument)
-                    case cr_modules
-                        modules.addItem(argument)
-                    case cr_out
-                        outFile = argument
-                        currentlyReceived = enum::cr_nothing
+                eSwitch currentlyReceived
+                case cr_sources
+                    sources.addItem(argument)
+                case cr_modules
+                    modules.addItem(argument)
+                case cr_out
+                    outFile = argument
+                    currentlyReceived = enum::cr_nothing
         if cmd == enum::cmd_noCMD
             if sources.empty?()
                 errorNoSources()
