@@ -1,4 +1,25 @@
 module Main
 
 def main()
-    runCommand(const::command)
+    eSwitch const::userCommand
+    case help
+        showHelp()
+    case version
+        showVersion()
+    case compile
+        compileProject(const::userCommandArguments)
+
+def compileProject(uca UCArguments)
+    var compiledData <>CData = nothing
+    do
+        const sources Sources = uca.sources~().loadBlocks().loadSourcesFromBlocks()
+        const currentModuleName String = sources.currentModule~().text~()
+        if currentModuleName != "Main"
+            if uca.ignoreNoThrow~()
+                errorIgnoreNoThrowInModule()
+        compiledData = uca.modules~().loadModules(currentModuleName)
+        compileData(sources, compiledData)
+    if compiledData.currentModule~() == "Main"
+        createProgram(compiledData, uca.out~())
+    else
+        createModule(compiledData, uca.out~())

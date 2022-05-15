@@ -1,28 +1,6 @@
 module Main
 
-// Label in llvm code.
+// Label in IR code.
 type Label
-    // label String
-    // level Int
-
-attach Label to FieldLabel
-    #alwaysinline
-    def label~(label Label) String
-        return label.typeGetItem(0)
-
-    #alwaysinline
-    def label`(write label Label, new String) String
-        return label.typePut(0, new)
-
-attach Label to FieldLevel
-    #alwaysinline
-    def level~(label Label) Int
-        return label.typeGetItem(1)
-
-    #alwaysinline
-    def level`(write label Label, new Int) Int
-        return label.typePut(1, new)
-
-#alwaysinline
-def Label(label String, level Int) Label
-    return Label.fromList({label, level})
+    label String
+    level Int

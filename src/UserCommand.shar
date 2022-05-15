@@ -1,0 +1,123 @@
+module Main
+
+// A type whose object stores the data required for compilation.
+type UCArguments
+    sources       Array // [String]
+    modules       Array // [String]
+    out           String
+    ignoreNoThrow Bool
+
+// Compiler commands.
+enum Command
+    help
+    version
+    compile
+
+// Information about what data is currently being received from the command line.
+enum CMDLReceived
+    nothing
+    sources
+    modules
+    out
+
+const helpMessage String = {
+    "sharc - compiler for shar programming language.\n"
+    "  -s FILE_NAMES or --sources FILE_NAMES - specify a list of files with source code. (file names are separated by a space)\n"
+    "  -m FILE_NAMES or --modules FILE_NAMES - specify a list of files with modules. (file names are separated by a space)\n"
+    "  -o FILE_NAME or --out FILE_NAME - specify the file with the built project.\n"
+    "  -t or --throw - compilation is performed ignoring the \qnothrow\q function attribute.\n"
+    "  -h or --help - show help.\n"
+    "  -v or --version - show version.\n\n"
+}
+
+const versionMessage String = "sharc 0.5\n"
+
+// The command passed by the user to the compiler.
+const userCommand Command
+    const cmdArgumentsCount Int = getCMDLineArgumentsCount() - 1
+    if cmdArgumentsCount == 0
+        return Command[help]
+    if cmdArgumentsCount == 1
+        switch getCMDLineArgument(1)
+        case "-h", "--help"
+            return Command[help]
+        case "-v", "--version"
+            return Command[version]
+    return Command[compile]
+
+const flagsReceivingData Array = ["-s", "--source", "-m", "--modules", "-o", "--out"]
+
+// Data passed by the user to the compiler needed for compilation.
+const userCommandArguments UCArguments
+    var sources Array = []
+    var modules Array = []
+    var out String = ""
+    var ignoreNoThrow Bool = false
+    eSwitch const::userCommand
+    case help, version
+        nothing
+    case compile
+        var previousArgument String = ""
+        var currentlyReceived CMDLReceived = CMDLReceived[nothing]
+        const cmdArgumentsCount Int = getCMDLineArgumentsCount() - 1
+        for :(index Int = 1) index <= cmdArgumentsCount; index++
+            const argument String = getCMDLineArgument(index)
+            if const::flagsReceivingData.contain?(previousArgument) && const::flagsReceivingData.contain?(argument)
+                errorFlagWithoutValue(previousArgument)
+            switch argument
+            case "-h", "--help", "-v", "--version"
+                errorFlagNotAlone(argument)
+            case "-s", "--sources"
+                if !sources.empty?()
+                    errorFlagSetTwice(argument)
+                currentlyReceived = CMDLReceived[sources]
+            case "-m", "--modules"
+                if !modules.empty?()
+                    errorFlagSetTwice(argument)
+                currentlyReceived = CMDLReceived[modules]
+            case "-o", "--out"
+                if !out.empty?()
+                    errorFlagSetTwice(argument)
+                currentlyReceived = CMDLReceived[out]
+            case "-t", "--throw"
+                if ignoreNoThrow
+                    errorFlagSetTwice(argument)
+                ignoreNoThrow = true
+                currentlyReceived = CMDLReceived[nothing]
+            default
+                if argument[0] == '-'
+                    errorUnknownCMDLineArgument(argument)
+                eSwitch currentlyReceived
+                case sources
+                    sources.addItem(argument)
+                case modules
+                    modules.addItem(argument)
+                case out
+                    out = argument
+                    currentlyReceived = CMDLReceived[nothing]
+                case nothing
+                    errorUnknownCMDLineArgument(argument)
+            previousArgument = argument
+        eSwitch currentlyReceived
+        case modules
+            if modules.empty?()
+                errorFlagWithoutValue(previousArgument)
+        case out
+            errorFlagWithoutValue(previousArgument)
+        case sources
+            if sources.empty?()
+                errorFlagWithoutValue(previousArgument)
+        case nothing
+            if !sources.empty?()
+                errorNoSources()
+        if out.empty?()
+            errorNoOutputFile()
+    return UCArguments{sources : sources, modules : modules, out : out, ignoreNoThrow : ignoreNoThrow}
+
+def showHelp()
+    const::helpMessage.print()
+    exit()
+
+def showVersion()
+    const::versionMessage.print()
+    exit()

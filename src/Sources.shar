@@ -1,317 +1,539 @@
 module Main
 
 // Character type (used in getToken function).
-enum
-    ct_none
-    ct_digit
-    ct_regular
-    ct_special
+enum CharType
+    none
+    digit
+    regular
+    special
+
+attach CharType to Equal
+
+attach CharType to Shar__sugar__equal
+    def shar__sugar__equal(charType1, charType2 CharType) Bool
+        return charType1.enumToInt() == charType2.enumToInt()
+
+attach CharType to Shar__sugar__notEqual
+    def shar__sugar__notEqual(charType1, charType2 CharType) Bool
+        return charType1.enumToInt() != charType2.enumToInt()
+
+// Data obtained from source code.
+type Sources
+    currentModule Token
+    constants     Map   // Map(name String, Constant)
+    types         Map   // Map(name String, Type)
+    groups        Map   // Map(name String, Group)
+    functions     Array // [Function]
+    attachments   Array // [Attachment]
 
 // The function loads and structures data from sources.
-def loadBlocks(files Array) Array // of Block
+def loadBlocks(files Array) Array // [Block]
     var result Array = []
-    for :(fileID Int = 0) fileID < files.length~(); fileID++
-        const fileName String = files[fileID]
-        const file <>String = String.loadFromUTF8File(fileName)
-        if file.nothing?()
-            errorCanNotLoadFile(fileName)
-        const lines Array = file.split('\n')
+    parse _, fileName String = files
+        var lines Array = []
+        do
+            const file <>String = String.loadFromUTF8File(fileName)
+            if file.nothing?()
+                errorCanNotLoadFile(fileName)
+            lines = file.split('\n')
         var lineIndex Int = 0
         for :(loop)
-            const block <>Block = lines.loadBlock(fileName, fileID + 1, lineIndex, 0 /*expected level*/, true /*check level*/)
+            const block <>Block = lines.loadBlock(fileName, lineIndex, 0 /*expected level*/, true /*check level*/)
             if block.nothing?()
                 end loop
             result.addItem(block)
     return result
 
 // The function loads and structures data from a file in memory.
-def loadBlock(lines Array, fileName String, fileID, write lineIndex, expectedLevel Int, checkLevel Bool) <>Block
-    lines.nextLineIndex(lineIndex, fileName)
-    if lineIndex < lines.length~()
+def loadBlock(lines Array, fileName String, write lineIndex, expectedLevel Int, checkLevel Bool) <>Block
+    lines.moveToNextLine(lineIndex, fileName)
+    if lineIndex < lines.length()
         const line String = lines[lineIndex]
         const lineLevel Int = line.getLevel()
         if lineLevel == expectedLevel
-            var tokens Array = line.getTokens(fileName, fileID, lineIndex, lineLevel)
+            var tokens Array = line.getTokens(fileName, lineIndex, lineLevel)
             lineIndex++
-            var ignoreSplittedStrings Bool = false
-            if tokens[tokens.length~() - 1].text~() == "{"
-                delete(tokens, tokens.length~() - 1, 1)
-                tokens.joinTokens(lines, fileName, fileID, lineIndex)
-            elif tokens.length~() == 1 && tokens[0].text~() == "llvm"
-                ignoreSplittedStrings = true
-                tokens = lines.getLLVMCode(fileName, fileID, lineIndex, expectedLevel + 1)
-            if !ignoreSplittedStrings
-                tokens.joinSplittedStrings()
-            return Block(tokens, lines.getSubBlocks(fileName, fileID, lineIndex, expectedLevel + 1))
+            if tokens.length() == 1 && tokens[0].type!(Token).text~() == "IR"
+                if lineIndex == lines.length()
+                    errorNotExpectedEOL(tokens[0], "")
+                return Block{line : lines.getIRCode(fileName, lineIndex, expectedLevel + 1), subBlocks : []}
+            if tokens[0].type!(Token).text~().hasPrefix?("//@")
+                var comment Token = tokens[0]
+                tokens = []
+                comment.addString(lines.getDocCommentTail(fileName, lineIndex))
+                return Block{line : [comment], subBlocks : []}
+            if tokens[tokens.length() - 1].type!(Token).text~() == "{"
+                delete(tokens, tokens.length() - 1, 1)
+                tokens.joinMultiLinesTokens(lines, fileName, lineIndex)
+            tokens.joinSplittedStrings()
+            return Block{line : tokens, subBlocks : lines.getSubBlocks(fileName, lineIndex, expectedLevel + 1)}
         elif checkLevel
             errorWrongLevel(fileName, lineIndex, expectedLevel, lineLevel)
     return nothing
 
-// The function loads and structures data from rows with a specific level.
-#alwaysinline
-def getSubBlocks(lines Array, fileName String, fileID, write lineIndex, expectedLevel Int) Array // of Block
-    var result Array = []
-    for :(loop)
-        const block <>Block = loadBlock(lines, fileName, fileID, lineIndex, expectedLevel, false /*check level*/)
-        if block.nothing?()
-            end loop
-        result.addItem(block)
-    return result
-
-// The function searches among the strings for the first row in which there is any useful data.
-def nextLineIndex(lines Array, write lineIndex Int, fileName String)
-    for :(loop) lineIndex < lines.length~()
+// The function searches among the lines for the first row in which there is any useful data.
+def moveToNextLine(lines Array, write lineIndex Int, fileName String)
+    for :(loop) lineIndex < lines.length()
         const line String = lines[lineIndex]
         var columnIndex Int = 0
-        if !(line.empty?() || line.getToken(fileName, 0 /*fileID*/, lineIndex, columnIndex).nothing?())
+        if !(line.empty?() || line.getToken(fileName, lineIndex, columnIndex).nothing?())
             end loop
         lineIndex++
 
 // The function recognizes the level in the line. (how much the line is shifted to the right)
-#alwaysinline
 def getLevel(line String) Int
     parse index, char = line
         if char != ' '
             return index >> 2
     return 0
 
+// The function loads and structures data from rows with a specific level.
+def getSubBlocks(lines Array, fileName String, write lineIndex, expectedLevel Int) Array
+    var result Array = []
+    for :(loop)
+        const block <>Block = loadBlock(lines, fileName, lineIndex, expectedLevel, false /*check level*/)
+        if block.nothing?()
+            end loop
+        result.addItem(block)
+    return result
+
 // The function converts the string to an array of tokens.
-#alwaysinline
-def getTokens(line, fileName String, fileID, lineIndex, lineLevel Int) Array // of Token
+def getTokens(line, fileName String, lineIndex, lineLevel Int) Array
     var result Array = []
     var columnIndex Int = lineLevel * 4
     for :(loop)
-        const token <>Token = line.getToken(fileName, fileID, lineIndex, columnIndex)
+        const token <>Token = line.getToken(fileName, lineIndex, columnIndex)
         if token.nothing?()
             end loop
         result.addItem(token)
     return result
 
 // The function receives the token from the string from the specified position.
-def getToken(line, fileName String, fileID, lineIndex, write columnIndex Int) <>Token
-    var token Token = Token("", fileName, fileID, lineIndex, columnIndex)
-    var previousCharType Int = enum::ct_none
+def getToken(line, fileName String, lineIndex, write columnIndex Int) <>Token
+    var token Token = Token{{
+        text        : "",
+        fileName    : fileName,
+        lineIndex   : lineIndex,
+        columnIndex : columnIndex
+    }}
+    var previousCharType CharType = CharType[none]
     for
-        if columnIndex >= line.length~()
-            if previousCharType == enum::ct_none
+        if columnIndex >= line.length()
+            if previousCharType == CharType[none]
                 return nothing
             return token
-        const tokenText String = token.text~()
         const char Char = line[columnIndex]
         switch char
         case ' '
-            if previousCharType != enum::ct_none
+            if previousCharType != CharType[none]
                 return token
         case '(', ')', ',', ';', '[', ']', '{', '}', '$'
-            if previousCharType == enum::ct_none
+            if previousCharType == CharType[none]
                 token.addChar(char)
                 token.columnIndex`(columnIndex)
                 columnIndex++
             return token
         case 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'Y', 'Z', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'y', 'z', '_'
             eSwitch previousCharType
-            case ct_regular
+            case regular
                 token.addChar(char)
-            case ct_none
-                previousCharType = enum::ct_regular
+            case none
+                previousCharType = CharType[regular]
                 token.addChar(char)
                 token.columnIndex`(columnIndex)
-            default
+            case digit, special
                 return token
         case '!', '#', '%', '&', ':', '<', '=', '>', '?', '@', '^', '`', '|', '~'
             eSwitch previousCharType
-            case ct_special
-                if char == '!' && tokenText == "!"
+            case special
+                if char == '!' && token.text~() == "!"
                     return token
                 token.addChar(char)
-            case ct_none
-                previousCharType = enum::ct_special
+            case none
+                previousCharType = CharType[special]
                 token.addChar(char)
                 token.columnIndex`(columnIndex)
-            default
+            case digit, regular
                 return token
         case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'
             eSwitch previousCharType
-            case ct_digit, ct_regular
+            case digit, regular
                 token.addChar(char)
-            case ct_none
-                previousCharType = enum::ct_digit
+            case none
+                previousCharType = CharType[digit]
                 token.addChar(char)
                 token.columnIndex`(columnIndex)
-            default
-                if tokenText == "-" || tokenText == "+"
-                    previousCharType = enum::ct_digit
+            case special
+                 if token.text~() == "-" || token.text~() == "+"
+                    previousCharType = CharType[digit]
                     token.addChar(char)
                 else
                     return token
         case 'A', 'B', 'C', 'D', 'F', 'a', 'b', 'c', 'd', 'f'
-            if previousCharType == enum::ct_regular || (previousCharType == enum::ct_digit && tokenText.containAny?("xX"))
-                token.addChar(char)
-            elif previousCharType == enum::ct_none
-                previousCharType = enum::ct_regular
-                token.addChar(char)
-                token.columnIndex`(columnIndex)
-            else
-                return token
-        case 'x', 'X'
-            if previousCharType == enum::ct_regular || (previousCharType == enum::ct_digit && tokenText == "0")
-                token.addChar(char)
-            elif previousCharType == enum::ct_none
-                previousCharType = enum::ct_regular
-                token.addChar(char)
-                token.columnIndex`(columnIndex)
-            else
-                return token
-        case 'e', 'E'
-            if previousCharType == enum::ct_regular || (previousCharType == enum::ct_digit && (tokenText.contain?('.') && !tokenText.containAny?("eE") || tokenText.containAny?("xX")))
-                token.addChar(char)
-            elif previousCharType == enum::ct_none
-                previousCharType = enum::ct_regular
-                token.addChar(char)
-                token.columnIndex`(columnIndex)
-            else
-                return token
-        case '-', '+'
             eSwitch previousCharType
-            case ct_special
-                if char == '-'
-                    switch tokenText
-                    case "!", "*", "/", "%", "+", "<<", ">>", "<", ">", "<=", ">=", "==", "!=", "&", "&&", "^", "|", "||", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", ":"
-                        return token
+            case regular
                 token.addChar(char)
-            case ct_none
-                previousCharType = enum::ct_special
-                token.addChar(char)
-                token.columnIndex`(columnIndex)
-            case ct_digit
-                if tokenText.contain?('.') && "eE".contain?(token[token.length~() - 1])
+            case digit
+                if token.text~().containAny?("xX")
                     token.addChar(char)
                 else
                     return token
-            default
+            case none
+                previousCharType = CharType[regular]
+                token.addChar(char)
+                token.columnIndex`(columnIndex)
+            case special
+                return token
+        case 'x', 'X'
+            eSwitch previousCharType
+            case regular
+                token.addChar(char)
+            case digit
+                if token.text~() == "0"
+                    token.addChar(char)
+                else
+                    return token
+            case none
+                previousCharType = CharType[regular]
+                token.addChar(char)
+                token.columnIndex`(columnIndex)
+            case special
+                return token
+        case 'e', 'E'
+            eSwitch previousCharType
+            case regular
+                token.addChar(char)
+            case digit
+                if token.text~().contain?('.') && !token.text~().containAny?("eE") || token.text~().containAny?("xX")
+                    token.addChar(char)
+                else
+                    return token
+            case none
+                previousCharType = CharType[regular]
+                token.addChar(char)
+                token.columnIndex`(columnIndex)
+            case special
+                return token
+        case '-', '+'
+            eSwitch previousCharType
+            case special
+                if char == '-'
+                    switch token.text~()
+                    case "!", "*", "/", "%", "+", "<<", ">>", "<", ">", "<=", ">=", "==", "!=", "&", "&&", "^", "|", "||", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", ":"
+                        return token
+                token.addChar(char)
+            case none
+                previousCharType = CharType[special]
+                token.addChar(char)
+                token.columnIndex`(columnIndex)
+            case digit
+                if token.text~().contain?('.') && "eE".contain?(token[token.length() - 1])
+                    token.addChar(char)
+                else
+                    return token
+            case regular
                 return token
         case '.'
-            if previousCharType == enum::ct_none
+            eSwitch previousCharType
+            case none
                 token.addChar(char)
                 token.columnIndex`(columnIndex)
                 columnIndex++
                 return token
-            elif previousCharType == enum::ct_digit && {
-                !tokenText.containAny?("xX.") &&
-                columnIndex + 1 < line.length~() &&
-                line[columnIndex + 1].inRange?('0', ':')
-            }
-                token.addChar(char)
-            else
+            case digit
+                if {
+                    !token.text~().containAny?("xX.") &&
+                    columnIndex + 1 < line.length() &&
+                    line[columnIndex + 1].inRange?('0', ':') //[0..9]
+                }
+                    token.addChar(char)
+                else
+                    return token
+            case regular, special
                 return token
         case '/'
-            if tokenText == "/"
+            if token.text~() == "/"
+                if columnIndex + 1 < line.length() && line[columnIndex] == '@'
+                    token.replaceText(line[columnIndex - 1 :])
+                    return token
                 return nothing
             eSwitch previousCharType
-            case ct_none
-                previousCharType = enum::ct_special
+            case none
+                previousCharType = CharType[special]
                 token.addChar(char)
                 token.columnIndex`(columnIndex)
-            case ct_special
+            case special
                 token.addChar(char)
-            default
+            case regular, digit
                 return token
         case '*'
-            if tokenText == "/"
-                const endIndex <>Int = line.lookPartFromAtoB("*/", columnIndex + 1, line.length~())
+            if token.text~() == "/"
+                const endIndex <>Int = line.lookPartFromAtoB("*/", columnIndex + 1, line.length())
                 if endIndex.nothing?()
-                    errorNotExpectedEOL(Token("", fileName, fileID, lineIndex, line.length~() - 1), "*/")
+                    errorNotExpectedEOL(Token{text : "", fileName : fileName, lineIndex : lineIndex, columnIndex : line.length() - 1}, "*/")
                 columnIndex = endIndex + 1
                 token.text`("")
-                previousCharType = enum::ct_none
+                previousCharType = CharType[none]
             else
                 eSwitch previousCharType
-                case ct_none
-                    previousCharType = enum::ct_special
+                case none
+                    previousCharType = CharType[special]
                     token.addChar(char)
                     token.columnIndex`(columnIndex)
-                case ct_special
+                case special
                     token.addChar(char)
-                default
+                case regular, digit
                     return token
         case '\q', '\p'
-            if previousCharType == enum::ct_none
+            if previousCharType == CharType[none]
                 token.columnIndex`(columnIndex)
                 const beginIndex Int = columnIndex
-                const endIndex <>Int = line.lookFromAtoB(char, columnIndex + 1, line.length~())
+                const endIndex <>Int = line.lookFromAtoB(char, columnIndex + 1, line.length())
                 if endIndex.nothing?()
-                    errorNotExpectedEOL(Token("", fileName, fileID, lineIndex, line.length~() - 1), char.toString())
+                    errorNotExpectedEOL(Token{text : "", fileName : fileName, lineIndex : lineIndex, columnIndex : line.length() - 1}, char.toString())
                 columnIndex = endIndex + 1
                 token.text`(line[beginIndex : columnIndex])
             return token
         default
-            errorInvalidCharacter(Token(char.charToInt().toString(), fileName, fileID, lineIndex, columnIndex))
+            errorInvalidCharacter(Token{text : charToInt(char).toString(), fileName : fileName, lineIndex : lineIndex, columnIndex : columnIndex})
         columnIndex++
 
-// Functions attaches to existing tokens, tokens from the following lines.
-// Such actions are needed to join several lines into one.
-def joinTokens(write existedTokens, lines Array, fileName String, fileID, write lineIndex Int)
-    for :(loop)
-        lines.nextLineIndex(lineIndex, fileName)
-        if lineIndex >= lines.length~()
-            errorNotExpectedEOL(existedTokens[existedTokens.length~() - 1], "}")
-        const line String = lines[lineIndex]
-        const lineLevel Int = line.getLevel()
-        const newTokens Array = line.getTokens(fileName, fileID, lineIndex, lineLevel)
-        if newTokens.length~() == 1 && newTokens[0].text~() == "}"
-            lineIndex++
-            end loop
-        existedTokens += newTokens
-        lineIndex++
-
-// The function gets the llvm code. Token - a line of llvm code.
-def getLLVMCode(lines Array, fileName String, fileID, write lineIndex, level Int) Array
+// The function gets the IR code. Token - a line of IR code.
+def getIRCode(lines Array, fileName String, write lineIndex, level Int) Array
     var line String = lines[lineIndex]
     var lineLevel Int = line.getLevel()
     if lineLevel < level
         errorWrongLevel(fileName, lineIndex, level, lineLevel)
-    var result Array = [const::llvmToken, Token(line[lineLevel * 4 : line.length~()], fileName, fileID, lineIndex, level * 4)]
+    var result Array = {
+        [
+            Token{text : "IR", fileName : "", lineIndex : 0, columnIndex : 0},
+            Token{text : line[lineLevel * 4 : line.length()], fileName : fileName, lineIndex : lineIndex, columnIndex : level * 4}
+        ]
+    }
     lineIndex++
-    if lineIndex != lines.length~()
+    if lineIndex != lines.length()
         for :(loop)
-            lines.nextLineIndex(lineIndex, fileName)
-            if lineIndex == lines.length~()
+            lines.moveToNextLine(lineIndex, fileName)
+            if lineIndex == lines.length()
                 end loop
             line = lines[lineIndex]
             lineLevel = line.getLevel()
             if lineLevel < level
                 end loop
-            result.addItem(Token(line[level * 4 : line.length~()], fileName, fileID, lineIndex, level * 4))
+            result.addItem(Token{text : line[lineLevel * 4 : line.length()], fileName : fileName, lineIndex : lineIndex, columnIndex : level * 4})
             lineIndex++
     return result
+
+// The function receives a documentation comment other than the first line.
+def getDocCommentTail(lines Array, fileName String, write lineIndex Int) String
+    var result String = ""
+    for :(loop) lineIndex < lines.length()
+        var columnIndex Int = 0
+        const token <>Token = lines[lineIndex].getToken(fileName, lineIndex, columnIndex)
+        if !token.nothing?()
+            if token.text~().hasPrefix?("//@")
+                result += "\n" + token.text~()[3:]
+            else
+                end loop
+        lineIndex++
+    return result
+
+// Functions attaches to existing tokens, tokens from the following lines.
+// Such actions are needed to join several lines into one.
+def joinMultiLinesTokens(write existedTokens, lines Array, fileName String, write lineIndex Int)
+    var deep Int = 0
+    for :(loop)
+        lines.moveToNextLine(lineIndex, fileName)
+        if lineIndex == lines.length()
+            errorNotExpectedEOL(existedTokens[existedTokens.length() - 1], "}")
+        const line String = lines[lineIndex]
+        const lineLevel Int = line.getLevel()
+        var newTokens Array = line.getTokens(fileName, lineIndex, lineLevel)
+        var unneededTokenIndex Int = -1
+        parse :(parse) index, token Token = newTokens
+            switch token[0]
+            case '{'
+                deep++
+            case '}'
+                if deep == 0
+                    unneededTokenIndex = index
+                    end parse
+                deep--
+        if unneededTokenIndex != -1
+            newTokens.delete(unneededTokenIndex, 1)
+        existedTokens += newTokens
+        lineIndex++
+        if unneededTokenIndex != -1
+            end loop
 
 // The function searches the specified tokens for several lines in a row and combines them into one line.
 def joinSplittedStrings(write tokens Array)
     var stringBegin Int = 0
     var stringEnd Int = 0
-    var index Int = 0
+    var tokenIndex Int = 0
     for :(mainLoop)
-        for :(beginLoop) index + 1 < tokens.length~(); index++
-            if tokens[index][0] == '\q' && tokens[index + 1][0] == '\q'
-                stringBegin = index
-                stringEnd = index + 1
-                for :(endLoop) stringEnd < tokens.length~(); stringEnd++
+        for :(beginLoop) tokenIndex + 1 < tokens.length(); tokenIndex++
+            if tokens[tokenIndex][0] == '\q' && tokens[tokenIndex + 1][0] == '\q'
+                stringBegin = tokenIndex
+                stringEnd = tokenIndex + 2
+                for :(endLoop) stringEnd < tokens.length(); stringEnd++
                     if tokens[stringEnd][0] != '\q'
                         end endLoop
                 end beginLoop
         if stringBegin == stringEnd
             end mainLoop
-        var newToken Token = tokens[stringBegin]
-        newToken.text`(newToken.text~()[0 : newToken.length~() - 1])
+        var newToken Token = tokens.put(stringBegin, const::emptyToken)
+        newToken.text`(newToken.text~()[:newToken.length() - 1])
         for :(stringIndex Int = stringBegin + 1) stringIndex < stringEnd; stringIndex++
-            const string String = tokens[stringIndex].text~()
-            newToken.addString(string[1 : string.length~() - 1])
-        newToken.addChar('\q')
-        const leftPart Array = tokens[0 : stringBegin]
-        const rightPart Array = tokens[stringEnd : tokens.length~()]
-        tokens = leftPart
-        tokens.addItem(newToken)
-        tokens += rightPart
-        index = stringBegin + 2
+            const string String = tokens[stringIndex].type!(Token).text~()
+            newToken.addString(string[1 : string.length() - 1])
+        newToken.addString("\q")
+        tokens.delete(stringBegin + 1, stringEnd - stringBegin - 1)
+        tokens.put(stringBegin, newToken)
+        tokenIndex = stringBegin + 2
         stringBegin = 0
         stringEnd = 0
+
+// The function loads sources from blocks.
+def loadSourcesFromBlocks(blocks Array) Sources
+    var sources Sources = Sources{{
+        currentModule : const::emptyToken,
+        constants     : Map(),
+        types         : Map(),
+        groups        : Map(),
+        functions     : [],
+        attachments   : []
+    }}
+    for :(blockIndex Int = 0) blockIndex < blocks.length(); blockIndex++
+        var block Block = blocks[blockIndex]
+        var docComment String = ""
+        const maybeDocComment String = block.line~()[0].type!(Token).text~()
+        if maybeDocComment.hasPrefix?("//@")
+            docComment = maybeDocComment[3:]
+            blockIndex++
+            if blockIndex == blocks.length()
+                end blockIndex
+            block = blocks[blockIndex]
+        var tokenIndex Int = 0
+        block.next?(tokenIndex, ["export"])
+        const token Token = block.next(tokenIndex)
+        switch token.text~()
+        case "const"
+            sources.addConstant(block.toConstant(docComment))
+        case "type", "primitive"
+            sources.addType(block.toType(docComment))
+        case "enum"
+            sources.addType(block.toEnum(docComment))
+        case "group"
+            sources.addGroup(block.toGroup(docComment))
+        case "def", "#"
+            var functionAttributes FAttributes = const::defaultFAttributes
+            if token[0] == '#'
+                functionAttributes = block.toFunctionAttributes()
+                blockIndex++
+                if blockIndex == blocks.length()
+                    errorNotExpectedToken(token, "")
+                block = blocks[blockIndex]
+            sources.addFunction(block.toFunction(functionAttributes, docComment, false))
+        case "attach"
+            sources.addAttachment(block.toAttachment())
+        case "module"
+            sources.setModuleName(block.getUppercaseName(tokenIndex, "module"))
+            block.eol!(tokenIndex)
+        default
+            errorNotExpectedToken(token, "")
+    return sources
+
+// The function adds a constant to existing constants.
+def addConstant(write sources Sources, constant Constant)
+    var constants Map = sources.constants`(Map())
+    if !constants.put(constant.name~().text~(), constant).nothing?()
+        errorAlreadyExist(constant.name~(), "constant")
+    sources.constants`(constants)
+
+// The function adds a type to existing types.
+def addType(write sources Sources, type Type)
+    var types Map = sources.types`(Map())
+    if !types.put(type.name~().text~(), type).nothing?()
+        errorAlreadyExist(type.name~(), "type")
+    sources.types`(types)
+
+// The function adds a group to existing groups.
+def addGroup(write sources Sources, group Group)
+    var groups Map = sources.groups`(Map())
+    if !groups.put(group.name~().text~(), group).nothing?()
+        errorAlreadyExist(group.name~(), "group")
+    sources.groups`(groups)
+
+// The function adds a function to existing functions.
+def addFunction(write sources Sources, function Function)
+    var functions Array = sources.functions`([])
+    functions.addItem(function)
+    sources.functions`(functions)
+
+// The function adds a attachment to existing attachments.
+def addAttachment(write sources Sources, attachment Attachment)
+    var attachments Array = sources.attachments`([])
+    attachments.addItem(attachment)
+    sources.attachments`(attachments)
+
+def setModuleName(write sources Sources, name Token)
+    const oldName Token = sources.currentModule`(name)
+    if !oldName.empty?() && oldName != name
+        errorVariousModuleNames(oldName, name)
+
+def compileData(sources Sources, write compiledData CData)
+    do
+        var compilingGroups Map = sources.groups~()
+        for !compilingGroups.empty?()
+            var oneCompilingGroup <>Group = nothing
+            parse :(parse) _, oneCompilingGroupFromParse Group = compilingGroups
+                oneCompilingGroup = oneCompilingGroupFromParse
+                end parse
+            oneCompilingGroup.compileGroup(compiledData, compilingGroups)
+    parse _, type Type = sources.types~()
+        type.precompileType(compiledData)
+    parse _, type Type = sources.types~()
+        type.compileType(compiledData)
+    sources.attachments~().addTypesToGroups(compiledData)
+    parse _, group Group = sources.groups~()
+        parse _, function GFunction = group.functions~()
+            compiledData.addRequiredFunction(group, function)
+    parse _, attachment Attachment = sources.attachments~()
+        var type CType = compiledData.getType(attachment.type~(), false)
+        const group CGroup = compiledData.getGroup(attachment.group~(), false)
+        if !type.fullName~().hasPrefix?(sources.currentModule~().text~() + "::")
+            var newGroups Array = type.newGroups`([])
+            newGroups.addItem(group.fullName~())
+            type.newGroups`(newGroups)
+            compiledData.updateType(type)
+        parse _, function Function = attachment.functions~()
+            function.precompileAttachmentFunction(compiledData, type, group)
+        parse functionName String, _ = group.functions~()
+            if attachment.functions~()[functionName].nothing?()
+                errorCantAttach(attachment.type~().replaceText(type.fullName~()), group.fullName~(), functionName)
+    parse _, function Function = sources.functions~()
+        if !function.attributes~().this~().empty?()
+            function.precompileDefaultFunction(compiledData)
+    parse _, function Function = sources.functions~()
+        if !function.attributes~().override~().empty?()
+            function.precompileOverrideFunction(compiledData)
+        elif function.attributes~().this~().empty?()
+            function.precompileSimpleFunction(compiledData)
+    parse _, constant Constant = sources.constants~()
+        constant.precompileConstant(compiledData)
+    parse _, constant Constant = sources.constants~()
+        constant.compileConstant(compiledData)
+    parse _, attachment Attachment = sources.attachments~()
+        const type CType = compiledData.getType(attachment.type~(), false)
+        const group CGroup = compiledData.getGroup(attachment.group~(), false)
+        parse _, function Function = attachment.functions~()
+            function.compileAttachmentFunction(compiledData, type, group)
+    parse _, function Function = sources.functions~()
+        if !function.attributes~().this~().empty?()
+            function.compileDefaultFunction(compiledData)
+    parse _, function Function = sources.functions~()
+        if !function.attributes~().override~().empty?()
+            function.compileOverrideFunction(compiledData)
+        elif function.attributes~().this~().empty?()
+            function.compileSimpleFunction(compiledData)

@@ -1,125 +1,887 @@
 module Main
 
 // Expressions in the source code.
-type Expression
-    // variant enum::exp_*
-    // data ...
+group Expression
+    compileExpression(This, COType, write CodeData, CData, Array, write String) Operand
 
-enum
-    exp_array
-        // firstChar Token
-        // items     [Expression]
-    exp_bool
-        // Token
-    exp_char
-        // Token
-    exp_const
-        // Token
-    exp_enum
-        // Token
-    exp_expression
-        // Expression
-    exp_function
-        // name         Token
-        // optional     Bool
-        // arguments    [Expression]
-    exp_inGroups
-        // operand  Expression
-        // optional Bool
-        // groups   [Token]
-    exp_int
-        // Token
-    exp_lazyAnd
-        // left  Expression
-        // right Expression
-    exp_lazyOr
-        // left  Expression
-        // right Expression
-    exp_list
-        // firstChar Token
-        // items     [Expression]
-    exp_noReadOperand
-        // Token
-    exp_nothing
-        // Token
-    exp_real
-        // Token
-    exp_select
-        // predicate Expression
-        // optional  Bool
-        // first     Expression
-        // second    Expression
-    exp_string
-        // Token
-    exp_var
-        // Token
+type EArray
+    firstToken Token
+    items List // [$Expression]
 
-attach Expression to FieldVariant
-    #alwaysinline
-    def variant~(expression Expression) Int
-        return expression.typeGetItem(0)
+attach EArray to Expression
+    def compileExpression(array EArray, expectType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String) Operand
+        var code Token = array.firstToken~()
+        var isConstant Bool = true
+        var value String = ""
+        if array.items~().empty?()
+            code.text`("[]")
+            value = const::irEmptyArray
+        else
+            var itemsOperands Array = []
+            var allFreedOnError Array = freedOnError
+            do
+                const lastIndex Int = array.items~().length() - 1
+                parse index, item = array.items~()
+                    const oneItem Operand = item.compileExpression(const::anyType, codeData, compiledData, allFreedOnError, ir).toReadOnly(codeData, ir)
+                    if oneItem.named?()
+                        oneItem.useOperand(codeData, compiledData, ir)
+                    itemsOperands.addItem(oneItem)
+                    allFreedOnError.addItem(oneItem)
+                    code.addString(oneItem.code~().text~() + (index == lastIndex).select("]", ", "))
+                    isConstant = isConstant && oneItem.Main::constant?()
+            const itemsType COType = itemsOperands[0].type!(Operand).type~()
+            if itemsType.nothingType?()
+                errorNotExpectedToken(itemsOperands[0].type!(Operand).code~(), "")
+            if isConstant
+                for :(index Int = 1) index < itemsOperands.length(); index++
+                    const itemOperand Operand = itemsOperands[index]
+                    itemOperand.type~().typeEq!(itemsType, itemOperand.code~(), false)
+                value = irConstArray(itemsOperands)
+            else
+                value = irArray(itemsOperands, codeData, compiledData, itemsType, allFreedOnError, ir)
+        const result Operand = Operand{{
+            code          : code,
+            access        : Access[read],
+            value         : value,
+            type          : const::arrayType,
+            isConstant    : isConstant,
+            isNamed       : false,
+            isArgument    : false,
+            isGlobalConst : false
+        }}
+        typesCompatibleCheck(result, expectType, codeData, compiledData)
+        return result
 
-    #alwaysinline
-    def variant`(write expression Expression, new Int) Int
-        return expression.typePut(0, new)
+type EBool
+    value Token
 
-#alwaysinline
-def Expression(arguments List) Expression
-    return Expression.fromList(arguments)
+attach EBool to Expression
+    def compileExpression(bool EBool, expectType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String) Operand
+        const result Operand = Operand{{
+            code          : bool.value~(),
+            access        : Access[read],
+            value         : irBool(bool.value~()[0] == 't'),
+            type          : const::boolType,
+            isConstant    : true,
+            isNamed       : false,
+            isArgument    : false,
+            isGlobalConst : false
+        }}
+        typesCompatibleCheck(result, expectType, codeData, compiledData)
+        return result
+
+type EChar
+    value Token
+
+attach EChar to Expression
+    def compileExpression(char EChar, expectType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String) Operand
+        const result Operand = Operand{{
+            code          : char.value~(),
+            access        : Access[read],
+            value         : irChar(char.value~()),
+            type          : const::charType,
+            isConstant    : true,
+            isNamed       : false,
+            isArgument    : false,
+            isGlobalConst : false
+        }}
+        typesCompatibleCheck(result, expectType, codeData, compiledData)
+        return result
+
+type EConst
+    name Token
+
+attach EConst to Expression
+    def compileExpression(constant EConst, expectType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String) Operand
+        const realConstant CConstant = compiledData.getConstant(constant.name~(), false)
+        var result <>Operand = nothing
+        if realConstant.isTrueConstant~()
+            result = Operand{{
+                code          : constant.name~(),
+                access        : Access[read],
+                value         : realConstant.ir~()["\tret {i64, i32} ".length() : realConstant.ir~().length() - 1],
+                type          : realConstant.type~(),
+                isConstant    : true,
+                isNamed       : false,
+                isArgument    : false,
+                isGlobalConst : false
+            }}
+            typesCompatibleCheck(result, expectType, codeData, compiledData)
+        else
+            result = Operand{{
+                code          : constant.name~(),
+                access        : Access[read],
+                value         : irConst(realConstant.fullName~(), codeData, ir),
+                type          : realConstant.type~(),
+                isConstant    : false,
+                isNamed       : false,
+                isArgument    : false,
+                isGlobalConst : true
+            }}
+            result.runtimeTypesCompatibleCheck(expectType, codeData, compiledData, freedOnError, ir)
+            if expectType.simple?() && (!result.type~().simple?() || (!expectType.optional?() && result.type~().optional?()))
+                result.type`(expectType)
+        return result
+
+type EEnumElement
+    type Token
+    name Token
+
+attach EEnumElement to Expression
+    def compileExpression(element EEnumElement, expectType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String) Operand
+        const type CType = compiledData.getType(element.type~(), false)
+        if !type.enum?()
+            errorNotEnumType(element.type~())
+        var elementID Int = 0
+        const elements Map = type.fields~()
+        if elements[element.name~().text~()].nothing?()
+            errorNotFound(element.name~(), "enumeration element")
+        parse enumElementName String, _ = elements
+            elementID += (enumElementName < element.name~().text~()).select(1, 0)
+        const result Operand = Operand{{
+            code          : element.type~().replaceText(element.type~().text~() + "[" + element.name~().text~() + "]"),
+            access        : Access[read],
+            value         : irEnumElement(elementID, type.fullName~()),
+            type          : COType{type : type.fullName~(), isOptional : false},
+            isConstant    : true,
+            isNamed       : false,
+            isArgument    : false,
+            isGlobalConst : false
+        }}
+        typesCompatibleCheck(result, expectType, codeData, compiledData)
+        return result
+
+type EFunctionCall
+    name       Token
+    isOptional Bool
+    arguments  List // [$Expression]
+
+attach EFunctionCall to IsOptional
+    def optional?(call EFunctionCall) Bool
+        return call.isOptional~()
+
+attach EFunctionCall to Expression
+    def compileExpression(call EFunctionCall, expectType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String) Operand
+        var allFreedOnError Array = freedOnError
+        var arguments Array = []
+        var nothingLabel String = ""
+        var functionLabel String = ""
+        var functionEndLabel String = ""
+        var endLabel String = ""
+        if call.optional?()
+            nothingLabel = codeData.createLabel()
+            functionLabel = codeData.createLabel()
+            functionEndLabel = codeData.createLabel()
+            endLabel = codeData.createLabel()
+            var firstArgument Operand = call.arguments~()[0].compileExpression(const::anyType, codeData, compiledData, freedOnError, ir)
+            if !(firstArgument.type~().optional?() || firstArgument.type~().anyType?())
+                errorNoPosibleNothingType(firstArgument.code~())
+            irIf(irEq(const::irTypeOfType, irOperandTypeNumber(firstArgument, codeData, ir), const::nothingTypeNumber, codeData, ir), Expectation[unknown], nothingLabel, functionLabel, codeData, ir)
+            irLabel(nothingLabel, ir)
+            irJmp(endLabel, ir)
+            irLabel(functionLabel, ir)
+            var firstArgumentType COType = firstArgument.type`(const::dummyCOType)
+            firstArgumentType.isOptional`(false)
+            firstArgument.type`(firstArgumentType)
+            arguments.addItem(firstArgument)
+            if !firstArgument.named?()
+                allFreedOnError.addItem(firstArgument)
+        for :(index Int = arguments.length()) index < call.arguments~().length(); index++
+            const argument Operand = call.arguments~()[index].compileExpression(const::anyType, codeData, compiledData, allFreedOnError, ir)
+            arguments.addItem(argument)
+            if !argument.named?()
+                allFreedOnError.addItem(argument)
+        var result Operand = callFunction(call.name~(), arguments, codeData, compiledData, freedOnError, true, false, ir)
+        if call.optional?()
+            irJmp(functionEndLabel, ir)
+            irLabel(functionEndLabel, ir)
+            irJmp(endLabel, ir)
+            irLabel(endLabel, ir)
+            result.value`(irPhi(const::objectIRType, [const::irNothing, result.value~()], [nothingLabel, functionEndLabel], codeData, ir))
+            if !(result.type~().anyType?() || result.type~().nothingType?() || result.type~().optional?())
+                var type COType = result.type`(const::dummyCOType)
+                type.isOptional`(true)
+                result.type`(type)
+        result.runtimeTypesCompatibleCheck(expectType, codeData, compiledData, freedOnError, ir)
+        if expectType.simple?() && (!result.type~().simple?() || (!expectType.optional?() && result.type~().optional?()))
+            result.type`(expectType)
+        return result
+
+type EGetField
+    operand    <>$Expression
+    field      Token
+    isOptional Bool
+
+attach EGetField to IsOptional
+    def optional?(getter EGetField) Bool
+        return getter.isOptional~()
+
+attach EGetField to Expression
+    def compileExpression(getter EGetField, expectType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String) Operand
+        var operand Operand = getter.operand~().compileExpression(const::anyType, codeData, compiledData, freedOnError, ir)
+        if operand.type~().nothingType?()
+            errorNothingHaveNoFields(getter.field~())
+        if operand.type~().simple?() && !operand.type~().optional?() && getter.optional?()
+            errorNoPosibleNothingType(operand.code~())
+        if !operand.type~().simple?()
+            errorFieldOnlyForSimple(getter.field~())
+        var fieldType COType = const::anyType
+        var fieldNumber Int = 0
+        do
+            const type CType = compiledData.getType(operand.code~().replaceText(operand.type~().type~()), false)
+            if type.enum?()
+                errorEnumType(operand.code~().replaceText(type.fullName~()))
+            const fields Map = type.fields~()
+            const field <>CField = fields[getter.field~().text~()]
+            if field.nothing?() || (field.hidden?() && type.fullName~()[:type.fullName~().look(':')] != compiledData.currentModule~())
+                errorTypeDontContainField(operand.type~().type~(), getter.field~())
+            fieldType = field.type~()
+            parse fieldName String, _ = fields
+                fieldNumber += (fieldName < getter.field~().text~()).select(1, 0)
+        var nothingLabel String = ""
+        var getFieldLabel String = ""
+        var getFieldEndLabel String = ""
+        var endLabel String = ""
+        if getter.optional?()
+            nothingLabel = codeData.createLabel()
+            getFieldLabel = codeData.createLabel()
+            getFieldEndLabel = codeData.createLabel()
+            endLabel = codeData.createLabel()
+            irIf(irEq(const::irTypeOfType, irOperandTypeNumber(operand, codeData, ir), const::nothingTypeNumber, codeData, ir), Expectation[unknown], nothingLabel, getFieldLabel, codeData, ir)
+            irLabel(nothingLabel, ir)
+            irJmp(endLabel, ir)
+            irLabel(getFieldLabel, ir)
+            var operandType COType = operand.type`(const::dummyCOType)
+            operandType.isOptional`(false)
+            operand.type`(operandType)
+        const fieldNumberOperand Operand = Operand{{
+            code          : getter.field~(),
+            access        : Access[read],
+            value         : irInt(fieldNumber.toString()),
+            type          : const::intType,
+            isConstant    : true,
+            isNamed       : false,
+            isArgument    : false,
+            isGlobalConst : false
+        }}
+        var result Operand = callFunction(getter.field~().replaceText("STD::type_getField"), [operand, fieldNumberOperand], codeData, compiledData, freedOnError, true, true, ir)
+        result.code`(operand.code~().replaceText(operand.code~().text~() + getter.optional?().select("->", ".") + getter.field~().text~() + "~()"))
+        result.type`(fieldType)
+        if getter.optional?()
+            irJmp(getFieldEndLabel, ir)
+            irLabel(getFieldEndLabel, ir)
+            irJmp(endLabel, ir)
+            irLabel(endLabel, ir)
+            result.value`(irPhi(const::objectIRType, [const::irNothing, result.value~()], [nothingLabel, getFieldEndLabel], codeData, ir))
+            if !(result.type~().anyType?() || result.type~().nothingType?() || result.type~().optional?())
+                var type COType = result.type`(const::dummyCOType)
+                type.isOptional`(true)
+                result.type`(type)
+        result.runtimeTypesCompatibleCheck(expectType, codeData, compiledData, freedOnError, ir)
+        if expectType.simple?() && (!result.type~().simple?() || (!expectType.optional?() && result.type~().optional?()))
+            result.type`(expectType)
+        return result
+
+type EInGroups
+    operand    <>$Expression
+    isOptional Bool
+    groups     Array // [Token]
+
+attach EInGroups to IsOptional
+    def optional?(eInGroups EInGroups) Bool
+        return eInGroups.isOptional~()
+
+attach EInGroups to Expression
+    def compileExpression(eInGroups EInGroups, expectType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String) Operand
+        var operand Operand = eInGroups.operand~().compileExpression(const::anyType, codeData, compiledData, freedOnError, ir)
+        var nothingLabel String = ""
+        var inGroupsLabel String = ""
+        var inGroupsEndLabel String = ""
+        var endLabel String = ""
+        if eInGroups.optional?()
+            if !(operand.type~().optional?() || operand.type~().anyType?())
+                errorNoPosibleNothingType(operand.code~())
+            nothingLabel = codeData.createLabel()
+            inGroupsLabel = codeData.createLabel()
+            inGroupsEndLabel = codeData.createLabel()
+            endLabel = codeData.createLabel()
+            irIf(irEq(const::irTypeOfType, irOperandTypeNumber(operand, codeData, ir), const::nothingTypeNumber, codeData, ir), Expectation[unknown], nothingLabel, inGroupsLabel, codeData, ir)
+            irLabel(nothingLabel, ir)
+            irJmp(endLabel, ir)
+            irLabel(inGroupsLabel, ir)
+            var operandType COType = operand.type`(const::dummyCOType)
+            operandType.isOptional`(false)
+            operand.type`(operandType)
+        if !operand.named?()
+            operand.freeOperand(codeData, compiledData, ir)
+        var groupsFullSet Set = Set()
+        var code Token = operand.code~().replaceText("inGroup?(" + operand.code~().text~())
+        parse _, groupName Token = eInGroups.groups~()
+            code.addString(", " + groupName.text~())
+            const group CGroup = compiledData.getGroup(groupName, false)
+            parse _, subGroupName String = group.subGroups~()
+                groupsFullSet.add(subGroupName)
+            groupsFullSet.add(group.fullName~())
+        code.addChar(')')
+        var groupsFullArray Array = []
+        parse _, group String = groupsFullSet
+            groupsFullArray.addItem(group)
+        groupsFullArray.sort(true)
+        var result Operand = Operand{{
+            code          : code,
+            access        : Access[read],
+            value         : irI1ToBool(irInGroups(irOperandTypeNumber(operand, codeData, ir), groupsFullArray, codeData, ir), codeData, ir),
+            type          : const::boolType,
+            isConstant    : false,
+            isNamed       : false,
+            isArgument    : false,
+            isGlobalConst : false
+        }}
+        if eInGroups.optional?()
+            irJmp(inGroupsEndLabel, ir)
+            irLabel(inGroupsEndLabel, ir)
+            irJmp(endLabel, ir)
+            irLabel(endLabel, ir)
+            result.value`(irPhi(const::objectIRType, [const::irNothing, result.value~()], [nothingLabel, inGroupsLabel], codeData, ir))
+            if !(result.type~().anyType?() || result.type~().nothingType?() || result.type~().optional?())
+                var type COType = result.type`(const::dummyCOType)
+                type.isOptional`(true)
+                result.type`(type)
+        result.runtimeTypesCompatibleCheck(expectType, codeData, compiledData, freedOnError, ir)
+        if expectType.simple?() && (!result.type~().simple?() || (!expectType.optional?() && result.type~().optional?()))
+            result.type`(expectType)
+        return result
+
+type EInt
+    value Token
+
+attach EInt to Expression
+    def compileExpression(int EInt, expectType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String) Operand
+        const result Operand = Operand{{
+            code          : int.value~(),
+            access        : Access[read],
+            value         : irInt(intToIRInt(int.value~())),
+            type          : const::intType,
+            isConstant    : true,
+            isNamed       : false,
+            isArgument    : false,
+            isGlobalConst : false
+        }}
+        typesCompatibleCheck(result, expectType, codeData, compiledData)
+        return result
+
+type ELazyAnd
+    left  $Expression
+    right $Expression
+
+attach ELazyAnd to Expression
+    def compileExpression(lazyAnd ELazyAnd, expectType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String) Operand
+        const leftLabel String = codeData.createLabel()
+        const leftEndLabel String = codeData.createLabel()
+        const rightLabel String = codeData.createLabel()
+        const rightEndLabel String = codeData.createLabel()
+        const endLabel String = codeData.createLabel()
+        irJmp(leftLabel, ir)
+        irLabel(leftLabel, ir)
+        const leftOperand Operand = lazyAnd.left~().compileExpression(const::boolType, codeData, compiledData, freedOnError, ir)
+        irJmp(leftEndLabel, ir)
+        irLabel(leftEndLabel, ir)
+        irIf(irTrunc(const::irDataType, irOperandData(leftOperand, codeData, ir), const::irBoolType, codeData, ir), Expectation[unknown], rightLabel, endLabel, codeData, ir)
+        irLabel(rightLabel, ir)
+        const rightOperand Operand = lazyAnd.right~().compileExpression(const::boolType, codeData, compiledData, freedOnError, ir).toReadOnly(codeData, ir)
+        irJmp(rightEndLabel, ir)
+        irLabel(rightEndLabel, ir)
+        irJmp(endLabel, ir)
+        irLabel(endLabel, ir)
+        const result Operand = Operand{{
+            code          : leftOperand.code~().replaceText("((" + leftOperand.code~().text~() + ") && (" + rightOperand.code~().text~() + "))"),
+            access        : Access[read],
+            value         : irPhi(const::objectIRType, [irBool(false), rightOperand.value~()], [leftEndLabel, rightEndLabel], codeData, ir),
+            type          : const::boolType,
+            isConstant    : false,
+            isNamed       : false,
+            isArgument    : false,
+            isGlobalConst : false
+        }}
+        typesCompatibleCheck(result, expectType, codeData, compiledData)
+        return result
+
+type ELazyOr
+    left  $Expression
+    right $Expression
+
+attach ELazyOr to Expression
+    def compileExpression(lazyOr ELazyOr, expectType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String) Operand
+        const leftLabel String = codeData.createLabel()
+        const leftEndLabel String = codeData.createLabel()
+        const rightLabel String = codeData.createLabel()
+        const rightEndLabel String = codeData.createLabel()
+        const endLabel String = codeData.createLabel()
+        irJmp(leftLabel, ir)
+        irLabel(leftLabel, ir)
+        const leftOperand Operand = lazyOr.left~().compileExpression(const::boolType, codeData, compiledData, freedOnError, ir)
+        irJmp(leftEndLabel, ir)
+        irLabel(leftEndLabel, ir)
+        irIf(irTrunc(const::irDataType, irOperandData(leftOperand, codeData, ir), const::irBoolType, codeData, ir), Expectation[unknown], endLabel, rightLabel, codeData, ir)
+        irLabel(rightLabel, ir)
+        const rightOperand Operand = lazyOr.right~().compileExpression(const::boolType, codeData, compiledData, freedOnError, ir).toReadOnly(codeData, ir)
+        irJmp(rightEndLabel, ir)
+        irLabel(rightEndLabel, ir)
+        irJmp(endLabel, ir)
+        irLabel(endLabel, ir)
+        const result Operand = Operand{{
+            code          : leftOperand.code~().replaceText("((" + leftOperand.code~().text~() + ") || (" + rightOperand.code~().text~() + "))"),
+            access        : Access[read],
+            value         : irPhi(const::objectIRType, [irBool(true), rightOperand.value~()], [leftEndLabel, rightEndLabel], codeData, ir),
+            type          : const::boolType,
+            isConstant    : false,
+            isNamed       : false,
+            isArgument    : false,
+            isGlobalConst : false
+        }}
+        typesCompatibleCheck(result, expectType, codeData, compiledData)
+        return result
+
+type EList
+    firstToken Token
+    items      List // [$Expression]
+
+attach EList to Expression
+    def compileExpression(list EList, expectType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String) Operand
+        var code Token = list.firstToken~()
+        var isConstant Bool = true
+        var value String = ""
+        if list.items~().empty?()
+            code.text`("{}")
+            value = const::irEmptyList
+        else
+            var itemsOperands Array = []
+            do
+                var allFreedOnError Array = freedOnError
+                const lastIndex Int = list.items~().length() - 1
+                parse index, item = list.items~()
+                    const oneItem Operand = item.compileExpression(const::anyType, codeData, compiledData, allFreedOnError, ir).toReadOnly(codeData, ir)
+                    if oneItem.named?()
+                        oneItem.useOperand(codeData, compiledData, ir)
+                    itemsOperands.addItem(oneItem)
+                    allFreedOnError.addItem(oneItem)
+                    code.addString(oneItem.code~().text~() + (index == lastIndex).select("}", ", "))
+                    isConstant = isConstant && oneItem.Main::constant?()
+            if isConstant
+                value = irConstList(itemsOperands)
+            else
+                value = irList(itemsOperands, codeData, ir)
+        const result Operand = Operand{{
+            code          : code,
+            access        : Access[read],
+            value         : value,
+            type          : const::listType,
+            isConstant    : isConstant,
+            isNamed       : false,
+            isArgument    : false,
+            isGlobalConst : false
+        }}
+        typesCompatibleCheck(result, expectType, codeData, compiledData)
+        return result
+
+type ENoReadOperand
+    value Token
+
+attach ENoReadOperand to Expression
+    def compileExpression(operand ENoReadOperand, expectType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String) Operand
+        var value String = ""
+        var type COType = const::thisType
+        if operand.value~().text~() == "This"
+            value = codeData.thisTypeRegister~()
+            if value.empty?()
+                errorNotExpectedToken(operand.value~(), "")
+        else
+            const fullTypeName String = compiledData.getType(operand.value~(), false).fullName~()
+            value =  sharTypeToIRType(fullTypeName)
+            type = COType{type : fullTypeName, isOptional : false}
+        var result Operand = Operand{{
+            code          : operand.value~().replaceText(type.type~()),
+            access        : Access[noread],
+            value         : value,
+            type          : type,
+            isConstant    : false,
+            isNamed       : false,
+            isArgument    : false,
+            isGlobalConst : false
+        }}
+        typesCompatibleCheck(result, expectType, codeData, compiledData)
+        return result
+
+type ENothing
+    coordinates Token
+
+attach ENothing to Expression
+    def compileExpression(operand ENothing, expectType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String) Operand
+        const result Operand = Operand{{
+            code          : operand.coordinates~(),
+            access        : Access[read],
+            value         : const::irNothing,
+            type          : const::nothingType,
+            isConstant    : true,
+            isNamed       : false,
+            isArgument    : false,
+            isGlobalConst : false
+        }}
+        typesCompatibleCheck(result, expectType, codeData, compiledData)
+        return result
+
+type EPutField
+    operand    <>$Expression
+    field      Token
+    newValue   $Expression
+    isOptional Bool
+
+attach EPutField to IsOptional
+    def optional?(putter EPutField) Bool
+        return putter.isOptional~()
+
+attach EPutField to Expression
+    def compileExpression(putter EPutField, expectType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String) Operand
+        var operand Operand = putter.operand~().compileExpression(const::anyType, codeData, compiledData, freedOnError, ir)
+        if operand.type~().nothingType?()
+            errorNothingHaveNoFields(putter.field~())
+        if operand.type~().simple?() && !operand.type~().optional?() && putter.optional?()
+            errorNoPosibleNothingType(operand.code~())
+        if !operand.type~().simple?()
+            errorFieldOnlyForSimple(putter.field~())
+        if operand.access~() != Access[write]
+            errorWrongAccess(operand.code~(), "write", operand.access~().toString())
+        var fieldType COType = const::anyType
+        var fieldNumber Int = 0
+        do
+            const type CType = compiledData.getType(const::emptyToken.replaceText(operand.type~().type~()), false)
+            if type.enum?()
+                errorEnumType(operand.code~().replaceText(type.fullName~()))
+            const fields Map = type.fields~()
+            const field <>CField = fields[putter.field~().text~()]
+            if field.nothing?() || (field.hidden?() && type.fullName~()[:type.fullName~().look(':')] != compiledData.currentModule~())
+                errorTypeDontContainField(operand.type~().type~(), putter.field~())
+            fieldType = field.type~()
+            parse fieldName String, _ = fields
+                fieldNumber += (fieldName < putter.field~().text~()).select(1, 0)
+        var nothingLabel String = ""
+        var putFieldLabel String = ""
+        var putFieldEndLabel String = ""
+        var endLabel String = ""
+        if putter.optional?()
+            nothingLabel = codeData.createLabel()
+            putFieldLabel = codeData.createLabel()
+            putFieldEndLabel = codeData.createLabel()
+            endLabel = codeData.createLabel()
+            irIf(irEq(const::irTypeOfType, irOperandTypeNumber(operand, codeData, ir), const::nothingTypeNumber, codeData, ir), Expectation[unknown], nothingLabel, putFieldLabel, codeData, ir)
+            irLabel(nothingLabel, ir)
+            irJmp(endLabel, ir)
+            irLabel(putFieldLabel, ir)
+            var operandType COType = operand.type`(const::dummyCOType)
+            operandType.isOptional`(false)
+            operand.type`(operandType)
+        const newValue Operand = putter.newValue~().compileExpression(fieldType, codeData, compiledData, freedOnError, ir)
+        if operand.code~().text~() == newValue.code~().text~()
+            errorPutOperandIntoItself(newValue.code~())
+        const fieldNumberOperand Operand = Operand{{
+            code          : putter.field~(),
+            access        : Access[read],
+            value         : irInt(fieldNumber.toString()),
+            type          : const::intType,
+            isConstant    : true,
+            isNamed       : false,
+            isArgument    : false,
+            isGlobalConst : false
+        }}
+        var result Operand = callFunction(putter.field~().replaceText("STD::type_putField"), [operand, fieldNumberOperand, newValue], codeData, compiledData, freedOnError, true, true, ir)
+        result.code`(operand.code~().replaceText(operand.code~().text~() + putter.optional?().select("->", ".") + putter.field~().text~() + "`(" + newValue.code~().text~() + ")"))
+        result.type`(fieldType)
+        if putter.optional?()
+            irJmp(putFieldEndLabel, ir)
+            irLabel(putFieldEndLabel, ir)
+            irJmp(endLabel, ir)
+            irLabel(endLabel, ir)
+            result.value`(irPhi(const::objectIRType, [const::irNothing, result.value~()], [nothingLabel, putFieldEndLabel], codeData, ir))
+            if !(result.type~().anyType?() || result.type~().nothingType?() || result.type~().optional?())
+                var type COType = result.type`(const::dummyCOType)
+                type.isOptional`(true)
+                result.type`(type)
+        result.runtimeTypesCompatibleCheck(expectType, codeData, compiledData, freedOnError, ir)
+        if expectType.simple?() && (!result.type~().simple?() || (!expectType.optional?() && result.type~().optional?()))
+            result.type`(expectType)
+        return result
+
+type EReal
+    value Token
+
+attach EReal to Expression
+    def compileExpression(real EReal, expectType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String) Operand
+        const result Operand = Operand{{
+            code          : real.value~(),
+            access        : Access[read],
+            value         : irReal(real.value~()),
+            type          : const::realType,
+            isConstant    : true,
+            isNamed       : false,
+            isArgument    : false,
+            isGlobalConst : false
+        }}
+        typesCompatibleCheck(result, expectType, codeData, compiledData)
+        return result
+
+type ESelect
+    predicate     <>$Expression
+    first         $Expression
+    second        $Expression
+    isOptional    Bool
+
+attach ESelect to IsOptional
+    def optional?(eSelect ESelect) Bool
+        return eSelect.isOptional~()
+
+attach ESelect to Expression
+    def compileExpression(eSelect ESelect, expectType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String) Operand
+        var predicate Operand = eSelect.predicate~().compileExpression(COType{type : const::boolType.type~(), isOptional : eSelect.optional?()}, codeData, compiledData, freedOnError, ir)
+        var nothingLabel String = ""
+        var selectLabel String = ""
+        const endLabel String = codeData.createLabel()
+        const firstLabel String = codeData.createLabel()
+        const firstEndLabel String = codeData.createLabel()
+        const secondLabel String = codeData.createLabel()
+        const secondEndLabel String = codeData.createLabel()
+        if eSelect.optional?()
+            if !(predicate.type~().optional?() || predicate.type~().anyType?())
+                errorNoPosibleNothingType(predicate.code~())
+            nothingLabel = codeData.createLabel()
+            selectLabel = codeData.createLabel()
+            irIf(irEq(const::irTypeOfType, irOperandTypeNumber(predicate, codeData, ir), const::nothingTypeNumber, codeData, ir), Expectation[unknown], nothingLabel, selectLabel, codeData, ir)
+            irLabel(nothingLabel, ir)
+            irJmp(endLabel, ir)
+            irLabel(selectLabel, ir)
+            predicate.type`(const::boolType)
+        irIf(irTrunc(const::irDataType, irOperandData(predicate, codeData, ir), const::irBoolType, codeData, ir), Expectation[unknown], firstLabel, secondLabel, codeData, ir)
+        irLabel(firstLabel, ir)
+        const first Operand = eSelect.first~().compileExpression(const::anyType, codeData, compiledData, freedOnError, ir).toReadOnly(codeData, ir)
+        if first.named?()
+            first.useOperand(codeData, compiledData, ir)
+        irJmp(firstEndLabel, ir)
+        irLabel(firstEndLabel, ir)
+        irJmp(endLabel, ir)
+        irLabel(secondLabel, ir)
+        const second Operand = eSelect.second~().compileExpression(const::anyType, codeData, compiledData, freedOnError, ir).toReadOnly(codeData, ir)
+        if second.named?()
+            second.useOperand(codeData, compiledData, ir)
+        irJmp(secondEndLabel, ir)
+        irLabel(secondEndLabel, ir)
+        irJmp(endLabel, ir)
+        irLabel(endLabel, ir)
+        var type COType = const::anyType
+        if first.type~().typeEq?(second.type~(), false)
+            type = COType{{
+                type       : first.type~().type~(),
+                isOptional : (first.type~().optional?() || second.type~().optional?() || eSelect.optional?()) && !(first.type~().nothingType?() || first.type~().anyType?())
+            }}
+        elif first.type~().nothingType?() && !second.type~().anyType?()
+            type = COType{{
+                type       : second.type~().type~(),
+                isOptional : true
+            }}
+        elif second.type~().nothingType?() && !first.type~().anyType?()
+            type = COType{{
+                type       : first.type~().type~(),
+                isOptional : true
+            }}
+        var result Operand = Operand{{
+            code          : predicate.code~().replaceText("select(" + predicate.code~().text~() + ", " + first.code~().text~() + ", " + second.code~().text~() + ")"),
+            access        : Access[read],
+            value         : eSelect.optional?().select(
+                irPhi(const::objectIRType, [const::irNothing, first.value~(), second.value~()], [nothingLabel, firstEndLabel, secondEndLabel], codeData, ir),
+                irPhi(const::objectIRType, [first.value~(), second.value~()], [firstEndLabel, secondEndLabel], codeData, ir)
+            ),
+            type          : type,
+            isConstant    : false,
+            isNamed       : false,
+            isArgument    : false,
+            isGlobalConst : false
+        }}
+        result.runtimeTypesCompatibleCheck(expectType, codeData, compiledData, freedOnError, ir)
+        if expectType.simple?() && (!result.type~().simple?() || (!expectType.optional?() && result.type~().optional?()))
+            result.type`(expectType)
+        return result
+
+type EString
+    value Token
+
+attach EString to Expression
+    def compileExpression(string EString, expectType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String) Operand
+        const result Operand = Operand{{
+            code          : string.value~(),
+            access        : Access[read],
+            value         : irString(string.value~()),
+            type          : const::stringType,
+            isConstant    : true,
+            isNamed       : false,
+            isArgument    : false,
+            isGlobalConst : false
+        }}
+        typesCompatibleCheck(result, expectType, codeData, compiledData)
+        return result
+
+type ETypeCreator
+    type   Token
+    fields Array // [Token]
+    values List  // [$Expression]
+
+attach ETypeCreator to Expression
+    def compileExpression(typeCreator ETypeCreator, expectType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String) Operand
+        const type CType = compiledData.getType(typeCreator.type~(), false)
+        if !type.groups~()["STD::Type"]
+            errorInvalidTypeForCreator(typeCreator.type~())
+        const fields Map = type.fields~()
+        var code Token = typeCreator.type~()
+        code.addString("{")
+        var valuesMap Map = Map()
+        var fieldsNames Array = []
+        var isConstant Bool = true
+        do
+            const typeModule String = type.fullName~()[:type.fullName~().look(':')]
+            var allFreedOnError Array = freedOnError
+            const lastIndex Int = typeCreator.fields~().length() - 1
+            parse index, fieldName Token = typeCreator.fields~()
+                const field <>CField = fields[fieldName.text~()]
+                if field.nothing?() || (field.hidden?() && typeModule != compiledData.currentModule~())
+                    errorNotFound(fieldName, "field")
+                const value Operand = typeCreator.values~()[index].compileExpression(field.type~(), codeData, compiledData, allFreedOnError, ir).toReadOnly(codeData, ir)
+                if value.named?()
+                    value.useOperand(codeData, compiledData, ir)
+                isConstant = isConstant && value.Main::constant?()
+                allFreedOnError.addItem(value)
+                valuesMap.put(fieldName.text~(), value)
+                fieldsNames.addItem(fieldName.text~())
+                code.addString(fieldName.type!(Token).text~() + " : " + value.code~().text~() + (index == lastIndex).select("}", ", "))
+        if fields.length() > typeCreator.fields~().length()
+            errorNotEnoughtFields(typeCreator.type~())
+        fieldsNames.sort(true)
+        const result Operand = Operand{{
+            code          : code,
+            access        : Access[read],
+            value         : isConstant.select(irConstType(valuesMap, fieldsNames, type.fullName~(), ir), irType(valuesMap, fieldsNames, codeData, type.fullName~(), ir)),
+            type          : COType{type: type.fullName~(), isOptional : false},
+            isConstant    : isConstant,
+            isNamed       : false,
+            isArgument    : false,
+            isGlobalConst : false
+        }}
+        typesCompatibleCheck(result, expectType, codeData, compiledData)
+        return result
+
+type EVar
+    name Token
+
+attach EVar to Expression
+    def compileExpression(variable EVar, expectType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String) Operand
+        var result <>Operand = nothing
+        do
+            var existedVar <>NamedOperand = codeData.namedOperands~()[variable.name~().text~()]
+            if existedVar.nothing?()
+                errorNotFound(variable.name~(), "variable")
+            if !existedVar.used?()
+                existedVar.isUsed`(true)
+                var namedOperands Map = codeData.namedOperands`(Map())
+                namedOperands.put(variable.name~().text~(), existedVar)
+                codeData.namedOperands`(namedOperands)
+            result = existedVar.operand~()
+        result.code`(variable.name~())
+        result.runtimeTypesCompatibleCheck(expectType, codeData, compiledData, freedOnError, ir)
+        if expectType.simple?() && (!result.type~().simple?() || (!expectType.optional?() && result.type~().optional?()))
+            result.type`(expectType)
+        return result
 
 // The function turns an array from an expression into a tree of expressions.
 #noinline
-def expressionArrayToTree(expressionArray List) Expression
+def expressionsArrayToTree(expressionsArray List) $Expression
     for :(priority Int = 11) priority >= 0; priority--
         if priority == 2
-            parse index, item = expressionArray
-                if item.typeNumber~() == Token.typeNumber~()
+            parse index, item = expressionsArray
+                if item.type?(Token)
                     const operator Token = item
                     if operator.text~() == "!"
                         if index != 0
                             errorNotExpectedToken(operator, "")
-                        return Expression({enum::exp_function, operator.replaceText("STD::shar__sugar__neg"), false, [expressionArrayToTree(expressionArray[1 : expressionArray.length~()])]})
+                        return EFunctionCall{{
+                            name       : operator.replaceText("STD::shar__sugar__neg"),
+                            arguments  : {expressionsArrayToTree(expressionsArray[1:])},
+                            isOptional : false
+                        }}
         else
-            for :(index Int = expressionArray.length~() - 1) index >= 0; index--
-                const item $Any = expressionArray[index]
-                if item.typeNumber~() == Token.typeNumber~()
+            for :(index Int = expressionsArray.length() - 1) index >= 0; index--
+                const item $Any = expressionsArray[index]
+                if item.type?(Token)
                     const operator Token = item
                     if operator.getOperatorPriority() == priority
-                        var result Expression = Expression.fromList({})
-                        const functionName Token = operator.operatorToFunctionName()
+                        var result <>$Expression = nothing
+                        const functionName Token = operatorToFunctionName(operator)
                         switch operator.text~()
                         case ".", "->"
-                            const left Expression = expressionArrayToTree(expressionArray[0 : index])
-                            var right List = expressionArray[index + 1]
-                            eSwitch right[0]
-                            case exp_select, exp_inGroups
-                                right.setItem(1, left)
-                            case exp_function
-                                var arguments Array = right.put(3, [])
+                            const left $Expression = expressionsArrayToTree(expressionsArray[:index])
+                            if expressionsArray.length() != index + 2
+                                unreachable()
+                            tSwitch expressionsArray[index + 1]
+                            case ESelect
+                                var eSelect ESelect = expressionsArray[index + 1]
+                                eSelect.predicate`(left)
+                                result = eSelect
+                            case EInGroups
+                                var eInGroups EInGroups = expressionsArray[index + 1]
+                                eInGroups.operand`(left)
+                                result = eInGroups
+                            case EGetField
+                                var eGetField EGetField = expressionsArray[index + 1]
+                                eGetField.operand`(left)
+                                result = eGetField
+                            case EPutField
+                                var ePutField EPutField = expressionsArray[index + 1]
+                                ePutField.operand`(left)
+                                result = ePutField
+                            case EFunctionCall
+                                var eFunctionCall EFunctionCall = expressionsArray[index + 1]
+                                var arguments List = eFunctionCall.arguments`({})
                                 arguments.insert(0, left)
-                                right.put(3, arguments)
-                            result = Expression(right)
+                                eFunctionCall.arguments`(arguments)
+                                result = eFunctionCall
+                            default
+                                unreachable()
                         case "++", "--"
-                            if index != expressionArray.length~() - 1
+                            if index != expressionsArray.length() - 1
                                 errorNotExpectedToken(operator, "")
-                            result = Expression({enum::exp_function, functionName, false, [expressionArrayToTree(expressionArray[0 : expressionArray.length~() - 1])]})
+                            result = EFunctionCall{{
+                                name       : functionName,
+                                arguments  : {expressionsArrayToTree(expressionsArray[:expressionsArray.length() - 1])},
+                                isOptional : false
+                            }}
                         case "&&"
-                            result = Expression({enum::exp_lazyAnd, expressionArrayToTree(expressionArray[0 : index]), expressionArrayToTree(expressionArray[index + 1 : expressionArray.length~()])})
+                            result = ELazyAnd{{
+                                left  : expressionsArrayToTree(expressionsArray[:index]),
+                                right : expressionsArrayToTree(expressionsArray[index + 1:])
+                            }}
                         case "||"
-                            result = Expression({enum::exp_lazyOr, expressionArrayToTree(expressionArray[0 : index]), expressionArrayToTree(expressionArray[index + 1 : expressionArray.length~()])})
+                            result = ELazyOr{{
+                                left  : expressionsArrayToTree(expressionsArray[:index]),
+                                right : expressionsArrayToTree(expressionsArray[index + 1:])
+                            }}
                         default
-                            result = Expression{
-                                ({enum::exp_function,
-                                functionName, false,
-                                [expressionArrayToTree(expressionArray[0 : index]),
-                                expressionArrayToTree(expressionArray[index + 1 : expressionArray.length~()])]
-                                })
-                            }
+                            result = EFunctionCall{{
+                                name       : functionName,
+                                arguments  : {expressionsArrayToTree(expressionsArray[:index]),
+                                    expressionsArrayToTree(expressionsArray[index + 1:])},
+                                isOptional : false
+                            }}
                         return result
-    return Expression(expressionArray[0])
+    if expressionsArray.length() != 1
+        unreachable()
+    return expressionsArray[0]
 
 // Functions recognizes the priority of the operator.
-#alwaysinline
 def getOperatorPriority(operator Token) Int
     var result Int = 0
     switch operator.text~()
@@ -152,7 +914,6 @@ def getOperatorPriority(operator Token) Int
     return result
 
 // The function recognizes the name of the function that the specified operator calls.
-#alwaysinline
 def operatorToFunctionName(operator Token) Token
     var functionName String = ""
     switch operator.text~()
@@ -213,413 +974,3 @@ def operatorToFunctionName(operator Token) Token
     case ">>="
         functionName = "STD::shar__sugar__shrSet"
     return operator.replaceText(functionName)
-
-// The function compiles the expression.
-#noinline
-def compileExpression(expression Expression, expectType OType, write codeData CodeData, compiledData CData, freedOnError Array, write llvmIR String) Operand
-    var result Operand = Operand.fromList({})
-    const expressionAsList List = expression.toList()
-    eSwitch expressionAsList[0]
-    case exp_expression
-        result = expressionAsList[1].compileExpression(expectType, codeData, compiledData, freedOnError, llvmIR)
-        return result
-    case exp_array
-        var code Token = expressionAsList[1]
-        var value String = ""
-        var isConstant Bool = true
-        const items Array = expressionAsList[2]
-        if items.empty?()
-            code.text`("[]")
-            value = "{i64 ptrtoint ([3 x i64]* @empty.array to i64), i32 ##tnum##STD::Array##}"
-        else
-            var itemsOperands Array = []
-            var allFreedOnError  Array = freedOnError
-            parse _, itemExpression = items
-                const oneItem Operand = itemExpression.compileExpression(const::anyType, codeData, compiledData, allFreedOnError, llvmIR).toReadOnly(codeData, llvmIR)
-                if oneItem.named?()
-                    oneItem.useOperand(codeData, compiledData, llvmIR)
-                itemsOperands.addItem(oneItem)
-                allFreedOnError.addItem(oneItem)
-                code.addString(oneItem.code~().text~() + ", ")
-                isConstant = isConstant && oneItem.Main::constant?()
-            var text String = code.text`("")
-            text.setItem(text.length~() - 2, ']')
-            text.delete(text.length~() - 1, 1)
-            code.text`(text)
-            text = ""
-            const itemsCount String = items.length~().toString()
-            const itemsType OType = itemsOperands[0].type~()
-            if itemsType.nothingType?()
-                errorNotExpectedToken(itemsOperands[0].code~(), "")
-            if isConstant
-                const llvmArrayDataType String = "[" + (itemsOperands.length~() + 3).toString() + " x i64]"
-                for :(index Int = 1) index < itemsOperands.length~(); index++
-                    const itemOperand Operand = itemsOperands[index]
-                    itemOperand.type~().typeEq!(itemsType, itemOperand.code~(), false)
-                var llvmArrayData String = "##llvmconst##>private unnamed_addr constant " + llvmArrayDataType + " [i64 0, i64 " + itemsCount + ", i64 ##tnum##" + oTypeToToken(itemsType, false).text~() + "##"
-                parse _, itemOperand = itemsOperands
-                    const itemOperandValue String = itemOperand.value~()
-                    llvmArrayData += ", " + itemOperandValue[1 : itemOperandValue.lookBack(',')]
-                llvmArrayData += "], align 8<##"
-                value = "{i64 ptrtoint (" + llvmArrayDataType + "* " + llvmArrayData + " to i64), i32 ##tnum##STD::Array##}"
-            else
-                const itemsTypeNumberRegister String = codeData.createRegister("extractvalue {i64, i32} " + itemsOperands[0].value~() + ", 1", llvmIR)
-                if itemsType.optional?() || itemsType.anyType?()
-                    const checkLabel String = codeData.createLabel()
-                    const throwLabel String = codeData.createLabel()
-                    const okLabel String = codeData.createLabel()
-                    llvmIR += "\tbr i1 ##flag##nothrow##, label %##reg##" + okLabel + "##, label %##reg##" + checkLabel + "##\n\t##nreg##" + checkLabel + "##:\n"
-                    const notNothingRegister String = codeData.createRegister("icmp ne i32 " + itemsTypeNumberRegister + ", 0", llvmIR).likelyI1Register(codeData, llvmIR)
-                    llvmIR += "\tbr i1 " + notNothingRegister + ", label %##reg##" + okLabel + "##, label %##reg##" + throwLabel + "##\n\t##nreg##" + throwLabel + "##:\n"
-                    createInvalidTypeThrow(codeData, compiledData, allFreedOnError, llvmIR)
-                    llvmIR += "\t##nreg##" + okLabel + "##:\n"
-                for :(index Int = 1) index < itemsOperands.length~(); index++
-                    const itemOperand Operand = itemsOperands[index]
-                    itemOperand.runtimeTypeCheck(itemsType, itemsTypeNumberRegister, codeData, compiledData, allFreedOnError, llvmIR)
-                value = createArrayInLLVMIR(codeData, itemsTypeNumberRegister, itemsOperands, llvmIR)
-        result = Operand(code, enum::access_read, value, OType(code.replaceText("STD::Array"), false), isConstant, true, false, false, false)
-    case exp_bool
-        const boolToken Token = expressionAsList[1]
-        const value String = (boolToken.text~() == "true").select("{i64 1, i32 ##tnum##STD::Bool##}", "{i64 0, i32 ##tnum##STD::Bool##}")
-        result = Operand(boolToken, enum::access_read, value, OType(boolToken.replaceText("STD::Bool"), false), true, true, false, false, false)
-    case exp_char
-        const charToken Token = expressionAsList[1]
-        result = Operand(charToken, enum::access_read, "{i64 " + charToken.charToLLVMI64() + ", i32 ##tnum##STD::Char##}", OType(charToken.replaceText("STD::Char"), false), true, true, false, false, false)
-    case exp_const
-        const constantToken Token = expressionAsList[1]
-        const constant CConstant = compiledData.getConstant(constantToken, false)
-        const value String = codeData.createRegister("call {i64, i32} ##const##" + constant.fullName~() + "##()", llvmIR)
-        result = Operand(constantToken, enum::access_read, value, constant.type~(), false, true, false, false, true)
-    case exp_enum
-        const elementToken Token = expressionAsList[1]
-        const elementFullName String = compiledData.getEnumElementFullName(elementToken, false)
-        const value String = "{i64 ##enum##" + elementFullName + "##, i32 ##tnum##STD::Int##}"
-        result = Operand(elementToken, enum::access_read, value, OType(elementToken.replaceText("STD::Int"), false), true, true, false, false, false)
-    case exp_function
-        const name Token = expressionAsList[1]
-        const isOptional Bool = expressionAsList[2]
-        const argumentsExpressions Array = expressionAsList[3]
-        var arguments Array = []
-        var allFreedOnError Array = freedOnError
-        var index Int = 0
-        var nothingLabel String = ""
-        var functionLabel String = ""
-        var functionEndLabel String = ""
-        var endLabel String = ""
-        if isOptional
-            var firstArgument Operand = argumentsExpressions[0].compileExpression(const::anyType, codeData, compiledData, allFreedOnError, llvmIR)
-            if !(firstArgument.type~().optional?() || firstArgument.type~().anyType?())
-                errorNoPosibleNothingType(firstArgument.code~())
-            var firstArgumentTypeRegister String = ""
-            if firstArgument.access~() == enum::access_write
-                var typePointerRegister String = codeData.createRegister("getelementptr {i64, i32}, {i64, i32}* " + firstArgument.value~() + ", i64 0, i32 1", llvmIR)
-                firstArgumentTypeRegister = codeData.createRegister("load i32, i32* " + typePointerRegister + ", align 4", llvmIR)
-            else
-                firstArgumentTypeRegister = codeData.createRegister("extractvalue {i64, i32} " + firstArgument.value~() + ", 1", llvmIR)
-            nothingLabel = codeData.createLabel()
-            functionLabel = codeData.createLabel()
-            functionEndLabel = codeData.createLabel()
-            endLabel = codeData.createLabel()
-            const firstArgumentIsNothingRegister String = codeData.createRegister("icmp eq i32 " + firstArgumentTypeRegister + ", 0", llvmIR)
-            llvmIR += "\tbr i1 " + firstArgumentIsNothingRegister + ", label %##reg##" + nothingLabel + "##, label %##reg##" + functionLabel + "##\n\t##nreg##" + functionLabel + "##:\n"
-            var firstArgumentType OType = firstArgument.type`(nothing)
-            firstArgumentType.optional`(false)
-            firstArgument.type`(firstArgumentType)
-            firstArgumentType = const::emptyOType
-            arguments.addItem(firstArgument)
-            if !firstArgument.named?()
-                allFreedOnError.addItem(firstArgument)
-            index = 1
-        for index < argumentsExpressions.length~(); index++
-            const argument Operand = argumentsExpressions[index].compileExpression(const::anyType, codeData, compiledData, allFreedOnError, llvmIR)
-            arguments.addItem(argument)
-            if !argument.named?()
-                allFreedOnError.addItem(argument)
-        result = callFunction(name, arguments, codeData, compiledData, freedOnError, true, llvmIR)
-        if isOptional
-            llvmIR += {
-                "\tbr label %##reg##" + functionEndLabel + "##\n"
-                "\t##nreg##" + functionEndLabel + "##:\n"
-                "\tbr label %##reg##" + endLabel + "##\n"
-                "\t##nreg##" + nothingLabel + "##:\n"
-                "\tbr label %##reg##" + endLabel + "##\n"
-                "\t##nreg##" + endLabel + "##:\n"
-            }
-            result.value`(codeData.createRegister("phi {i64, i32} [" + result.value~() + ", %##reg##" + functionEndLabel + "##], [zeroinitializer, %##reg##" + nothingLabel + "##]", llvmIR))
-            if !(result.type~().anyType?() || result.type~().nothingType?() || result.type~().optional?())
-                var type OType = result.type`(nothing)
-                type.optional`(true)
-                result.type`(type)
-    case exp_inGroups
-        const operandExpression Expression = expressionAsList[1]
-        const isOptional Bool = expressionAsList[2]
-        const groups Array = expressionAsList[3]
-        var operand Operand = operandExpression.compileExpression(const::anyType, codeData, compiledData, freedOnError, llvmIR)
-        var typeRegister String = ""
-        if operand.access~() == enum::access_write
-            var typePointerRegister String = codeData.createRegister("getelementptr {i64, i32}, {i64, i32}* " + operand.value~() + ", i64 0, i32 1", llvmIR)
-            typeRegister = codeData.createRegister("load i32, i32* " + typePointerRegister + ", align 4", llvmIR)
-        else
-            typeRegister = codeData.createRegister("extractvalue {i64, i32} " + operand.value~() + ", 1", llvmIR)
-        var nothingLabel String = ""
-        var inGroupLabel String = ""
-        var inGroupEndLabel String = ""
-        var endLabel String = ""
-        if isOptional
-            if !(operand.type~().optional?() || operand.type~().anyType?())
-                errorNoPosibleNothingType(operand.code~())
-            nothingLabel = codeData.createLabel()
-            inGroupLabel = codeData.createLabel()
-            inGroupEndLabel = codeData.createLabel()
-            endLabel = codeData.createLabel()
-            const operandIsNothingRegister String = codeData.createRegister("icmp eq i32 " + typeRegister + ", 0", llvmIR)
-            llvmIR += "\tbr i1 " + operandIsNothingRegister + ", label %##reg##" + nothingLabel + "##, label %##reg##" + inGroupLabel + "##\n\t##nreg##" + inGroupLabel + "##:\n"
-            var operandType OType = operand.type`(nothing)
-            operandType.optional`(false)
-            operand.type`(operandType)
-        if !operand.named?()
-            operand.freeOperand(codeData, compiledData, llvmIR)
-        var groupsFullSet Set = Set()
-        var code Token = operand.code~().replaceText("inGroup?(" + operand.code~().text~())
-        parse _, groupName = groups
-            code.addString(", " + groupName.text~())
-            const group CGroup = compiledData.getGroup(groupName, false)
-            parse _, subGroupName = group.subGroups~()
-                groupsFullSet.add(subGroupName)
-            groupsFullSet.add(group.fullName~())
-        code.addChar(')')
-        var groupsFullArray Array = []
-        parse _, group = groupsFullSet
-            groupsFullArray.addItem(group)
-        groupsFullArray.sort(true)
-        var value String = ""
-        var isConstant Bool = false
-        if operand.type~().simple?() && !(operand.type~().this?() || operand.type~().optional?() || isOptional)
-            isConstant = true
-            var inGroups Bool = true
-            const operandType CType = compiledData.getType(code.replaceText(operand.type~().type~().text~()), false)
-            parse :(parse) _, groupName = groupsFullArray
-                inGroups = operandType.groups~()[groupName]
-                if !inGroups
-                    end parse
-            value = inGroups.select("{i64 1, i32 ##tnum##STD::Bool##}", "{i64 0, i32 ##tnum##STD::Bool##}")
-        else
-            var groupListAsOneString String = ""
-            parse _, groupName = groupsFullArray
-                groupListAsOneString += groupName + ","
-            groupListAsOneString.delete(groupListAsOneString.length~() - 1, 1)
-            value = codeData.createRegister("call i1 ##ingroups##" + groupListAsOneString + "##(i32 " + typeRegister + ")", llvmIR)
-            value = codeData.createRegister("zext i1 " + value + " to i64", llvmIR)
-            value = codeData.createRegister("insertvalue {i64, i32} {i64 0, i32 ##tnum##STD::Bool##}, i64 " + value + ", 0", llvmIR)
-        result = Operand(code, enum::access_read, value, OType(code.replaceText("STD::Bool"), isOptional), isConstant, true, false, false, false)
-        if isOptional
-            llvmIR += {
-                "\tbr label %##reg##" + inGroupEndLabel + "##\n"
-                "\t##nreg##" + inGroupEndLabel + "##:\n"
-                "\tbr label %##reg##" + endLabel + "##\n"
-                "\t##nreg##" + nothingLabel + "##:\n"
-                "\tbr label %##reg##" + endLabel + "##\n"
-                "\t##nreg##" + endLabel + "##:\n"
-            }
-            result.value`(codeData.createRegister("phi {i64, i32} [" + result.value~() + ", %##reg##" + inGroupEndLabel + "##], [zeroinitializer, %##reg##" + nothingLabel + "##]", llvmIR))
-    case exp_int
-        const intToken Token = expressionAsList[1]
-        result = Operand(intToken, enum::access_read, "{i64 " + integerToLLVMI64(intToken) + ", i32 ##tnum##STD::Int##}", OType(intToken.replaceText("STD::Int"), false), true, true, false, false, false)
-    case exp_lazyAnd
-        const leftExpression Expression = expressionAsList[1]
-        const rightExpression Expression = expressionAsList[2]
-        const leftOperand Operand = leftExpression.compileExpression(const::boolType, codeData, compiledData, freedOnError, llvmIR).toReadOnly(codeData, llvmIR)
-        const leftAsI64Register String = codeData.createRegister("extractvalue {i64, i32} " + leftOperand.value~() + ", 0", llvmIR)
-        const leftAsI1Register String = codeData.createRegister("trunc i64 " + leftAsI64Register + " to i1", llvmIR)
-        const maybeTrueLabel String = codeData.createLabel()
-        const falseLabel String = codeData.createLabel()
-        const trueLabel String = codeData.createLabel()
-        const endLabel String = codeData.createLabel()
-        llvmIR += "\tbr i1 " + leftAsI1Register + ", label %##reg##" + maybeTrueLabel + "##, label %##reg##" + falseLabel + "##\n\t##nreg##" + maybeTrueLabel + "##:\n"
-        const rightOperand Operand = rightExpression.compileExpression(const::boolType, codeData, compiledData, freedOnError, llvmIR).toReadOnly(codeData, llvmIR)
-        const rightAsI64Register String = codeData.createRegister("extractvalue {i64, i32} " + rightOperand.value~() + ", 0", llvmIR)
-        const rightAsI1Register String = codeData.createRegister("trunc i64 " + rightAsI64Register + " to i1", llvmIR)
-        llvmIR += {
-            "\tbr i1 " + rightAsI1Register + ", label %##reg##" + trueLabel + "##, label %##reg##" + falseLabel + "##\n"
-            "\t##nreg##" + falseLabel + "##:\n"
-            "\tbr label %##reg##" + endLabel + "##\n"
-            "\t##nreg##" + trueLabel + "##:\n"
-            "\tbr label %##reg##" + endLabel + "##\n"
-            "\t##nreg##" + endLabel + "##:\n"
-        }
-        const value String = codeData.createRegister("phi {i64, i32} [{i64 0, i32 ##tnum##STD::Bool##}, %##reg##" + falseLabel + "##], [{i64 1, i32 ##tnum##STD::Bool##}, %##reg##" + trueLabel + "##]", llvmIR)
-        result = Operand{
-            (leftOperand.code~().replaceText("((" + leftOperand.code~().text~() + ") && (" + rightOperand.code~().text~() + "))"),
-            enum::access_read,
-            value,
-            OType(leftOperand.code~().replaceText("STD::Bool"), false),
-            false, true, false, false, false)
-        }
-    case exp_lazyOr
-        const leftExpression Expression = expressionAsList[1]
-        const rightExpression Expression = expressionAsList[2]
-        const leftOperand Operand = leftExpression.compileExpression(const::boolType, codeData, compiledData, freedOnError, llvmIR).toReadOnly(codeData, llvmIR)
-        const leftAsI64Register String = codeData.createRegister("extractvalue {i64, i32} " + leftOperand.value~() + ", 0", llvmIR)
-        const leftAsI1Register String = codeData.createRegister("trunc i64 " + leftAsI64Register + " to i1", llvmIR)
-        const maybeFalseLabel String = codeData.createLabel()
-        const falseLabel String = codeData.createLabel()
-        const trueLabel String = codeData.createLabel()
-        const endLabel String = codeData.createLabel()
-        llvmIR += "\tbr i1 " + leftAsI1Register + ", label %##reg##" + trueLabel + "##, label %##reg##" + maybeFalseLabel + "##\n\t##nreg##" + maybeFalseLabel + "##:\n"
-        const rightOperand Operand = rightExpression.compileExpression(const::boolType, codeData, compiledData, freedOnError, llvmIR).toReadOnly(codeData, llvmIR)
-        const rightAsI64Register String = codeData.createRegister("extractvalue {i64, i32} " + rightOperand.value~() + ", 0", llvmIR)
-        const rightAsI1Register String = codeData.createRegister("trunc i64 " + rightAsI64Register + " to i1", llvmIR)
-        llvmIR += {
-            "\tbr i1 " + rightAsI1Register + ", label %##reg##" + trueLabel + "##, label %##reg##" + falseLabel + "##\n"
-            "\t##nreg##" + falseLabel + "##:\n"
-            "\tbr label %##reg##" + endLabel + "##\n"
-            "\t##nreg##" + trueLabel + "##:\n"
-            "\tbr label %##reg##" + endLabel + "##\n"
-            "\t##nreg##" + endLabel + "##:\n"
-        }
-        const value String = codeData.createRegister("phi {i64, i32} [{i64 0, i32 ##tnum##STD::Bool##}, %##reg##" + falseLabel + "##], [{i64 1, i32 ##tnum##STD::Bool##}, %##reg##" + trueLabel + "##]", llvmIR)
-        result = Operand{
-            (leftOperand.code~().replaceText("((" + leftOperand.code~().text~() + ") || (" + rightOperand.code~().text~() + "))"),
-            enum::access_read,
-            value,
-            OType(leftOperand.code~().replaceText("STD::Bool"), false),
-            false, true, false, false, false)
-        }
-    case exp_list
-        var code Token = expressionAsList[1]
-        var value String = ""
-        var isConstant Bool = true
-        const items Array = expressionAsList[2]
-        if items.empty?()
-            code.text`("{}")
-            value = "{i64 ptrtoint ([2 x i64]* @empty.list to i64), i32 ##tnum##STD::List##}"
-        else
-            var itemsOperands Array = []
-            var allFreedOnError  Array = freedOnError
-            parse _, itemExpression = items
-                const oneItem Operand = itemExpression.compileExpression(const::anyType, codeData, compiledData, allFreedOnError, llvmIR).toReadOnly(codeData, llvmIR)
-                if oneItem.named?()
-                    oneItem.useOperand(codeData, compiledData, llvmIR)
-                itemsOperands.addItem(oneItem)
-                allFreedOnError.addItem(oneItem)
-                code.addString(oneItem.code~().text~() + ", ")
-                isConstant = isConstant && oneItem.Main::constant?()
-            var text String = code.text`("")
-            text.setItem(text.length~() - 2, '}')
-            text.delete(text.length~() - 1, 1)
-            code.text`(text)
-            text = ""
-            const itemsCount String = items.length~().toString()
-            if isConstant
-                const llvmListDataType String = "{i64, i64" + ", <{i64, i32}>".repeatPart(itemsOperands.length~()) + "}"
-                var llvmListData String = "##llvmconst##>private unnamed_addr constant " + llvmListDataType + " {i64 0, i64 " + itemsCount
-                parse _, itemOperand = itemsOperands
-                    llvmListData += ", <{i64, i32}> <" + itemOperand.value~() + ">"
-                llvmListData += "}, align 8<##"
-                value = "{i64 ptrtoint (" + llvmListDataType + "* " + llvmListData + " to i64), i32 ##tnum##STD::List##}"
-            else
-                value = codeData.createListInLLVMIR(itemsOperands, llvmIR)
-        result = Operand(code, enum::access_read, value, OType(code.replaceText("STD::List"), false), isConstant, true, false, false, false)
-    case exp_noReadOperand
-        const noReadToken Token = expressionAsList[1]
-        const typeFullName String = (noReadToken.text~() == "This").select("This", compiledData.getType(noReadToken, false).fullName~())
-        result = Operand(noReadToken, enum::access_noread, "{i64 0, i32 ##tnum##" + typeFullName + "##}", OType(noReadToken.replaceText(typeFullName), false), true, true, false, false, false)
-    case exp_nothing
-        const nothingToken Token = expressionAsList[1]
-        result = Operand(nothingToken, enum::access_read, "{i64 0, i32 0}", OType(nothingToken.replaceText("STD::Nothing"), false), true, true, false, false, false)
-    case exp_real
-        const realToken Token = expressionAsList[1]
-        result = Operand(realToken, enum::access_read, "{i64 bitcast (double " + realToken.realToLLVMDouble() + " to i64), i32 ##tnum##STD::Real##}", OType(realToken.replaceText("STD::Real"), false), true, true, false, false, false)
-    case exp_select
-        var predicateExpression Expression = expressionAsList[1]
-        var isOptional Bool = expressionAsList[2]
-        var firstExpression Expression = expressionAsList[3]
-        var secondExpression Expression = expressionAsList[4]
-        var predicate Operand = predicateExpression.compileExpression(const::boolType, codeData, compiledData, freedOnError, llvmIR)
-        const trueLabel String = codeData.createLabel()
-        const falseLabel String = codeData.createLabel()
-        const firstEndLabel String = codeData.createLabel()
-        const secondEndLabel String = codeData.createLabel()
-        const endLabel String = codeData.createLabel()
-        var selectLabel String = ""
-        var nothingLabel String = ""
-        if isOptional
-            if !(predicate.type~().optional?() || predicate.type~().anyType?())
-                errorNoPosibleNothingType(predicate.code~())
-            selectLabel = codeData.createLabel()
-            nothingLabel = codeData.createLabel()
-            var typeRegister String = ""
-            if predicate.access~() == enum::access_write
-                var typePointerRegister String = codeData.createRegister("getelementptr {i64, i32}, {i64, i32}* " + predicate.value~() + ", i64 0, i32 1", llvmIR)
-                typeRegister = codeData.createRegister("load i32, i32* " + typePointerRegister + ", align 4", llvmIR)
-            else
-                typeRegister = codeData.createRegister("extractvalue {i64, i32} " + predicate.value~() + ", 1", llvmIR)
-            const predicateIsNothingRegister String = codeData.createRegister("icmp eq i32 " + typeRegister + ", 0", llvmIR)
-            llvmIR += "\tbr i1 " + predicateIsNothingRegister + ", label %##reg##" + nothingLabel + "##, label %##reg##" + selectLabel + "##\n\t##nreg##" + selectLabel + "##:\n"
-            var predicateType OType = predicate.type`(nothing)
-            predicateType.optional`(false)
-            predicate.type`(predicateType)
-        predicate = predicate.toReadOnly(codeData, llvmIR)
-        const predicateAsI64Register String = codeData.createRegister("extractvalue {i64, i32} " + predicate.value~() + ", 0", llvmIR)
-        const predicateAsI1Register String = codeData.createRegister("trunc i64 " + predicateAsI64Register + " to i1", llvmIR)
-        llvmIR += "\tbr i1 " + predicateAsI1Register + ", label %##reg##" + trueLabel + "##, label %##reg##" + falseLabel + "##\n\t##nreg##" + trueLabel + "##:\n"
-        const first Operand = firstExpression.compileExpression(const::anyType, codeData, compiledData, freedOnError, llvmIR).toReadOnly(codeData, llvmIR)
-        if first.named?()
-            first.useOperand(codeData, compiledData, llvmIR)
-        llvmIR += "\tbr label %##reg##" + firstEndLabel + "##\n\t##nreg##" + falseLabel + "##:\n"
-        const second Operand = secondExpression.compileExpression(const::anyType, codeData, compiledData, freedOnError, llvmIR).toReadOnly(codeData, llvmIR)
-        if second.named?()
-            second.useOperand(codeData, compiledData, llvmIR)
-        llvmIR += {
-            "\tbr label %##reg##" + secondEndLabel + "##\n"
-            "\t##nreg##" + firstEndLabel + "##:\n"
-            "\tbr label %##reg##" + endLabel + "##\n"
-            "\t##nreg##" + secondEndLabel + "##:\n"
-            "\tbr label %##reg##" + endLabel + "##\n"
-        }
-        if isOptional
-            llvmIR += "\t##nreg##" + nothingLabel + "##:\n\tbr label %##reg##" + endLabel + "##\n"
-        llvmIR += "\t##nreg##" + endLabel + "##:\n"
-        var value String = "phi {i64, i32} [" + first.value~() + ", %##reg##" + firstEndLabel + "##], [" + second.value~() + ", %##reg##" + secondEndLabel + "##]"
-        if isOptional
-            value += ", [zeroinitializer,  %##reg##" + nothingLabel + "##]"
-        value = codeData.createRegister(value, llvmIR)
-        var type OType = OType.fromList({})
-        if first.type~().typeEq?(second.type~(), false)
-            type = first.type~()
-            type.optional`((first.type~().optional?() || second.type~().optional?() || isOptional) && !(type.nothingType?() || type.anyType?()))
-        elif first.type~().nothingType?() && !second.type~().anyType?()
-            type = second.type~()
-            type.optional`(true)
-        elif second.type~().nothingType?() && !first.type~().anyType?()
-            type = first.type~()
-            type.optional`(true)
-        else
-            type = const::anyType
-        result = Operand{
-            (predicate.code~().replaceText("select(" + predicate.code~().text~() + ", " + first.code~().text~() + ", " + second.code~().text~() + ")"),
-            enum::access_read,
-            value,
-            type,
-            false, true, false, false, false)
-        }
-    case exp_string
-        result = expressionAsList[1].stringToOperand()
-    case exp_var
-        const varName Token = expressionAsList[1]
-        var namedOperands Map = codeData.namedOperands`(nothing)
-        var existedVar <>NamedOperand = namedOperands.put(varName.text~(), NamedOperand.fromList({}))
-        if existedVar.nothing?()
-            errorNotFound(varName, "variable")
-        result = existedVar.operand`(nothing)
-        result.used`(true)
-        existedVar.operand`(result)
-        namedOperands.put(varName.text~(), existedVar)
-        codeData.namedOperands`(namedOperands)
-        result.code`(varName)
-    default
-        unreachable()
-    result.runtimeTypesCompatibleCheck(expectType, codeData, compiledData, freedOnError, llvmIR)
-    if expectType.simple?() && (!result.type~().simple?() || (!expectType.optional?() && result.type~().optional?()))
-        result.type`(expectType)
-    return result

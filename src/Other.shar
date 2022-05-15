@@ -1,0 +1,93 @@
+module Main
+
+group IsExport
+    export?(This) Bool
+
+group IsEnum
+    enum?(This) Bool
+
+group IsConstant
+    constant?(This) Bool
+
+group IsOptional
+    optional?(This) Bool
+
+group IsNamed
+    named?(This) Bool
+
+group IsArgument
+    argument?(This) Bool
+
+group IsGlobalConst
+    globalConst?(This) Bool
+
+group IsUsed
+    used?(This) Bool
+
+group IsPrimitive
+    primitive?(This) Bool
+
+group IsHidden
+    hidden?(This) Bool
+
+group IsFromCurrentModule
+    fromCurrentModule?(This) Bool
+
+def binarySearchString(array Array, string String) <>Int
+    var left Int = 0
+    var right Int = array.length()
+    for
+        const center Int = (right + left) >> 1
+        eSwitch string.compare(array[center])
+        case less
+            right = center
+        case great
+            left = center + 1
+        case equal
+            return center
+        if left >= right
+            return nothing
+
+def stringToRaw(string Token) String
+    var result String = ""
+    var escChar String = ""
+    for :(index Int = 1) index < string.text~().length() - 1; index++
+        const char Char = string.text~()[index]
+        switch escChar.length()
+        case 0
+            if char == '\\'
+                escChar = "\\"
+            else
+                result.addItem(char)
+        case 1
+            switch char
+            case 'n'
+                escChar = ""
+                result.addItem('\n')
+            case 't'
+                escChar = ""
+                result.addItem('\t')
+            case '\\'
+                escChar = ""
+                result.addItem('\\')
+            case 'q'
+                escChar = ""
+                result.addItem('\q')
+            case 'p'
+                escChar = ""
+                result.addItem('\p')
+            default
+                escChar.addItem(char)
+        case 6
+            escChar = "0x" + escChar[1:]
+            escChar.addItem(char)
+            try
+                result.addItem(intToChar(hexToInt(escChar)))
+            catch
+                errorInvalidString(string)
+            escChar = ""
+        default
+            escChar.addItem(char)
+    if !escChar.empty?()
+        errorInvalidString(string)
+    return result

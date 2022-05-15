@@ -1,95 +1,355 @@
 module Main
 
-// Compiled data.
-type CData
-    // currentModule        String
-    // enumerationsElements Map(name String, Map(moduleName String, isExport Bool))
-    // constants            Map(name String, Map(moduleName String, CConstant))
-    // types                Map(name String, Map(moduleName String, CType))
-    // groups               Map(name String, Map(moduleName String, CGroup))
-    // functions            Map(name String, Map(moduleName String, CFunction))
-
-def moduleSignature() Bytes
-    var result Bytes = Bytes()
-    parse _, char = "shar module 0.4|"
-        result.addItem(charToInt(char))
+const alwaysUsedTypes Map
+    var result Map = Map()
+    parse typeNumber, typeName String = {
+        [
+            "STD::Nothing",
+            "STD::Error",
+            "STD::Bool",
+            "STD::Int",
+            "STD::String"
+        ]
+    }
+        result.put(typeName, typeNumber.toString())
     return result
 
-attach CData to FieldCurrentModule
-    #alwaysinline
-    def currentModule~(data CData) String
-        return data.typeGetItem(0)
+const builtinLLVMDeclaredFunctions Map
+    var result Map = Map()
+    const functions Array = {
+        [
+            "llvm.expect.i1"                    , "declare i1 @llvm.expect.i1(i1, i1)",
+            "llvm.assume"                       , "declare void @llvm.assume(i1)",
+            "malloc"                            , "declare noalias i8* @malloc(i64) nofree nounwind",
+            "realloc"                           , "declare noalias i8* @realloc(i8* nocapture, i64) nounwind",
+            "free"                              , "declare void @free(i8* nocapture) nounwind",
+            "string__utf32_to_utf8"             , "declare noalias i8* @string__utf32_to_utf8({i64, i32}) nounwind",
+            "string__utf8_to_utf32"             , "declare {i64, i32} @string__utf8_to_utf32(i8*) nounwind",
+            "string__print"                     , "declare void @string__print({i64, i32}) nofree nounwind",
+            "string__println"                   , "declare void @string__println({i64, i32}) nofree nounwind",
+            "string__print_as_error"            , "declare void @string__print_as_error({i64, i32}) nofree nounwind",
+            "string__println_as_error"          , "declare void @string__println_as_error({i64, i32}) nofree nounwind",
+            "string__print_error"               , "declare void @string__print_error({i64, i32}) cold noreturn nounwind",
+            "string__print_utf8_error"          , "declare void @string__print_utf8_error(i8*) cold noreturn nounwind",
+            "error__create"                     , "declare {i64, i32} @error__create({i64, i32}, {i64, i32}, {i64, i32}) nounwind",
+            "error__create_utf8_message"        , "declare {i64, i32} @error__create_utf8_message({i64, i32}, {i64, i32}, i8*) nounwind",
+            "error__add_utf8_string_to_message" , "declare void @error__add_utf8_string_to_message({i64, i32}, i8*) nounwind",
+            "error__get_id"                     , "declare {i64, i32} @error__get_id({i64, i32}) mustprogress nofree norecurse nosync nounwind readonly willreturn",
+            "error__get_message"                , "declare {i64, i32} @error__get_message({i64, i32}) mustprogress nofree norecurse nosync nounwind readonly willreturn",
+            "error__get_data"                   , "declare {i64, i32} @error__get_data({i64, i32}) mustprogress nofree norecurse nosync nounwind readonly willreturn",
+            "error__free"                       , "declare void @error__free({i64, i32}, i8*) nounwind",
+            "pipeline__create"                  , "declare i64 @pipeline__create() nounwind",
+            "pipeline__use"                     , "declare void @pipeline__use(i64) nounwind",
+            "pipeline__free"                    , "declare void @pipeline__free(i64, i8*) nounwind",
+            "pipeline__to_const"                , "declare void @pipeline__to_const(i64) nounwind",
+            "pipeline__push"                    , "declare void @pipeline__push(i64, {i64, i32}) nounwind",
+            "pipeline__pop"                     , "declare {i64, i32} @pipeline__pop(i64) nounwind",
+            "pipeline__items_count"             , "declare {i64, i32} @pipeline__items_count(i64) nounwind",
+            "worker__create"                    , "declare void @worker__create({i64, i32} ({i64, i32}, {i64, i32}, i8*, i1)*, {i64, i32}, {i64, i32}) nounwind",
+            "worker__yield"                     , "declare void @worker__yield() nounwind",
+            "worker__sleep"                     , "declare void @worker__sleep({i64, i32}) nounwind",
+            "worker__id"                        , "declare {i64, i32} @worker__id(i8* nocapture readonly) mustprogress nofree norecurse nosync readonly willreturn nounwind",
+            "get_number_of_threads"             , "declare {i64, i32} @get_number_of_threads() mustprogress nofree norecurse willreturn nounwind",
+            "env__get_cmd_argument"             , "declare {i64, i32} @env__get_cmd_argument({i64, i32}) nounwind",
+            "env__get_cmd_arguments_count"      , "declare {i64, i32} @env__get_cmd_arguments_count() mustprogress nofree norecurse nosync readonly willreturn nounwind",
+            "env__get_variable"                 , "declare {i64, i32} @env__get_variable({i64, i32}) nounwind",
+            "env__get_string_from_cmd_line"     , "declare {i64, i32} @env__get_string_from_cmd_line() nounwind",
+            "env__get_platform_name"            , "declare {i64, i32} @env__get_platform_name() mustprogress nofree norecurse nosync readnone willreturn nounwind",
+            "env__execute_command"              , "declare {i64, i32} @env__execute_command({i64, i32}) nounwind",
+            "env__get_cpu_cores_number"         , "declare {i64, i32} @env__get_cpu_cores_number() mustprogress nofree norecurse nosync readonly willreturn nounwind",
+            "int__get_random"                   , "declare {i64, i32} @int__get_random(i8* nocapture) mustprogress nofree norecurse nosync willreturn nounwind",
+            "int__get_cryptographic__random"    , "declare {i64, i32} @int__get_cryptographic__random(i8* nocapture) nounwind",
+            "fs__delete_file"                   , "declare {i64, i32} @fs__delete_file({i64, i32}) nounwind",
+            "fs__delete_empty_dir"              , "declare {i64, i32} @fs__delete_empty_dir({i64, i32}) nounwind",
+            "fs__file_is_exist"                 , "declare {i64, i32} @fs__file_is_exist({i64, i32}) nounwind",
+            "fs__dir_is_exist"                  , "declare {i64, i32} @fs__dir_is_exist({i64, i32}) nounwind",
+            "fs__open_file"                     , "declare i1 @fs__open_file({i64, i32}, i32, i8** nocapture) nounwind",
+            "fs__flush_file"                    , "declare {i64, i32} @fs__flush_file(i8* nocapture) nofree nounwind",
+            "fs__close_file"                    , "declare {i64, i32} @fs__close_file(i8* nocapture) nofree nounwind",
+            "fs__read_from_file"                , "declare {i64, i32} @fs__read_from_file(i8* nocapture, {i64, i32}, i8* nocapture) nofree nounwind",
+            "fs__write_to_file"                 , "declare {i64, i32} @fs__write_to_file(i8* nocapture, {i64, i32}, i8* nocapture) nofree nounwind",
+            "fs__get_file_size"                 , "declare {i64, i32} @fs__get_file_size({i64, i32}) nounwind",
+            "fs__get_position_in_file"          , "declare {i64, i32} @fs__get_position_in_file(i8* nocapture) nofree nounwind",
+            "fs__set_position_in_file"          , "declare {i64, i32} @fs__set_position_in_file(i8* nocapture, {i64, i32}) nofree nounwind",
+            "fs__file_rename"                   , "declare {i64, i32} @fs__file_rename({i64, i32}, {i64, i32}) nounwind",
+            "fs__dir_rename"                    , "declare {i64, i32} @fs__dir_rename({i64, i32}, {i64, i32}) nounwind",
+            "fs__open_dir"                      , "declare {i64, i32} @fs__open_dir({i64, i32}) nounwind",
+            "fs__read_dir"                      , "declare {i64, i32} @fs__read_dir({i64, i32}, {i64, i32}* nocapture) nounwind",
+            "fs__close_dir"                     , "declare void @fs__close_dir({i64, i32}) nounwind",
+            "fs__make_dir"                      , "declare {i64, i32} @fs__make_dir({i64, i32}, {i64, i32}) nounwind",
+            "fs__get_tmp_dir_name"              , "declare {i64, i32} @fs__get_tmp_dir_name() mustprogress nofree norecurse nosync readnone willreturn nounwind",
+            "time__current"                     , "declare i64 @time__current() nofree nounwind",
+            "time__current_utc"                 , "declare i64 @time__current_utc() nofree nounwind",
+            "lib__load"                         , "declare {i64, i32} @lib__load({i64, i32}) nounwind",
+            "lib__get_object_address"           , "declare {i64, i32} @lib__get_object_address({i64, i32}, {i64, i32}) nounwind",
+            "lib__unload_lib"                   , "declare {i64, i32} @lib__unload_lib({i64, i32}) nounwind",
+            "locale__lang_code"                 , "declare {i64, i32} @locale__lang_code() nounwind",
+            "shar__init"                        , "declare noalias i8* @shar__init(i32, i8**, {i64, i32} ({i64, i32}, i8*, i1)*, {i64, i32} ({i64, i32}, i8*, i1)*) nounwind",
+            "shar__enable__threads"             , "declare void @shar__enable__threads() mustprogress nofree norecurse nosync willreturn writeonly nounwind",
+            "shar__end"                         , "declare i1 @shar__end({i64, i32}, i8*) nounwind",
+            "shar__exit"                        , "declare void @shar__exit() cold noreturn nounwind",
+            "shar__fail"                        , "declare void @shar__fail() cold noreturn nounwind"
+        ]
+    }
+    for :(index Int = 0) index < functions.length(); index += 2
+        result.put(functions[index], functions[index + 1])
+    return result
 
-    #alwaysinline
-    def currentModule`(write data CData, new String) String
-        return data.typePut(0, new)
+// Compiled data.
+type CData
+    currentModule String
+    constants     Map // name String, Map(moduleName String, CConstant)
+    types         Map // name String, Map(moduleName String, CType)
+    groups        Map // name String, Map(moduleName String, CGroup)
+    functions     Map // name String, Map(moduleName String, CFunction)
 
-attach CData to FieldEnumerationsElements
-    #alwaysinline
-    def enumerationsElements~(data CData) Map
-        return data.typeGetItem(1)
+// The function returns a constant with the specified name.
+def getConstant(compiledData CData, constantName Token, ignoreExport Bool) CConstant
+    var shortConstantName String = constantName.text~()
+    const separatorIndex <>Int = shortConstantName.look(':')
+    if !separatorIndex.nothing?()
+        shortConstantName = shortConstantName[separatorIndex + 2:]
+    const allConstantsWithSameName <>Map = compiledData.constants~()[shortConstantName]
+    var constant <>CConstant = nothing
+    if !allConstantsWithSameName.nothing?()
+        if separatorIndex.nothing?()
+            parse moduleName String, constantWithSameName CConstant = allConstantsWithSameName
+                if constantWithSameName.export?() || moduleName == compiledData.currentModule~()
+                    if !constant.nothing?()
+                        errorFewVariants(constantName, "constants", constant.fullName~().split(':')[0], moduleName)
+                    constant = constantWithSameName
+        else
+            const moduleName String = constantName.text~()[:separatorIndex]
+            constant = allConstantsWithSameName[moduleName]
+            if !(moduleName == compiledData.currentModule~() || ignoreExport || constant.nothing?() || constant.export?())
+                constant = nothing
+    if constant.nothing?()
+        errorNotFound(constantName, "constant")
+    return constant
 
-    #alwaysinline
-    def enumerationsElements`(write data CData, new <>Map) <>Map
-        return data.typePut(1, new)
+// The function returns a group with the specified name.
+def getGroup(compiledData CData, groupName Token, ignoreExport Bool) CGroup
+    var shortGroupName String = groupName.text~()
+    const separatorIndex <>Int = shortGroupName.look(':')
+    if !separatorIndex.nothing?()
+        shortGroupName = shortGroupName[separatorIndex + 2:]
+    const allGroupsWithSameName <>Map = compiledData.groups~()[shortGroupName]
+    var group <>CGroup = nothing
+    if !allGroupsWithSameName.nothing?()
+        if separatorIndex.nothing?()
+            parse moduleName String, groupWithSameName CGroup = allGroupsWithSameName
+                if groupWithSameName.export?() || moduleName == compiledData.currentModule~()
+                    if !group.nothing?()
+                        errorFewVariants(groupName, "groups", group.fullName~().split(':')[0], moduleName)
+                    group = groupWithSameName
+        else
+            const moduleName String = groupName.text~()[:separatorIndex]
+            group = allGroupsWithSameName[moduleName]
+            if !(moduleName == compiledData.currentModule~() || ignoreExport || group.nothing?() || group.export?())
+                group = nothing
+    if group.nothing?()
+        errorNotFound(groupName, "group")
+    return group
 
-attach CData to FieldConstants
-    #alwaysinline
-    def constants~(data CData) Map
-        return data.typeGetItem(2)
+// The function finds out if a group with the specified name exists.
+def groupExist?(compiledData CData, groupName String) Bool
+    const {moduleName String, shortGroupName String} = groupName.splitByPart("::")
+    const allGroupsWithSameName <>Map = compiledData.groups~()[shortGroupName]
+    return !(allGroupsWithSameName.nothing?() || allGroupsWithSameName[moduleName].nothing?())
 
-    #alwaysinline
-    def constants`(write data CData, new <>Map) <>Map
-        return data.typePut(2, new)
+// The function returns the type with the specified name.
+def getType(compiledData CData, typeName Token, ignoreExport Bool) CType
+    var shortTypeName String = typeName.text~()
+    const separatorIndex <>Int = shortTypeName.look(':')
+    if !separatorIndex.nothing?()
+        shortTypeName = shortTypeName[separatorIndex + 2:]
+    const allTypesWithSameName <>Map = compiledData.types~()[shortTypeName]
+    var type <>CType = nothing
+    if !allTypesWithSameName.nothing?()
+        if separatorIndex.nothing?()
+            parse moduleName String, typeWithSameName CType = allTypesWithSameName
+                if typeWithSameName.export?() || moduleName == compiledData.currentModule~()
+                    if !type.nothing?()
+                        errorFewVariants(typeName, "types", type.fullName~().split(':')[0], moduleName)
+                    type = typeWithSameName
+        else
+            const moduleName String = typeName.text~()[:separatorIndex]
+            type = allTypesWithSameName[moduleName]
+            if !(moduleName == compiledData.currentModule~() || ignoreExport || type.nothing?() || type.export?())
+                type = nothing
+    if type.nothing?()
+        errorNotFound(typeName, "type")
+    return type
 
-attach CData to FieldTypes
-    #alwaysinline
-    def types~(data CData) Map
-        return data.typeGetItem(3)
+// The function updates the changed type.
+def updateType(write compiledData CData, type CType)
+    const {moduleName String, typeName String} = type.fullName~().splitByPart("::")
+    var allTypes Map = compiledData.types`(Map())
+    var allTypesWithSameName Map = allTypes.put(typeName, Map())
+    allTypesWithSameName.put(moduleName, type)
+    allTypes.put(typeName, allTypesWithSameName)
+    compiledData.types`(allTypes)
 
-    #alwaysinline
-    def types`(write data CData, new <>Map) <>Map
-        return data.typePut(3, new)
+// The function returns the function with the specified name.
+def getFunction(compiledData CData, functionName Token, ignoreExport Bool) CFunction
+    var shortFunctionName String = functionName.text~()
+    const separatorIndex <>Int = shortFunctionName.look(':')
+    if !separatorIndex.nothing?()
+        shortFunctionName = shortFunctionName[separatorIndex + 2:]
+    const allFunctionsWithSameName <>Map = compiledData.functions~()[shortFunctionName]
+    var function <>CFunction = nothing
+    if !allFunctionsWithSameName.nothing?()
+        if separatorIndex.nothing?()
+            parse moduleName String, functionWithSameName CFunction = allFunctionsWithSameName
+                if functionWithSameName.export?() || moduleName == compiledData.currentModule~()
+                    if !function.nothing?()
+                        errorFewVariants(functionName, "functions", function.fullName~().split(':')[0], moduleName)
+                    function = functionWithSameName
+        else
+            const moduleName String = functionName.text~()[:separatorIndex]
+            function = allFunctionsWithSameName[moduleName]
+            if !(moduleName == compiledData.currentModule~() || ignoreExport || function.nothing?() || function.export?())
+                function = nothing
+    if function.nothing?()
+        errorNotFound(functionName, "function")
+    return function
 
-attach CData to FieldGroups
-    #alwaysinline
-    def groups~(data CData) Map
-        return data.typeGetItem(4)
+// The function updates the changed function.
+def updateFunction(write compiledData CData, function CFunction)
+    const {moduleName String, functionName String} = function.fullName~().splitByPart("::")
+    var allFunctions Map = compiledData.functions`(Map())
+    var allFunctionsWithSameName Map = allFunctions.put(functionName, Map())
+    allFunctionsWithSameName.put(moduleName, function)
+    allFunctions.put(functionName, allFunctionsWithSameName)
+    compiledData.functions`(allFunctions)
 
-    #alwaysinline
-    def groups`(write data CData, new <>Map) <>Map
-        return data.typePut(4, new)
+// The function adds a function that is declared in the group and must be defined when adding any type to this group.
+def addRequiredFunction(write compiledData CData, group Group, function GFunction)
+    var allFunctions Map = compiledData.functions`(Map())
+    var allFunctionsWithSameName <>Map = allFunctions.put(function.name~().text~(), Map())
+    if allFunctionsWithSameName.nothing?()
+        allFunctionsWithSameName = Map()
+    var groupFunctions Map = Map()
+    groupFunctions.put("-", SimpleFunction{{
+        attributes            : const::defaultFAttributes.compileFAttributes(),
+        signature             : function.signature~().compileFSignature(compiledData),
+        ir                    : "",
+        irFirstRegisterNumber : 0,
+        fromCurrentModule     : true,
+        docComment            : function.docComment~()
+    }})
+    if !allFunctionsWithSameName.put(compiledData.currentModule~(), CFunction{{
+        isExport      : group.export?(),
+        fullName      : compiledData.currentModule~() + "::" + function.name~().text~(),
+        finalFunction : GroupsFunctions{
+            groups    : [compiledData.currentModule~() + "::" + group.name~().text~()],
+            functions : groupFunctions
+        }
+    }}).nothing?()
+        errorAlreadyExist(function.name~(), "function")
+    allFunctions.put(function.name~().text~(), allFunctionsWithSameName)
+    compiledData.functions`(allFunctions)
 
-attach CData to FieldFunctions
-    #alwaysinline
-    def functions~(data CData) Map
-        return data.typeGetItem(5)
+// The function adds a group to existing groups.
+def addCGroup(write compiledData CData, group CGroup)
+    const {moduleName String, groupName String} = group.fullName~().splitByPart("::")
+    var groups Map = compiledData.groups`(Map())
+    var allGroupsWithSameName <>Map = groups.put(groupName, Map())
+    if allGroupsWithSameName.nothing?()
+        allGroupsWithSameName = Map()
+    allGroupsWithSameName.put(moduleName, group)
+    groups.put(groupName, allGroupsWithSameName)
+    compiledData.groups`(groups)
 
-    #alwaysinline
-    def functions`(write data CData, new <>Map) <>Map
-        return data.typePut(5, new)
+// The function adds a type to existing types.
+def addCType(write compiledData CData, type CType)
+    const {moduleName String, typeName String} = type.fullName~().splitByPart("::")
+    var types Map = compiledData.types`(Map())
+    var allTypesWithSameName <>Map = types.put(typeName, Map())
+    if allTypesWithSameName.nothing?()
+        allTypesWithSameName = Map()
+    allTypesWithSameName.put(moduleName, type)
+    types.put(typeName, allTypesWithSameName)
+    compiledData.types`(types)
 
-#alwaysinline
-def CData(currentModule String, enumerationsElements, constants, types, groups, functions Map) CData
-    return CData.fromList({currentModule, enumerationsElements, constants, types, groups, functions})
+// The function writes the compiled data to a file.
+def createModule(compiledData CData, outputFile String)
+    var fileData Bytes = const::moduleSignature
+    const currentModuleName String = compiledData.currentModule~()
+    currentModuleName.serialize(fileData)
+    var alienTypesAddedToGroups Set = Set()
+    do
+        var constants Array = []
+        parse _, constantsWithName Map = compiledData.constants~()
+            parse moduleName String, constant CConstant = constantsWithName
+                if moduleName == currentModuleName
+                    constants.addItem(constant)
+        constants.serializeContainer(fileData)
+    do
+        var types Array = []
+        parse _, typesWithName Map = compiledData.types~()
+            parse moduleName String, type CType = typesWithName
+                if moduleName == currentModuleName
+                    types.addItem(type)
+                else
+                    parse _, newGroup String = type.newGroups~()
+                        alienTypesAddedToGroups.add(type.fullName~() + " " + newGroup)
+        types.serializeContainer(fileData)
+    do
+        var groups Array = []
+        parse _, groupsWithName Map = compiledData.groups~()
+            parse moduleName String, group CGroup = groupsWithName
+                if moduleName == currentModuleName
+                    groups.addItem(group)
+        groups.serializeContainer(fileData)
+    do
+        var functions Array = []
+        parse functionName String, functionsWithName Map = compiledData.functions~()
+            parse moduleName String, function CFunction = functionsWithName
+                tSwitch function.finalFunction~()
+                case GroupsFunctions
+                    const groupsFunctions GroupsFunctions = function.finalFunction~()
+                    parse thisType String, simpleFunction SimpleFunction = groupsFunctions.functions~()
+                        if simpleFunction.fromCurrentModule?()
+                            functions.addItem(ModuleFunction{{
+                                isExport      : function.export?(),
+                                name          : functionName,
+                                module        : moduleName,
+                                owningGroups  : groupsFunctions.groups~(),
+                                thisType      : thisType,
+                                finalFunction : simpleFunction
+                            }})
+                case SimpleFunction
+                    const simpleFunction SimpleFunction = function.finalFunction~()
+                    if simpleFunction.fromCurrentModule?()
+                        functions.addItem(ModuleFunction{{
+                            isExport      : function.export?(),
+                            name          : functionName,
+                            module        : moduleName,
+                            owningGroups  : [],
+                            thisType      : "",
+                            finalFunction : simpleFunction
+                        }})
+        functions.serializeContainer(fileData)
+    alienTypesAddedToGroups.serializeSet(fileData)
+    if !saveToFile(outputFile, fileData)
+        errorCanNotWriteToFile(outputFile)
 
 // The function loads data from modules into compiled data.
 def loadModules(modulesFilesList Array, currentModule String) CData
-    var enumerationsElements Map = Map()
     var constants Map = Map()
     var types Map = Map()
     var groups Map = Map()
     var functions Map = Map()
     var alienTypesAddedToGroups Set = Set()
     var loadedModules Map = Map()
-    const moduleSignature Bytes = moduleSignature()
-    parse _, moduleFileName = modulesFilesList
-        var position Int = moduleSignature.length~()
-        var module <>Bytes = loadFile(moduleFileName)
+    parse _, moduleFileName String = modulesFilesList
+        const module <>Bytes = loadFile(moduleFileName)
         if module.nothing?()
             errorCanNotLoadFile(moduleFileName)
-        if !module.hasPrefix?(moduleSignature)
+        if !module.hasPrefix?(const::moduleSignature)
             errorNotModule(moduleFileName)
+        var position Int = const::moduleSignature.length()
         const moduleName String = String.deserialize(module, position)
         if moduleName.empty?()
             errorNotModule(moduleFileName)
@@ -98,15 +358,6 @@ def loadModules(modulesFilesList Array, currentModule String) CData
             error2Module1Name(fileNameWithSameModule, moduleFileName, moduleName)
         try
             var length Int = Int.deserialize(module, position)
-            for :(counter Int = 0) counter < length; counter++
-                const elementName String = String.deserialize(module, position)
-                const isExport Bool = Bool.deserialize(module, position)
-                var allElementsWithSameName <>Map = enumerationsElements.put(elementName, Map())
-                if allElementsWithSameName.nothing?()
-                    allElementsWithSameName = Map()
-                allElementsWithSameName.put(moduleName, isExport)
-                enumerationsElements.put(elementName, allElementsWithSameName)
-            length = Int.deserialize(module, position)
             for :(counter Int = 0) counter < length; counter++
                 var constant CConstant = CConstant.deserialize(module, position)
                 const constantName String = constant.fullName~()
@@ -144,962 +395,168 @@ def loadModules(modulesFilesList Array, currentModule String) CData
                 var allFunctionsWithSameName <>Map = functions.put(functionName, Map())
                 if allFunctionsWithSameName.nothing?()
                     allFunctionsWithSameName = Map()
-                var newFunction CFunction = CFunction.fromList({})
+                var newFunction <>CFunction = nothing
                 if function.owningGroups~().empty?()
-                    newFunction = CFunction(function.export?(), functionModule + "::" + functionName, function.finalFunction~())
+                    newFunction = CFunction{{
+                        isExport      : function.export?(),
+                        fullName      : functionModule + "::" + functionName,
+                        finalFunction : function.finalFunction~()
+                    }}
                 else
                     var groupsFunctions <>CFunction = allFunctionsWithSameName[functionModule]
                     if groupsFunctions.nothing?()
-                        groupsFunctions = CFunction(function.export?(), functionModule + "::" + functionName, GroupsFunctions(function.owningGroups~(), Map()))
+                        groupsFunctions = CFunction{{
+                            isExport      : function.export?(),
+                            fullName      : functionModule + "::" + functionName,
+                            finalFunction : GroupsFunctions{
+                                groups    : function.owningGroups~(),
+                                functions : Map()
+                            }
+                        }}
                     addFunctionToFunctionWithGroupsFunctions(groupsFunctions, function.thisType~(), function.finalFunction~())
                     newFunction = groupsFunctions
                 allFunctionsWithSameName.put(functionModule, newFunction)
                 functions.put(functionName, allFunctionsWithSameName)
-            length = Int.deserialize(module, position)
-            for :(counter Int = 0) counter < length; counter++
-                alienTypesAddedToGroups.add(String.deserialize(module, position))
+            alienTypesAddedToGroups = Set.deserializeSet(module, position, String)
         catch
             errorNotModule(moduleFileName)
-        parse _, typeAndGroup = alienTypesAddedToGroups
-            const splitedTypeAndGroups Array = typeAndGroup.split(' ')
-            const fullTypeName String = splitedTypeAndGroups[0]
-            const groupName String = splitedTypeAndGroups[1]
-            const moduleNameTypeName Array = fullTypeName.splitByPart("::")
-            const typeModuleName String = moduleNameTypeName[0]
-            const shortTypeName String = moduleNameTypeName[1]
+        parse _, typeAndGroup String = alienTypesAddedToGroups
+            const {fullTypeName String, groupName String} = typeAndGroup.split(' ')
+            const {typeModuleName String, shortTypeName String} = fullTypeName.splitByPart("::")
             try
                 var allTypesWithSameName Map = types.put(shortTypeName, Map())
-                var type CType = allTypesWithSameName.put(typeModuleName, CType.fromList({}))
-                var typeGroups Set = type.groups`(nothing)
+                var type CType = allTypesWithSameName[typeModuleName]
+                var typeGroups Set = type.groups`(Set())
                 typeGroups.add(groupName)
                 type.groups`(typeGroups)
                 allTypesWithSameName.put(typeModuleName, type)
                 types.put(shortTypeName, allTypesWithSameName)
             catch
                 errorNotFoundTypeInModules(fullTypeName)
-    return CData(currentModule, enumerationsElements, constants, types, groups, functions)
-
-// The function returns the type with the specified name.
-def getType(compiledData CData, typeName Token, ignoreExport Bool) CType
-    var shortTypeName String = typeName.text~()
-    const separatorIndex <>Int = shortTypeName.lookPart("::")
-    if !separatorIndex.nothing?()
-        shortTypeName = shortTypeName[separatorIndex +  2 : shortTypeName.length~()]
-    const allTypesWithSameName <>Map = compiledData.types~()[shortTypeName]
-    if !allTypesWithSameName.nothing?()
-        if separatorIndex.nothing?()
-            var type CType = CType.fromList({})
-            parse moduleName, typeWithDesiredName = allTypesWithSameName
-                if typeWithDesiredName.export?() || moduleName == compiledData.currentModule~()
-                    if type.toList().empty?()
-                        type = typeWithDesiredName
-                    else
-                        errorFewVariants(typeName, "types", type.fullName~().split(':')[0], moduleName)
-            if !type.toList().empty?()
-                return type
-        else
-            const moduleName String = typeName.text~()[0 : separatorIndex]
-            const type <>CType = allTypesWithSameName[moduleName]
-            if !type.nothing?() && (ignoreExport || type.export?() || moduleName == compiledData.currentModule~())
-                return type
-    errorNotFound(typeName, "type")
-
-// The function returns a type with the specified name, and puts a dummy in its place.
-def borrowType(write compiledData CData, typeName Token) CType
-    var shortTypeName String = typeName.text~()
-    const separatorIndex <>Int = shortTypeName.lookPart("::")
-    if !separatorIndex.nothing?()
-        shortTypeName = shortTypeName[separatorIndex +  2 : shortTypeName.length~()]
-    var allTypes Map = compiledData.types`(nothing)
-    var allTypesWithSameName <>Map = allTypes.put(shortTypeName, Map())
-    var type <>CType = nothing
-    if !allTypesWithSameName.nothing?()
-        if separatorIndex.nothing?()
-            var foundedTypeModuleName String = ""
-            parse moduleName, typeWithDesiredName = allTypesWithSameName
-                if typeWithDesiredName.export?() || moduleName == compiledData.currentModule~()
-                    if foundedTypeModuleName.empty?()
-                        foundedTypeModuleName = moduleName
-                    else
-                        errorFewVariants(typeName, "types", foundedTypeModuleName, moduleName)
-            if !foundedTypeModuleName.empty?()
-                type = allTypesWithSameName.put(foundedTypeModuleName, CType.fromList({}))
-        else
-            const moduleName String = typeName.text~()[0 : separatorIndex]
-            type = allTypesWithSameName.put(moduleName, CType.fromList({}))
-            if !type.nothing?() && !(type.export?() || moduleName == compiledData.currentModule~())
-                type = nothing
-    if type.nothing?()
-        errorNotFound(typeName, "type")
-    allTypes.put(shortTypeName, allTypesWithSameName)
-    compiledData.types`(allTypes)
-    return type
-
-// The function returns back the type that was obtained using the "borrowType" function.
-def refitType(write compiledData CData, type CType)
-    const splitedName Array = type.fullName~().splitByPart("::")
-    const moduleName String = splitedName[0]
-    const typeName String = splitedName[1]
-    var allTypes Map = compiledData.types`(nothing)
-    var allTypesWithSameName Map = allTypes.put(typeName, Map())
-    allTypesWithSameName.put(moduleName, type)
-    allTypes.put(typeName, allTypesWithSameName)
-    compiledData.types`(allTypes)
-
-// The function returns a group with the specified name.
-def getGroup(compiledData CData, groupName Token, ignoreExport Bool) CGroup
-    var shortGroupName String = groupName.text~()
-    const separatorIndex <>Int = shortGroupName.lookPart("::")
-    if !separatorIndex.nothing?()
-        shortGroupName = shortGroupName[separatorIndex +  2 : shortGroupName.length~()]
-    const allGroupsWithSameName <>Map = compiledData.groups~()[shortGroupName]
-    if !allGroupsWithSameName.nothing?()
-        if separatorIndex.nothing?()
-            var group CGroup = CGroup.fromList({})
-            parse moduleName, groupWithDesiredName = allGroupsWithSameName
-                if groupWithDesiredName.export?() || moduleName == compiledData.currentModule~()
-                    if group.toList().empty?()
-                        group = groupWithDesiredName
-                    else
-                        errorFewVariants(groupName, "groups", group.fullName~().split(':')[0], moduleName)
-            if !group.toList().empty?()
-                return group
-        else
-            const moduleName String = groupName.text~()[0 : separatorIndex]
-            const group <>CGroup = allGroupsWithSameName[moduleName]
-            if !group.nothing?() && (ignoreExport || group.export?() || moduleName == compiledData.currentModule~())
-                return group
-    errorNotFound(groupName, "group")
-
-// The function adds a function that is declared in the group and must be defined when adding any type to this group.
-#alwaysinline
-def addRequiredFunction(write compiledData CData, group Group, function GFunction)
-    var allFunctions Map = compiledData.functions`(nothing)
-    var allFunctionsWithSameName <>Map = allFunctions.put(function.name~().text~(), Map())
-    if allFunctionsWithSameName.nothing?()
-        allFunctionsWithSameName = Map()
-    var groupFunctions Map = Map()
-    groupFunctions.put{
-        ("-", SimpleFunction(
-            const::defaultFAttributes,
-            function.signature~().toFull(compiledData),
-            "",
-            true
-        ))
-    }
-    if !allFunctionsWithSameName.put{
-        (compiledData.currentModule~(),
-        CFunction(
-            group.export?(),
-            compiledData.currentModule~() + "::" + function.name~().text~(),
-            GroupsFunctions([compiledData.currentModule~() + "::" + group.name~().text~()], groupFunctions)
-        )).nothing?()
-    }
-        errorAlreadyExist(function.name~(), "function")
-    allFunctions.put(function.name~().text~(), allFunctionsWithSameName)
-    compiledData.functions`(allFunctions)
-
-// The function returns a constant with the specified name.
-def getConstant(compiledData CData, constantName Token, ignoreExport Bool) CConstant
-    var shortConstantName String = constantName.text~()
-    const separatorIndex <>Int = shortConstantName.lookPart("::")
-    if !separatorIndex.nothing?()
-        shortConstantName = shortConstantName[separatorIndex +  2 : shortConstantName.length~()]
-    const allConstantsWithSameName <>Map = compiledData.constants~()[shortConstantName]
-    if !allConstantsWithSameName.nothing?()
-        if separatorIndex.nothing?()
-            var constant CConstant = CConstant.fromList({})
-            parse moduleName, constantWithDesiredName = allConstantsWithSameName
-                if constantWithDesiredName.export?() || moduleName == compiledData.currentModule~()
-                    if constant.toList().empty?()
-                        constant = constantWithDesiredName
-                    else
-                        errorFewVariants(constantName, "constants", constant.fullName~().split(':')[0], moduleName)
-            if !constant.toList().empty?()
-                return constant
-        else
-            const moduleName String = constantName.text~()[0 : separatorIndex]
-            const constant <>CConstant = allConstantsWithSameName[moduleName]
-            if !constant.nothing?() && (ignoreExport || constant.export?() || moduleName == compiledData.currentModule~())
-                return constant
-    errorNotFound(constantName, "constant")
-
-// The function returns the full name of the enumeration element.
-def getEnumElementFullName(compiledData CData, elementName Token, ignoreExport Bool) String
-    var shortElementName String = elementName.text~()
-    const separatorIndex <>Int = shortElementName.lookPart("::")
-    if !separatorIndex.nothing?()
-        shortElementName = shortElementName[separatorIndex +  2 : shortElementName.length~()]
-    const allElementsWithSameName <>Map = compiledData.enumerationsElements~()[shortElementName]
-    if !allElementsWithSameName.nothing?()
-        if separatorIndex.nothing?()
-            var result String = ""
-            parse moduleName, isExport = allElementsWithSameName
-                if isExport || moduleName == compiledData.currentModule~()
-                    if result.empty?()
-                        result = moduleName + "::" + shortElementName
-                    else
-                        errorFewVariants(elementName, "elements", result.split(':')[0], moduleName)
-            if !result.empty?()
-                return result
-        else
-            const moduleName String = elementName.text~()[0 : separatorIndex]
-            const isExport <>Bool = allElementsWithSameName[moduleName]
-            if !isExport.nothing?() && (ignoreExport || isExport || moduleName == compiledData.currentModule~())
-                return moduleName + "::" + shortElementName
-    errorNotFound(elementName, "enumeration element")
-
-// The function returns the function with the specified name.
-def getFunction(compiledData CData, functionName Token, ignoreExport Bool) CFunction
-    var shortFunctionName String = functionName.text~()
-    const separatorIndex <>Int = shortFunctionName.lookPart("::")
-    if !separatorIndex.nothing?()
-        shortFunctionName = shortFunctionName[separatorIndex +  2 : shortFunctionName.length~()]
-    const allFunctionsWithSameName <>Map = compiledData.functions~()[shortFunctionName]
-    if !allFunctionsWithSameName.nothing?()
-        if separatorIndex.nothing?()
-            var function CFunction = CFunction.fromList({})
-            parse moduleName, functionWithDesiredName = allFunctionsWithSameName
-                if functionWithDesiredName.export?() || moduleName == compiledData.currentModule~()
-                    if function.toList().empty?()
-                        function = functionWithDesiredName
-                    else
-                        errorFewVariants(functionName, "functions", function.fullName~().split(':')[0], moduleName)
-            if !function.toList().empty?()
-                return function
-        else
-            const moduleName String = functionName.text~()[0 : separatorIndex]
-            const function <>CFunction = allFunctionsWithSameName[moduleName]
-            if !function.nothing?() && (ignoreExport || function.export?() || moduleName == compiledData.currentModule~())
-                return function
-    errorNotFound(functionName, "function")
-
-// The function returns a function with the specified name, and puts a dummy in its place.
-def borrowFunction(write compiledData CData, functionName Token) CFunction
-    var shortFunctionName String = functionName.text~()
-    const separatorIndex <>Int = shortFunctionName.lookPart("::")
-    if !separatorIndex.nothing?()
-        shortFunctionName = shortFunctionName[separatorIndex +  2 : shortFunctionName.length~()]
-    var allFunctions Map = compiledData.functions`(nothing)
-    var allFunctionsWithSameName <>Map = allFunctions.put(shortFunctionName, Map())
-    var function <>CFunction = nothing
-    if !allFunctionsWithSameName.nothing?()
-        if separatorIndex.nothing?()
-            var foundedFunctionModuleName String = ""
-            parse moduleName, functionWithDesiredName = allFunctionsWithSameName
-                if functionWithDesiredName.export?() || moduleName == compiledData.currentModule~()
-                    if foundedFunctionModuleName.empty?()
-                        foundedFunctionModuleName = moduleName
-                    else
-                        errorFewVariants(functionName, "functions", foundedFunctionModuleName, moduleName)
-            if !foundedFunctionModuleName.empty?()
-                function = allFunctionsWithSameName.put(foundedFunctionModuleName, CFunction.fromList({}))
-        else
-            const moduleName String = functionName.text~()[0 : separatorIndex]
-            function = allFunctionsWithSameName.put(moduleName, CFunction.fromList({}))
-            if !function.nothing?() && !(function.export?() || moduleName == compiledData.currentModule~())
-                function = nothing
-    if function.nothing?()
-        errorNotFound(functionName, "function")
-    allFunctions.put(shortFunctionName, allFunctionsWithSameName)
-    compiledData.functions`(allFunctions)
-    return function
-
-// The function returns back the function that was obtained using the "borrowFunction" function.
-def refitFunction(write compiledData CData, function CFunction)
-    const splitedName Array = function.fullName~().splitByPart("::")
-    const moduleName String = splitedName[0]
-    const functionName String = splitedName[1]
-    var allFunctions Map = compiledData.functions`(nothing)
-    var allFunctionsWithSameName Map = allFunctions.put(functionName, Map())
-    allFunctionsWithSameName.put(moduleName, function)
-    allFunctions.put(functionName, allFunctionsWithSameName)
-    compiledData.functions`(allFunctions)
-
-// The function finds out if a group with the specified name exists.
-def groupIsExist?(compiledData CData, groupName String) Bool
-    const splitedName Array = groupName.splitByPart("::")
-    const moduleName String = splitedName[0]
-    const shortGroupName String = splitedName[1]
-    const allGroupsWithSameName <>Map = compiledData.groups~()[shortGroupName]
-    return !(allGroupsWithSameName.nothing?() || allGroupsWithSameName[moduleName].nothing?())
-
-// The function adds a group to existing groups.
-def addCGroup(write compiledData CData, group CGroup)
-    const splitedName Array = group.fullName~().splitByPart("::")
-    const moduleName String = splitedName[0]
-    const groupName String = splitedName[1]
-    var groups Map = compiledData.groups`(nothing)
-    var allGroupsWithSameName <>Map = groups.put(groupName, Map())
-    if allGroupsWithSameName.nothing?()
-        allGroupsWithSameName = Map()
-    allGroupsWithSameName.put(moduleName, group)
-    groups.put(groupName, allGroupsWithSameName)
-    compiledData.groups`(groups)
-
-// The function adds a type to existing types.
-def addCType(write compiledData CData, type CType)
-    const splitedName Array = type.fullName~().splitByPart("::")
-    const moduleName String = splitedName[0]
-    const typeName String = splitedName[1]
-    var types Map = compiledData.types`(nothing)
-    var allTypesWithSameName <>Map = types.put(typeName, Map())
-    if allTypesWithSameName.nothing?()
-        allTypesWithSameName = Map()
-    allTypesWithSameName.put(moduleName, type)
-    types.put(typeName, allTypesWithSameName)
-    compiledData.types`(types)
-
-// The function writes the compiled data to a file.
-#noinline
-def createModule(compiledData CData, outputFile String)
-    var fileData Bytes = moduleSignature()
-    const currentModuleName String = compiledData.currentModule~()
-    currentModuleName.serialize(fileData)
-    var elements Map = Map()
-    var alienTypesAddedToGroups Set = Set()
-    parse elementName, elementsWithName = compiledData.enumerationsElements~()
-        parse moduleName, isExport = elementsWithName
-            if moduleName == currentModuleName
-                elements.put(elementName, isExport)
-    elements.length~().serialize(fileData)
-    parse elementName, isExport = elements
-        elementName.serialize(fileData)
-        isExport.serialize(fileData)
-    var constants Array = []
-    parse _, constantsWithName = compiledData.constants~()
-        parse moduleName, constant = constantsWithName
-            if moduleName == currentModuleName
-                constants.addItem(constant)
-    constants.length~().serialize(fileData)
-    parse _, constant = constants
-        constant.serialize(fileData)
-    var types Array = []
-    parse _, typesWithName = compiledData.types~()
-        parse moduleName, type = typesWithName
-            if moduleName == currentModuleName
-                types.addItem(type)
-            else
-                parse _, newGroup = type.newGroups~()
-                    alienTypesAddedToGroups.add(type.fullName~() + " " + newGroup)
-    types.length~().serialize(fileData)
-    parse _, type = types
-        type.serialize(fileData)
-    var groups Array = []
-    parse _, groupsWithName = compiledData.groups~()
-        parse moduleName, group = groupsWithName
-            if moduleName == currentModuleName
-                groups.addItem(group)
-    groups.length~().serialize(fileData)
-    parse _, group = groups
-        group.serialize(fileData)
-    var functions Array = []
-    parse functionName, functionsWithName = compiledData.functions~()
-        parse moduleName, function = functionsWithName
-            tSwitch function.finalFunction~()
-            case GroupsFunctions
-                const groupsFunctions GroupsFunctions = function.finalFunction~()
-                parse thisType, simpleFunction = groupsFunctions.functions~()
-                    if simpleFunction.fromCurrentModule?()
-                        functions.addItem{
-                            (ModuleFunction(
-                                function.export?(),
-                                functionName,
-                                moduleName,
-                                groupsFunctions.groups~(),
-                                thisType,
-                                simpleFunction
-                            ))
-                        }
-            case SimpleFunction
-                const simpleFunction SimpleFunction = function.finalFunction~()
-                if simpleFunction.fromCurrentModule?()
-                    functions.addItem{
-                        (ModuleFunction(
-                            function.export?(),
-                            functionName,
-                            moduleName,
-                            [],
-                            "",
-                            simpleFunction
-                        ))
-                    }
-    functions.length~().serialize(fileData)
-    parse _, function = functions
-        function.serialize(fileData)
-    alienTypesAddedToGroups.length~().serialize(fileData)
-    parse _, typeAndGroup = alienTypesAddedToGroups
-        typeAndGroup.serialize(fileData)
-    const file <>File = openFile(outputFile, enum::fmode_write)
-    if file.nothing?() || writeDataToFile(file, fileData.length~(), fileData) != fileData.length~()
-        errorCanNotWriteToFile(outputFile)
+    return CData{{
+        currentModule : currentModule,
+        constants     : constants,
+        types         : types,
+        groups        : groups,
+        functions     : functions
+    }}
 
 // The function creates a file with the final program.
 #noinline
 def createProgram(compiledData CData, outputFile String)
-    var compilingConstants Set = Set()
-    var compilingFunctions Set = Set()
-    var usedData UsedData = UsedData.fromList({})
+    var usedData <>UsedData = nothing
     do
         var groupsTypes Map = Map()
-        parse _, groups = compiledData.groups~()
-            parse _, group = groups
+        parse _, groups Map = compiledData.groups~()
+            parse _, group CGroup = groups
                 groupsTypes.put(group.fullName~(), Set())
-        const alwaysUsedTypes Map = alwaysUsedTypes()
-        parse typeName, _ = alwaysUsedTypes
+        parse typeName String, _ = const::alwaysUsedTypes
             const typeGroups Set = compiledData.getType(const::emptyToken.replaceText(typeName), true).groups~()
-            parse _, group = typeGroups
+            parse _, group String = typeGroups
                 var groupTypes Set = groupsTypes.put(group, Set())
                 groupTypes.add(typeName)
                 groupsTypes.put(group, groupTypes)
-        usedData = UsedData{
-            (builtinEnumerationsElements(),
-            Map(),
-            alwaysUsedTypes,
-            Map(),
-            Map(),
-            builtinConstantStrings(),
-            builtinLLVMDeclaredFunctions(),
-            Map(),
-            groupsTypes,
-            Map())
-        }
+        usedData = UsedData{{
+            constants          : Map(),
+            types              : const::alwaysUsedTypes,
+            inGroups           : Map(),
+            functions          : Map(),
+            llvmConstants      : Map(),
+            llvmDeclares       : const::builtinLLVMDeclaredFunctions,
+            groupsFunctions    : Map(),
+            groupsTypes        : groupsTypes,
+            groupListConstants : Map()
+        }}
     var mainFunctionMayThrow Bool = true
     try
         const mainFunction CFunction = compiledData.getFunction(const::emptyToken.replaceText("Main::main"), true)
         if {
             !(
                 mainFunction.finalFunction~().type?(SimpleFunction) &&
-                !mainFunction.finalFunction~().attributes~().cold?() &&
-                !mainFunction.finalFunction~().attributes~().worker?() &&
-                mainFunction.finalFunction~().signature~().arguments~().length~() == 0 &&
-                mainFunction.finalFunction~().signature~().resultType~().nothingType?()
+                !mainFunction.finalFunction~().type!(SimpleFunction).attributes~().cold~() &&
+                !mainFunction.finalFunction~().type!(SimpleFunction).attributes~().worker~() &&
+                mainFunction.finalFunction~().type!(SimpleFunction).signature~().arguments~().empty?() &&
+                mainFunction.finalFunction~().type!(SimpleFunction).signature~().resultType~().nothingType?()
             )
         }
             errorIncorrectMain()
-        mainFunctionMayThrow = !mainFunction.finalFunction~().attributes~().nothrow?()
+        mainFunctionMayThrow = !mainFunction.finalFunction~().type!(SimpleFunction).attributes~().nothrow~()
     catch
         errorNotFoundMainFunction()
-    compilingFunctions.add(const::emptyToken.replaceText("Main::main0".addItem$((mainFunctionMayThrow || const::ignoreNoThrow).select('1', '0'))))
-    compilingFunctions.add(const::emptyToken.replaceText("STD::shar__rc_free" + const::ignoreNoThrow.select("11", "00")))
-    for :(loop)
-        for !compilingConstants.empty?()
-            var constantName Token = const::emptyToken
-            parse :(parse) _, constant = compilingConstants
-                constantName = constant
-                end parse
-            if !constantName.empty?()
-                compilingConstants.remove(constantName)
-                compiledData.constantToFinalLLVMIR(constantName, compilingConstants, compilingFunctions, usedData)
-        for !compilingFunctions.empty?()
-            var functionName Token = const::emptyToken
-            parse :(parse) _, function = compilingFunctions
-                functionName = function
-                end parse
-            if !functionName.empty?()
-                compilingFunctions.remove(functionName)
-                compiledData.functionToFinalLLVMIR(functionName, compilingConstants, compilingFunctions, usedData)
-        if compilingConstants.empty?()
-            end loop
-    var llvmIR String = builtinConstants()
     do
-        var constantsArray Array = Array.repeat("", usedData.llvmConstants~().length~())
-        parse code, name = usedData.llvmConstants~()
-            var index Int = 0
-            try
-                index = Int.fromString(name[4 : name.length~()])
-            catch
-                unreachable()
-            constantsArray.setItem(index, name + " = " + code + "\n")
-        parse _, line = constantsArray
-            llvmIR += line
-    var genericFunctionsErrors Map = Map()
+        var compilingConstants Set = Set()
+        var compilingFunctions Set = Set()
+        compilingFunctions.add(const::emptyToken.replaceText("Main::main".addItem$((mainFunctionMayThrow || const::userCommandArguments.ignoreNoThrow~()).select('1', '0'))))
+        compilingFunctions.add(const::emptyToken.replaceText("STD::shar__rc_free0"))
+        compilingFunctions.add(const::emptyToken.replaceText("STD::shar__rc_use0"))
+        for :(loop)
+            for !compilingConstants.empty?()
+                var constantName Token = const::emptyToken
+                parse :(parse) _, constant Token = compilingConstants
+                    constantName = constant
+                    end parse
+                if !constantName.empty?()
+                    compilingConstants.remove(constantName)
+                    compiledData.constantToFinalIR(constantName, compilingConstants, compilingFunctions, usedData)
+            for !compilingFunctions.empty?()
+                var functionName Token = const::emptyToken
+                parse :(parse) _, function Token = compilingFunctions
+                    functionName = function
+                    end parse
+                if !functionName.empty?()
+                    compilingFunctions.remove(functionName)
+                    compiledData.functionToFinalIR(functionName, compilingConstants, compilingFunctions, usedData)
+            if compilingConstants.empty?()
+                end loop
+    var ir String = const::builtinConstants
     do
-        var idCounter Int = usedData.llvmConstants~().length~()
-        parse functionNameWithVariant, functionCode = usedData.functions~()
-            if functionCode[0] == '|'
-                const functionName String = functionNameWithVariant[0: functionNameWithVariant.length~() - 2]
-                var llvmStringType String = ""
-                const llvmStringData String = stringToLLVMArray(const::emptyToken.replaceText("Invalid type.\\n<- " + functionName), llvmStringType)
-                const stringConstantName String = "@lc." + idCounter.toString()
-                idCounter++
-                llvmIR += stringConstantName + " = private unnamed_addr constant " + llvmStringType + " " + llvmStringData + ", align 8\n"
-                const errorConstantName String = "@lc." + idCounter.toString()
-                idCounter++
-                llvmIR += errorConstantName + " = private unnamed_addr constant [5 x i64] [i64 0, i64 ptrtoint (" + llvmStringType + "* " + stringConstantName + " to i64), i64 0, i64 0, i64 0], align 8\n"
-                genericFunctionsErrors.put(functionName, "{i64 ptrtoint([5 x i64]* " + errorConstantName + " to i64), i32 1}")
+        var constantsArray Array = "".repeat(usedData.llvmConstants~().length(), Array)
+        parse code String, name String = usedData.llvmConstants~()
+            constantsArray.setItem(Int.fromString(name[4:]), name + " = " + code + "\n")
+        parse _, line String = constantsArray
+            ir += line
     do
-        var typesArray Array = Array.repeat("", usedData.types~().length~())
-        parse typeName, typeNumber = usedData.types~()
-            var llvmStringType String = ""
-            const llvmStringData String = stringToLLVMArray(const::emptyToken.replaceText(typeName), llvmStringType)
-            var index Int = 0
-            try
-                index = Int.fromString(typeNumber)
-            catch
-                unreachable()
-            const stringConstantName String = "@ctnc." + typeNumber
-            typesArray.setItem{
-                (index,
-                stringConstantName + " = private unnamed_addr constant " + llvmStringType + " " + llvmStringData + ", align 8\n"
-                "@ctn." + typeNumber + " = private unnamed_addr constant {i64, i32} {i64 ptrtoint(" + llvmStringType + "* " + stringConstantName + " to i64), i32 4}, align 8\n")
-            }
-        parse _, line = typesArray
-            llvmIR += line
-    llvmIR += "\n"
-    do
-        var constantsInitFunction String = "define private void @constnants.init() nounwind noinline{\n"
-        var registerNumber Int = 1
-        parse constantName, code = usedData.constants~()
-            constantsInitFunction += "\t%" + registerNumber.toString() + " = call {i64, i32} @get.c." + constantName.replacePart$("::", ".") + "() noinline\n"
-            llvmIR += code + "\n"
-            registerNumber++
-        llvmIR += constantsInitFunction + "\tret void\n}\n\n" + builtinFunctions(mainFunctionMayThrow)
-    parse functionNameWithVariant, functionCode = usedData.functions~()
-        if functionCode[0] == '|'
-            const functionName String = functionNameWithVariant[0 : functionNameWithVariant.length~() - 2]
-            const functionVariant String = functionNameWithVariant[functionName.length~() : functionNameWithVariant.length~()]
-            const functionData Array = functionCode.split('|')
-            const thisTypeArgumentIndex String = functionData[1]
-            var newRegisterNumber Int = Int.fromString(functionData[2])
-            const groups Array = functionData[3].split(',')
-            const llvmFunctionType String = functionData[4]
-            const llvmFunctionSignature String = functionData[5]
-            const thisTypeArgumentIsMutable Bool = functionData[6][0] == '1'
-            var typesInGroups Set = usedData.groupsTypes~()[groups[0]]
-            for :(groupIndex Int = 1) groupIndex < groups.length~(); groupIndex++
-                const currentGroupName String = groups[groupIndex]
-                const currentGroupTypes Set = usedData.groupsTypes~()[currentGroupName]
-                parse _, alreadyInTypeName = typesInGroups
-                    if !currentGroupTypes[alreadyInTypeName]
-                        typesInGroups.remove(alreadyInTypeName)
-            var brs String = ""
-            llvmIR += llvmFunctionSignature
-            if !typesInGroups.empty?()
-                var typeRegister String = newRegisterNumber.toString()
-                if thisTypeArgumentIsMutable
-                    const typePointerRegister String = typeRegister
-                    typeRegister = (newRegisterNumber + 1).toString()
-                    llvmIR += {
-                        "\t%" + typePointerRegister + " = getelementptr {i64, i32}, {i64, i32}* %" + thisTypeArgumentIndex + ", i64 0, i32 1\n"
-                        "\t%" + typeRegister + " = load i32, i32* %" + typePointerRegister + ", align 4\n"
-                    }
-                    newRegisterNumber += 2
-                else
-                    llvmIR += "\t%" + typeRegister + " = extractvalue {i64, i32} %" + thisTypeArgumentIndex + ", 1\n"
-                    newRegisterNumber++
-                llvmIR += "\tswitch i32 %" + typeRegister + ", label %" + newRegisterNumber.toString() + " [\n"
-                brs = "\t" + newRegisterNumber.toString() + ":\n"
-                newRegisterNumber++
-            brs += "\tret {i64, i32} " + genericFunctionsErrors[functionName] + "\n"
-            if !typesInGroups.empty?()
-                // [[ (number | 0x4000000000000000).toString(), numberAsString, name] ...]
-                var typesInGroupsArray Array = []
-                parse _, typeName = typesInGroups
-                    const typeNumberAsString String = usedData.types~()[typeName]
-                    var typeNumber Int = 0
-                    try
-                        typeNumber = Int.fromString(typeNumberAsString)
-                    catch
-                        unreachable()
-                    typesInGroupsArray.addItem([(typeNumber | 0x4000000000000000).toString(), typeNumberAsString, typeName])
-                typesInGroupsArray.sort(true)
-                var llvmArgumentsInCall String = "("
-                const splitedLLVmFunctionType Array = llvmFunctionType.split('}')
-                parse argumentRegisterNumber, afterTypePart = splitedLLVmFunctionType[2 : splitedLLVmFunctionType.length~()]
-                    llvmArgumentsInCall += (afterTypePart[0] == '*').select("{i64, i32}* %", "{i64, i32} %") + argumentRegisterNumber.toString() + ", "
-                llvmArgumentsInCall.copy(llvmArgumentsInCall.length~() - 2, ")\n", 0, 2)
-                parse _, type = typesInGroupsArray
-                    const newRegister String = newRegisterNumber.toString()
-                    newRegisterNumber++
-                    const resultRegister String = newRegisterNumber.toString()
-                    newRegisterNumber++
-                    llvmIR += "\t\ti32 " + type[1] + ", label %" + newRegister + "\n"
-                    brs += {
-                        "\t" + newRegister + ":\n"
-                        "\t%" + resultRegister + " = call {i64, i32} " + createFunctionLLVMName(functionName, type[2], functionVariant[0] == '1', functionVariant[1] == '1', false) + llvmArgumentsInCall +
-                        "\tret {i64, i32} %" + resultRegister + "\n"
-                    }
-                llvmIR += "\t]\n" + brs
-            llvmIR += "}\n\n"
+        var typesArray Array = "".repeat(usedData.types~().length(), Array)
+        parse typeName String, typeNumber String = usedData.types~()
+            typesArray.setItem(Int.fromString(typeNumber), irTypeNameToConstant(typeName, typeNumber))
+        parse _, line String = typesArray
+            ir += line
+    var fields Array = [].repeat(usedData.types~().length(), Array)
+    parse typeName String, typeNumberAsString String = usedData.types~()
+        const fieldsFromType Map = compiledData.getType(const::emptyToken.replaceText(typeName), true).fields~()
+        var fieldsArray Array = []
+        const typeNumber Int = Int.fromString(typeNumberAsString)
+        if !fieldsFromType.empty?()
+            parse fieldName String, _ = fieldsFromType
+                fieldsArray.addItem(fieldName)
+            fieldsArray.sort(true)
+        fields.setItem(typeNumber, fieldsArray)
+    irCreateFieldsNamesConstants(fields, ir)
+    irConstantsInit(usedData.constants~(), ir)
+    ir += builtinFunctions(mainFunctionMayThrow)
+    parse functionNameWithVariant String, functionCode String = usedData.functions~()
+        if !functionCode.empty?()
+            ir += functionCode
         else
-            llvmIR += functionCode
-    genericFunctionsErrors = Map()
-    parse groupsAsString, functionName = usedData.inGroups~()
-        llvmIR += "define private i1 " + functionName + "(i32) alwaysinline nounwind readnone{\n"
-        const groups Array = groupsAsString.split(',')
-        var allTypes Set = usedData.groupsTypes~()[groups[groups.length~() - 1]]
-        for :(groupIndex Int = 0) groupIndex < groups.length~() - 1; groupIndex++
-            const groupTypes Set = usedData.groupsTypes~()[groups[groupIndex]]
-            parse _, type = allTypes
-                if !groupTypes[type]
-                    allTypes.remove(type)
-        var functionBody String = ""
-        if allTypes.empty?()
-            functionBody = "\tret i1 0\n"
-        elif allTypes.length~() == usedData.types~().length~()
-            functionBody = "\tret i1 1\n"
-        else
-            var typesNumbersInGroups Array = []
-            parse _, typeName = allTypes
-                const typeNumberAsString String = usedData.types~()[typeName]
-                var typeNumber Int = 0
-                try
-                    typeNumber = Int.fromString(typeNumberAsString)
-                catch
-                    unreachable()
-                typesNumbersInGroups.addItem(typeNumber)
-            typesNumbersInGroups.sort(true)
-            functionBody = "\tswitch i32 %0, label %false [\n"
-            parse _, typeNumber = typesNumbersInGroups
-                functionBody += "\t\ti32 " + typeNumber.toString() + ", label %true\n"
-            functionBody += {
-                "\t]\n"
-                "\ttrue:\n"
-                "\tret i1 1\n"
-                "\tfalse:\n"
-                "\tret i1 0\n"
-            }
-        llvmIR += functionBody + "}\n\n"
-    llvmIR += "define private {i64, i32} @shar.type.number.to.type.name(i32) nounwind readnone{\n\tswitch i32 %0, label %notype [\n"
-    do
-        var labelNumber Int = 2
-        var labelsCode String = ""
-        var phiCode String = ""
-        for :(index Int = 0) index < usedData.types~().length~(); index++
-            const typeNumber String = index.toString()
-            const label String = labelNumber.toString()
-            llvmIR += "\t\ti32 " + typeNumber + ", label %" + label + "\n"
-            labelsCode += "\t" + label + ":\n\tbr label %end\n"
-            phiCode += "[@ctn." + typeNumber + ", %" + label + "], "
-            labelNumber++
-        const phiRegisterNumber String = labelNumber.toString()
-        const resultRegisterNumber String = (labelNumber + 1).toString()
-        llvmIR += {
-            "\t]\n" +
-            labelsCode +
-            "\tnotype:\n"
-            "\tbr label %end\n"
-            "\tend:\n"
-            "\t%" + phiRegisterNumber + " = phi {i64, i32}* " + phiCode + "[@shar.empty.string, %notype]\n"
-            "\t%" + resultRegisterNumber + " = load {i64, i32}, {i64, i32}* %" + phiRegisterNumber + ", align 8\n"
-            "\tret {i64, i32} %" + resultRegisterNumber + "\n}\n\n"
-        }
-    parse _, declare = usedData.llvmDeclares~()
-        llvmIR += declare + "\n"
-    if !saveToUTF8File(llvmIR, outputFile)
+            const functionName String = functionNameWithVariant[:functionNameWithVariant.length() - 1]
+            const nothrow Bool = functionNameWithVariant[functionNameWithVariant.length() - 1] == '0'
+            var typesInGroups Map = Map()
+            var simpleFunction <>SimpleFunction = nothing
+            do
+                const functions GroupsFunctions = compiledData.getFunction(const::emptyToken.replaceText(functionName), true).finalFunction~()
+                simpleFunction = functions.functions~()["-"]
+                if simpleFunction.nothing?()
+                    simpleFunction = functions.functions~()["+"]
+                parse typeName String, _ =  functions.functions~()
+                    const typeNumber <>String = usedData.types~()[typeName]
+                    if !((typeName.length() == 1 && (typeName[0] == '-' || typeName[0] == '+')) || typeNumber.nothing?())
+                        typesInGroups.put(typeNumber, typeName)
+            irCreateGenericFunction(functionName, nothrow, typesInGroups, simpleFunction.signature~().arguments~(), ir)
+    irCreateGetFieldNameFunctions(fields, ir)
+    parse groupsAsString String, functionName String = usedData.inGroups~()
+        irCreateInGroupsFunctions(groupsAsString, functionName, usedData, ir)
+    irCreateTypeNumberToTypeNameFunction(usedData.types~(), ir)
+    parse _, declare String = usedData.llvmDeclares~()
+        ir += declare + "\n"
+    if !saveToUTF8File(ir, outputFile)
         errorCanNotWriteToFile(outputFile)
-
-def builtinEnumerationsElements() Map
-    var result Map = Map()
-    parse index, element = {
-        ["STD::error_invalidType",
-        "STD::error_noReturnValue",
-        "STD::error_noError",
-        "STD::error_fail"]
-    }
-        result.put(element, index.toString())
-    return result
-
-def builtinConstantStrings() Map
-    var result Map = Map()
-    parse index, constant = ["private unnamed_addr constant [21 x i16] [i16 0, i16 0, i16 0, i16 0, i16 13, i16 0, i16 0, i16 0, i16 73, i16 110, i16 118, i16 97, i16 108, i16 105, i16 100, i16 32, i16 116, i16 121, i16 112, i16 101, i16 46], align 8"]
-        result.put(constant, "@lc." + index.toString())
-    return result
-
-def alwaysUsedTypes() Map
-    var result Map = Map()
-    parse typeNumber, typeName = {
-        ["STD::Nothing",
-        "STD::Error",
-        "STD::Bool",
-        "STD::Int",
-        "STD::String"]
-    }
-        result.put(typeName, typeNumber.toString())
-    return result
-
-def builtinLLVMDeclaredFunctions() Map
-    var result Map = Map()
-    const functions Array = {
-        ["shar__get__cmd__argument", "declare i1 @shar__get__cmd__argument(i64, i64, i64* nocapture, i16** nocapture) local_unnamed_addr nounwind",
-        "shar__get__cmd__arguments__count", "declare i64 @shar__get__cmd__arguments__count() local_unnamed_addr nounwind readonly",
-        "shar__get__env__variable", "declare i1 @shar__get__env__variable(i64, i16* nocapture readonly, i64, i64* nocapture, i16** nocapture) local_unnamed_addr nounwind",
-        "shar__get__string__from__cmd__line", "declare i1 @shar__get__string__from__cmd__line(i64, i64* nocapture, i16** nocapture) local_unnamed_addr nounwind",
-        "shar__get__platform__name", "declare void @shar__get__platform__name(i64, i64* nocapture, i16** nocapture) local_unnamed_addr nounwind",
-        "shar__execute__command", "declare i1 @shar__execute__command(i64, i16* nocapture readonly) local_unnamed_addr nounwind",
-        "shar__get__cpu__cores__number", "declare i64 @shar__get__cpu__cores__number() local_unnamed_addr nounwind",
-        "shar__delete__file", "declare i1 @shar__delete__file(i64, i16* nocapture readonly) local_unnamed_addr nounwind",
-        "shar__delete__empty__directory", "declare i1 @shar__delete__empty__directory(i64, i16* nocapture readonly) local_unnamed_addr nounwind",
-        "shar__file__is__exist", "declare i1 @shar__file__is__exist(i64, i16* nocapture readonly) local_unnamed_addr nounwind",
-        "shar__directory__is__exist", "declare i1 @shar__directory__is__exist(i64, i16* nocapture readonly) local_unnamed_addr nounwind",
-        "shar__open__file", "declare i1 @shar__open__file(i64, i16* nocapture readonly, i32, i8** nocapture) local_unnamed_addr nounwind",
-        "shar__flush__file", "declare i1 @shar__flush__file(i8* nocapture) local_unnamed_addr nounwind",
-        "shar__close__file", "declare i1 @shar__close__file(i8* nocapture) local_unnamed_addr nounwind",
-        "shar__read__from__file", "declare i64 @shar__read__from__file(i8* nocapture, i64, i8* nocapture) local_unnamed_addr nounwind",
-        "shar__write__to__file", "declare i64 @shar__write__to__file(i8* nocapture, i64, i8* nocapture) local_unnamed_addr nounwind",
-        "shar__get__file__size", "declare i64 @shar__get__file__size(i64, i16* nocapture readonly) local_unnamed_addr nounwind",
-        "shar__get__position__in__file", "declare i64 @shar__get__position__in__file(i8* nocapture) local_unnamed_addr nounwind",
-        "shar__set__position__in__file", "declare i1 @shar__set__position__in__file(i8* nocapture, i64) local_unnamed_addr nounwind",
-        "shar__file__rename", "declare i1 @shar__file__rename(i64, i16* nocapture readonly, i64, i16* nocapture readonly) local_unnamed_addr nounwind",
-        "shar__open__directory", "declare i1 @shar__open__directory(i64, i16* nocapture readonly, i64*) local_unnamed_addr nounwind",
-        "shar__read__directory", "declare i1 @shar__read__directory(i64, i64, i64* nocapture, i16** nocapture, i8* nocapture) local_unnamed_addr nounwind",
-        "shar__close__directory", "declare void @shar__close__directory(i64) local_unnamed_addr nounwind",
-        "shar__make__directory", "declare i1 @shar__make__directory(i64, i16* nocapture readonly, i1) local_unnamed_addr nounwind",
-        "shar__get__tmp__dir__name", "declare void @shar__get__tmp__dir__name(i64, i64* nocapture, i16** nocapture) local_unnamed_addr nounwind",
-        "shar__print__string", "declare void @shar__print__string(i64, i16* nocapture readonly) local_unnamed_addr nounwind",
-        "shar__println__string", "declare void @shar__println__string(i64, i16* nocapture readonly) local_unnamed_addr nounwind",
-        "shar__print__as__error", "declare void @shar__print__as__error(i64, i16* nocapture readonly) local_unnamed_addr nounwind",
-        "shar__println__as__error", "declare void @shar__println__as__error(i64, i16* nocapture readonly) local_unnamed_addr nounwind",
-        "shar__print__error", "declare void @shar__print__error(i64, i16* nocapture readonly) local_unnamed_addr cold noreturn nounwind",
-        "shar__print__builtin__error", "declare void @shar__print__builtin__error(i8*) local_unnamed_addr cold noreturn nounwind",
-        "shar__get__random__number", "declare i64 @shar__get__random__number() local_unnamed_addr nounwind",
-        "shar__get__cryptographic__random__number", "declare i64 @shar__get__cryptographic__random__number() local_unnamed_addr nounwind",
-        "shar__get__current__time", "declare i64 @shar__get__current__time() local_unnamed_addr nounwind",
-        "shar__get__current__utc__time", "declare i64 @shar__get__current__utc__time() local_unnamed_addr nounwind",
-        "shar__load__lib", "declare i1 @shar__load__lib(i64, i16* nocapture readonly, i8** nocapture) local_unnamed_addr nounwind",
-        "shar__get__from__lib", "declare i1 @shar__get__from__lib(i64, i16* nocapture readonly, i8*, i8** nocapture) local_unnamed_addr nounwind",
-        "shar__unload__lib", "declare i1 @shar__unload__lib(i8*) local_unnamed_addr nounwind",
-        "shar__pipeline__use__counter__inc", "declare void @shar__pipeline__use__counter__inc(i64) local_unnamed_addr nounwind",
-        "shar__pipeline__use__counter__dec", "declare i1 @shar__pipeline__use__counter__dec(i64) local_unnamed_addr nounwind",
-        "shar__pipeline__get__data__for__free", "declare i64 @shar__pipeline__get__data__for__free(i64) local_unnamed_addr nounwind",
-        "shar__pipeline__get__count__for__free", "declare i64 @shar__pipeline__get__count__for__free(i64) local_unnamed_addr nounwind",
-        "shar__create__pipeline", "declare i64 @shar__create__pipeline() local_unnamed_addr nounwind",
-        "shar__pipeline__push", "declare void @shar__pipeline__push(i64, {i64, i32}) local_unnamed_addr nounwind",
-        "shar__pipeline__pop", "declare {i64, i32} @shar__pipeline__pop(i64) local_unnamed_addr nounwind",
-        "shar__destroy__pipeline", "declare void @shar__destroy__pipeline(i64) local_unnamed_addr nounwind",
-        "shar__create__worker", "declare void @shar__create__worker({i64, i32} ({i64, i32}, {i64, i32})*, {i64, i32}, {i64, i32}, {i64, i32} ({i64, i32})*) local_unnamed_addr nounwind",
-        "shar__yield", "declare void @shar__yield() local_unnamed_addr nounwind",
-        "shar__sleep", "declare void @shar__sleep(i64) local_unnamed_addr nounwind",
-        "shar__get__threads__number", "declare i64 @shar__get__threads__number() local_unnamed_addr nounwind",
-        "shar__get__pipeline__items__count", "declare i64 @shar__get__pipeline__items__count(i64) local_unnamed_addr nounwind",
-        "shar__get__language__code", "declare i16 @shar__get__language__code() local_unnamed_addr nounwind",
-        "shar__init", "declare void @shar__init(i32, i8**) local_unnamed_addr nounwind",
-        "shar__enable__threads", "declare void @shar__enable__threads() local_unnamed_addr nounwind",
-        "shar__end", "declare void @shar__end() local_unnamed_addr nounwind",
-        "shar__exit", "declare void @shar__exit() local_unnamed_addr nounwind cold noreturn",
-        "shar__fail", "declare void @shar__fail() local_unnamed_addr nounwind cold noreturn",
-        "llvm.expect.i1", "declare i1 @llvm.expect.i1(i1, i1)",
-        "llvm.assume", "declare void @llvm.assume(i1)",
-        "llvm.memcpy.i16.i16.i64", "declare void @llvm.memcpy.i16.i16.i64(i16*, i16*, i64, i1)",
-        "malloc", "declare noalias i8* @malloc(i64) local_unnamed_addr nofree nounwind",
-        "realloc", "declare noalias i8* @realloc(i8* nocapture, i64) local_unnamed_addr nounwind",
-        "free", "declare void @free(i8* nocapture) local_unnamed_addr nounwind"]
-    }
-    for :(index Int = 0) index < functions.length~(); index += 2
-        result.put(functions[index], functions[index + 1])
-    return result
-
-def builtinConstants() String
-    return {
-        "@empty.string = private unnamed_addr constant [8 x i16] zeroinitializer, align 8\n"
-        "@shar.empty.string = private unnamed_addr constant {i64, i32} {i64 ptrtoint ([8 x i16]* @empty.string to i64), i32 4}, align 8\n"
-        "@empty.list = private unnamed_addr constant [2 x i64] zeroinitializer, align 8\n"
-        "@empty.array = private unnamed_addr constant [3 x i64] zeroinitializer, align 8\n"
-        "@not.enough.memory.message = private unnamed_addr constant [20 x i8] c\qNot enough memory.\\0A\\00\q, align 1\n"
-        "@invalid.type.error = private unnamed_addr constant [5 x i64] [i64 0, i64 ptrtoint([21 x i16]* @lc.0 to i64), i64 0, i64 0, i64 0], align 8\n\n"
-    }
-
-def builtinFunctions(mainFunctionMayThrow Bool) String
-    return {
-        "define i32 @main(i32, i8**) local_unnamed_addr sspstrong nounwind{\n"
-        "\tcall void @shar__init(i32 %0, i8** %1)\n"
-        "\tcall void @constnants.init()\n"
-        "\tcall void @shar__enable__threads()\n"
-        "\t%3 = call {i64, i32} " + createFunctionLLVMName("Main::main", "", false, mainFunctionMayThrow || const::ignoreNoThrow, false) + "()\n"
-        "\t%4 = extractvalue {i64, i32} %3, 1\n"
-        "\t%5 = icmp eq i32 %4, 1\n"
-        "\tbr i1 %5, label %6, label %23\n"
-        "\t6:\n"
-        "\t%7 = call {i64, i32} @shar.error.get.data({i64, i32} %3)\n"
-        "\t%8 = call {i64, i32} " + createFunctionLLVMName("STD::shar__rc_free", "", const::ignoreNoThrow, const::ignoreNoThrow, false) + "({i64, i32} %7)\n"
-        "\t%9 = extractvalue {i64, i32} %3, 0\n"
-        "\t%10 = inttoptr i64 %9 to i64*\n"
-        "\t%11 = load i64, i64* %10, align 8\n"
-        "\t%12 = icmp eq i64 %11, 2\n"
-        "\t%13 = icmp eq i64 %11, 3\n"
-        "\t%14 = or i1 %12, %13\n"
-        "\tbr i1 %14, label %23, label %15\n"
-        "\t15:\n"
-        "\t%16 = getelementptr i64, i64* %10, i64 1\n"
-        "\t%17 = load i64, i64* %16, align 8\n"
-        "\t%18 = inttoptr i64 %17 to i64*\n"
-        "\t%19 = getelementptr i64, i64* %18, i64 1\n"
-        "\t%20 = getelementptr i64, i64* %18, i64 2\n"
-        "\t%21 = load i64, i64* %19, align 8\n"
-        "\t%22 = bitcast i64* %20 to i16*\n"
-        "\tcall void @shar__print__error(i64 %21, i16* %22)\n"
-        "\tunreachable\n"
-        "\t23:\n"
-        "\t%24 = phi i1 [0, %2], [%13, %6]\n"
-        "\tcall void @shar__end()\n"
-        "\t%25 = zext i1 %24 to i32\n"
-        "\tret i32 %25\n"
-        "}\n\n"
-        "define private i64* @shar.malloc(i64) alwaysinline nounwind {\n"
-        "\t%2 = call i8* @malloc(i64 %0)\n"
-        "\t%3 = icmp eq i8* %2, null\n"
-        "\t%4 = call i1 @llvm.expect.i1(i1 %3, i1 0)\n"
-        "\tbr i1 %4, label %5, label %7\n"
-        "\t5:\n"
-        "\t%6 = bitcast [20 x i8]* @not.enough.memory.message to i8*\n"
-        "\tcall void @shar__print__builtin__error(i8* %6)\n"
-        "\tunreachable\n"
-        "\t7:\n"
-        "\t%8 = bitcast i8* %2 to i64*\n"
-        "\tret i64* %8\n"
-        "}\n\n"
-        "define private i64* @shar.realloc(i64*, i64) alwaysinline nounwind {\n"
-        "\t%3 = bitcast i64* %0 to i8*\n"
-        "\t%4 = call i8* @realloc(i8* %3, i64 %1)\n"
-        "\t%5 = icmp eq i8* %4, null\n"
-        "\t%6 = call i1 @llvm.expect.i1(i1 %5, i1 0)\n"
-        "\tbr i1 %6, label %7, label %9\n"
-        "\t7:\n"
-        "\t%8 = bitcast [20 x i8]* @not.enough.memory.message to i8*\n"
-        "\tcall void @shar__print__builtin__error(i8* %8)\n"
-        "\tunreachable\n"
-        "\t9:\n"
-        "\t%10 = bitcast i8* %4 to i64*\n"
-        "\tret i64* %10\n"
-        "}\n\n"
-        "define private void @shar.free(i64*) alwaysinline nounwind {\n"
-        "\t%2 = bitcast i64* %0 to i8*\n"
-        "\tcall void @free(i8* %2)\n"
-        "\tret void\n"
-        "}\n\n"
-        "define private {i64, i32} @shar.error.get.id({i64, i32}) alwaysinline nounwind {\n"
-        "\t%2 = extractvalue {i64, i32} %0, 0\n"
-        "\t%3 = inttoptr i64 %2 to i64*\n"
-        "\t%4 = load i64, i64* %3, align 8\n"
-        "\t%5 = insertvalue {i64, i32} {i64 0, i32 3}, i64 %4, 0\n"
-        "\tret {i64, i32} %5\n"
-        "}\n\n"
-        "define private {i64, i32} @shar.error.get.message({i64, i32}) alwaysinline nounwind {\n"
-        "\t%2 = extractvalue {i64, i32} %0, 0\n"
-        "\t%3 = inttoptr i64 %2 to i64*\n"
-        "\t%4 = getelementptr i64, i64* %3, i64 1\n"
-        "\t%5 = load i64, i64* %4, align 8\n"
-        "\t%6 = insertvalue {i64, i32} {i64 0, i32 4}, i64 %5, 0\n"
-        "\tret {i64, i32} %6\n"
-        "}\n\n"
-        "define private {i64, i32} @shar.error.get.data({i64, i32}) alwaysinline nounwind {\n"
-        "\t%2 = extractvalue {i64, i32} %0, 0\n"
-        "\t%3 = inttoptr i64 %2 to i32*\n"
-        "\t%4 = getelementptr i32, i32* %3, i64 5\n"
-        "\t%5 = getelementptr i32, i32* %3, i64 6\n"
-        "\t%6 = bitcast i32* %5 to i64*\n"
-        "\t%7 = load i32, i32* %4, align 4\n"
-        "\t%8 = load i64, i64* %6, align 8\n"
-        "\t%9 = insertvalue {i64, i32} undef, i64 %8, 0\n"
-        "\t%10 = insertvalue {i64, i32} %9, i32 %7, 1\n"
-        "\tret {i64, i32} %10\n"
-        "}\n\n"
-        "define private void @shar.error.free({i64, i32}) noinline nounwind {\n"
-        "\t%2 = extractvalue {i64, i32} %0, 0\n"
-        "\t%3 = inttoptr i64 %2 to i32*\n"
-        "\t%4 = getelementptr i32, i32* %3, i64 4\n"
-        "\t%5 = load i32, i32* %4, align 4\n"
-        "\t%6 = trunc i32 %5 to i1\n"
-        "\tbr i1 %6, label %7, label %13\n"
-        "\t7:\n"
-        "\t%8 = call {i64, i32} @shar.error.get.message({i64, i32} %0)\n"
-        "\t%9 = call {i64, i32} " + createFunctionLLVMName("STD::shar__rc_free", "STD::String", const::ignoreNoThrow, const::ignoreNoThrow, false) + "({i64, i32} %8)\n"
-        "\t%10 = call {i64, i32} @shar.error.get.data({i64, i32} %0)\n"
-        "\t%11 = call {i64, i32} " + createFunctionLLVMName("STD::shar__rc_free", "", const::ignoreNoThrow, const::ignoreNoThrow, false) + "({i64, i32} %10)\n"
-        "\t%12 = bitcast i32* %3 to i64*\n"
-        "\tcall void @shar.free(i64* %12)\n"
-        "\tbr label %13\n"
-        "\t13:\n"
-        "\tret void\n"
-        "}\n\n"
-        "define private {i64, i32} @shar.error.add.to.message({i64, i32}, i64) noinline nounwind {\n"
-        "\t%3 = extractvalue {i64, i32} %0, 0\n"               // error i64
-        "\t%4 = inttoptr i64 %3 to i64*\n"                     // error i64*
-        "\t%5 = load i64, i64* %4, align 8\n"                  // error id
-        "\t%6 = icmp eq i64 %5, 2\n"                           // error id == 2
-        "\t%7 = icmp eq i64 %5, 3\n"                           // error id == 3
-        "\t%8 = or i1 %6, %7\n"                                // error id == 2 || error id == 3
-        "\t%9 = inttoptr i64 %1 to i64*\n"                     // added string i64*
-        "\t%10 = getelementptr i64, i64* %9, i64 1\n"          // added string length pointer
-        "\t%11 = load i64, i64* %10, align 8\n"                // added string length
-        "\t%12 = icmp eq i64 %11, 0\n"                         // added string is empty?
-        "\t%13 = or i1 %8, %12\n"                              // not need add string
-        "\tbr i1 %13, label %64, label %14\n"
-        "\t14:\n"
-        "\t%15 = mul i64 %11, 2\n"                             // added string chars size in bytes
-        "\t%16 = getelementptr i64, i64* %9, i64 2\n"          // added chars i64*
-        "\t%17 = bitcast i64* %16 to i16*\n"                   // added chars i16*
-        "\t%18 = getelementptr i64, i64* %4, i64 1\n"          // error message pointer
-        "\t%19 = load i64, i64* %18, align 8\n"                // error message i64
-        "\t%20 = inttoptr i64 %19 to i64*\n"                   // error message i64*
-        "\t%21 = load i64, i64* %20, align 8\n"                // error message counter
-        "\t%22 = getelementptr i64, i64* %20, i64 1\n"         // error message length pointer
-        "\t%23 = load i64, i64* %22, align 8\n"                // error message length
-        "\t%24 = mul i64 %23, 2\n"                             // error message chars size in bytes
-        "\t%25 = getelementptr i64, i64* %20, i64 2\n"         // error message chars i64*
-        "\t%26 = bitcast i64* %25 to i16*\n"                   // error message chars
-        "\t%27 = add i64 %11, %23\n"                           // new message length
-        "\t%28 = add i64 %27, 8\n"                             // new message length + 8
-        "\t%29 = mul i64 %28, 2\n"                             // new message size in bytes
-        "\tswitch i64 %21, label %30 [\n"                      // switch error message counter
-        "\t\ti64 0, label %32\n"
-        "\t\ti64 1, label %36\n"
-        "\t]\n"
-        "\t30:\n"                                              // error message counter > 1
-        "\t%31 = sub i64 %21, 1\n"                             // error message counter - 1
-        "\tstore i64 %31, i64* %20, align 8\n"                 // save error message counter
-        "\tbr label %32\n"
-        "\t32:\n"                                              // error message counter == 0
-        "\t%33 = call i64* @shar.malloc(i64 %29)\n"            // new error message mem
-        "\tstore i64 1, i64* %33, align 8\n"                   // save new error message counter
-        "\t%34 = getelementptr i64, i64* %33, i64 2\n"         // new error message chars i64*
-        "\t%35 = bitcast i64* %34 to i16*\n"                   // new error message chars
-                                                               // copy old message chars to new message
-        "\tcall void @llvm.memcpy.i16.i16.i64(i16* nonnull align 2 %35, i16* nonnull align 2 %26, i64 %24, i1 0)\n"
-        "\tbr label %38\n"
-        "\t36:\n"                                              // error message counter == 1
-        "\t%37 = call i64* @shar.realloc(i64* %20, i64 %29)\n" // enlarge memory message
-        "\tbr label %38\n"
-        "\t38:\n"
-        "\t%39 = phi i64* [%33, %32], [%37, %36]\n"            // new error message mem
-        "\t%40 = getelementptr i64, i64* %39, i64 1\n"         // new error message length pointer
-        "\tstore i64 %27, i64* %40, align 8\n"                 // save new message length
-        "\t%41 = getelementptr i64, i64* %39, i64 2\n"         // new error message chars i64*
-        "\t%42 = bitcast i64* %41 to i16*\n"                   // new error message chars
-        "\t%43 = getelementptr i16, i16* %42, i64 %23\n"       // end of old message in new message
-                                                               // add new chars
-        "\tcall void @llvm.memcpy.i16.i16.i64(i16* nonnull align 2 %43, i16* nonnull align 2 %17, i64 %15, i1 0)\n"
-        "\t%44 = getelementptr i64, i64* %4, i64 2\n"          // error mutable flag pointer i64*
-        "\t%45 = bitcast i64* %44 to i32*\n"                   // error mutable flag pointer i32*
-        "\t%46 = load i32, i32* %45, align 4\n"                // error mutable flag i32
-        "\t%47 = trunc i32 %46 to i1\n"                        // error mutable flag
-        "\tbr i1 %47, label %58, label %48\n"
-        "\t48:\n"                                              // error is ro
-        "\t%49 = call i64* @shar.malloc(i64 36)\n"             // new error mem
-        "\tstore i64 %5, i64* %49, align 8\n"                  // save error id to new mem
-        "\t%50 = getelementptr i64, i64* %49, i64 2\n"         // mutable flag in new mem pointer i64*
-        "\t%51 = bitcast i64* %50 to i32*\n"                   // mutable flag in new mem pointer i32*
-        "\tstore i32 1, i32* %51, align 4\n"                   // save mutable flag to new mem
-        "\t%52 = getelementptr i32, i32* %45, i64 1\n"         // data type pointer in old error
-        "\t%53 = load i32, i32* %52, align 4\n"                // data type
-        "\t%54 = getelementptr i32, i32* %51, i64 1\n"         // data type pointer in new error
-        "\tstore i32 %53, i32* %54, align 4\n"                 // save data type to new error
-        "\t%55 = getelementptr i64, i64* %4, i64 3\n"          // data value pointer in old error
-        "\t%56 = load i64, i64* %55, align 8\n"                // data value
-        "\t%57 = getelementptr i64, i64* %49, i64 3\n"         // data value pointer in new error
-        "\tstore i64 %56, i64* %57, align 8\n"                 // save data value to new error
-        "\tbr label %58\n"
-        "\t58:\n"
-        "\t%59 = phi i64* [%4, %38], [%49, %48]\n"             // error mem
-        "\t%60 = getelementptr i64, i64* %59, i64 1\n"         // error message pointer
-        "\t%61 = ptrtoint i64* %39 to i64\n"                   // new error message i64
-        "\tstore i64 %61, i64* %60, align 8\n"                 // save new message to error
-        "\t%62 = ptrtoint i64* %59 to i64\n"                   // error mem i64
-        "\t%63 = insertvalue {i64, i32} %0, i64 %62, 0\n"      // error {i64, i32}
-        "\tbr label %64\n"
-        "\t64:\n"
-        "\t%65 = phi {i64, i32} [%0, %2], [%63, %58]\n"        // result
-        "\tret {i64, i32} %65\n"
-        "}\n\n"
-    }

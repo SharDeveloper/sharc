@@ -2,292 +2,217 @@ module Main
 
 // The operand in expressions.
 type Operand
-    // code Token
-    // access enum::access_*
-    // value String
-    // type OType
-    // constant? used? named? argument? globalConstant? Int (Array of Bits)
+    code          Token
+    access        Access
+    value         String
+    type          COType
+    isConstant    Bool
+    isNamed       Bool
+    isArgument    Bool
+    isGlobalConst Bool
 
-attach Operand to FieldCode
-    #alwaysinline
-    def code~(operand Operand) Token
-        return operand.typeGetItem(0)
+// A type that stores data for operands with a name. (constants and variables in functions)
+type NamedOperand
+    level   Int
+    operand Operand
+    isUsed  Bool
 
-    #alwaysinline
-    def code`(write operand Operand, new <>Token) <>Token
-        return operand.typePut(0, new)
-
-attach Operand to FieldAccess
-    #alwaysinline
-    def access~(operand Operand) Int
-        return operand.typeGetItem(1)
-
-    #alwaysinline
-    def access`(write operand Operand, new Int) Int
-        return operand.typePut(1, new)
-
-attach Operand to FieldValue
-    #alwaysinline
-    def value~(operand Operand) String
-        return operand.typeGetItem(2)
-
-    #alwaysinline
-    def value`(write operand Operand, new String) String
-        return operand.typePut(2, new)
-
-attach Operand to FieldType
-    #alwaysinline
-    def type~(operand Operand) OType
-        return operand.typeGetItem(3)
-
-    #alwaysinline
-    def type`(write operand Operand, new <>OType) <>OType
-        return operand.typePut(3, new)
-
-attach Operand to FieldConstant
-    #alwaysinline
+attach Operand to IsConstant
     def constant?(operand Operand) Bool
-        return (operand.typeGetItem(4) & 1) == 1
+        return operand.isConstant~()
 
-    #alwaysinline
-    def constant`(write operand Operand, new Bool) Bool
-        return (operand.typePut(4, operand.typeGetItem(4) & (-2) | new.select(1, 0)) & 1) == 1
-
-attach Operand to FieldUsed
-    #alwaysinline
-    def used?(operand Operand) Bool
-        return (operand.typeGetItem(4) & 2) == 2
-
-    #alwaysinline
-    def used`(write operand Operand, new Bool) Bool
-        return (operand.typePut(4, operand.typeGetItem(4) & (-3) | new.select(2, 0)) & 2) == 2
-
-attach Operand to FieldNamed
-    #alwaysinline
+attach Operand to IsNamed
     def named?(operand Operand) Bool
-        return (operand.typeGetItem(4) & 4) == 4
+        return operand.isNamed~()
 
-    #alwaysinline
-    def named`(write operand Operand, new Bool) Bool
-        return (operand.typePut(4, operand.typeGetItem(4) & (-5) | new.select(4, 0)) & 4) == 4
-
-attach Operand to FieldArgument
-    #alwaysinline
+attach Operand to IsArgument
     def argument?(operand Operand) Bool
-        return (operand.typeGetItem(4) & 8) == 8
+        return operand.isArgument~()
 
-    #alwaysinline
-    def argument`(write operand Operand, new Bool) Bool
-        return (operand.typePut(4, operand.typeGetItem(4) & (-9) | new.select(8, 0)) & 8) == 8
+attach Operand to IsGlobalConst
+    def globalConst?(operand Operand) Bool
+        return operand.isGlobalConst~()
 
-attach Operand to FieldGlobalConstant
-    #alwaysinline
-    def globalConstant?(operand Operand) Bool
-        return (operand.typeGetItem(4) & 16) == 16
-
-    #alwaysinline
-    def globalConstant`(write operand Operand, new Bool) Bool
-        return (operand.typePut(4, operand.typeGetItem(4) & (-17) | new.select(16, 0)) & 16) == 16
-
-#alwaysinline
-def Operand(code Token, access Int, value String, type OType, isConstant, isUsed, isNamed, isArgument, isGlobalConstant Bool) Operand
-    return Operand.fromList({code, access, value, type, isConstant.select(1, 0) | isUsed.select(2, 0) | isNamed.select(4, 0) | isArgument.select(8, 0) | isGlobalConstant.select(16, 0)})
-
-// The function applies the "shar__to_const" function to the operand.
-#alwaysinline
-def operandToConst(operand Operand, write codeData CodeData, compiledData CData, write llvmIR String)
-    var needToTransform Bool = !(operand.Main::constant?() || operand.access~() == enum::access_noread || operand.type~().nothingType?() || operand.globalConstant?())
-    if needToTransform && operand.type~().simple?() && !operand.type~().this?()
-        needToTransform = !compiledData.getType(operand.type~().type~(), true).groups~()["STD::Independent"]
-    var endLabel String = ""
-    if needToTransform
-        var mutOperand Operand = operand.toReadOnly(codeData, llvmIR)
-        if mutOperand.type~().simple?() && mutOperand.type~().optional?()
-            const functionLabel String = codeData.createLabel()
-            endLabel = codeData.createLabel()
-            const typeRegister String = codeData.createRegister("extractvalue {i64, i32} " + mutOperand.value~() + ", 1", llvmIR)
-            const isNothing String = codeData.createRegister("icmp eq i32 " + typeRegister + ", 0", llvmIR)
-            llvmIR += "\tbr i1 " + isNothing + ", label %##reg##" + endLabel + "##, label %##reg##" + functionLabel + "##\n\t##nreg##" + functionLabel + "##:\n"
-            var type OType = mutOperand.type`(nothing)
-            type.optional`(false)
-            mutOperand.type`(type)
-        callFunction(const::emptyToken.replaceText("STD::shar__to_const"), [mutOperand], codeData, compiledData, [], false, llvmIR)
-    if !endLabel.empty?()
-        llvmIR += "\tbr label %##reg##" + endLabel + "##\n\t##nreg##" + endLabel + "##:\n"
-
-// The function applies the "shar__rc_free" function to the operand.
-#alwaysinline
-def freeOperand(operand Operand, write codeData CodeData, compiledData CData, write llvmIR String)
-    var needToFree Bool = !(operand.Main::constant?() || operand.access~() == enum::access_noread || operand.type~().nothingType?() || operand.globalConstant?())
-    if needToFree && operand.type~().simple?() && !operand.type~().this?()
-        needToFree = !compiledData.getType(operand.type~().type~(), true).groups~()["STD::Independent"]
-    var endLabel String = ""
-    if needToFree
-        var mutOperand Operand = operand.toReadOnly(codeData, llvmIR)
-        if mutOperand.type~().simple?() && mutOperand.type~().optional?()
-            const functionLabel String = codeData.createLabel()
-            endLabel = codeData.createLabel()
-            const typeRegister String = codeData.createRegister("extractvalue {i64, i32} " + mutOperand.value~() + ", 1", llvmIR)
-            const isNothing String = codeData.createRegister("icmp eq i32 " + typeRegister + ", 0", llvmIR)
-            llvmIR += "\tbr i1 " + isNothing + ", label %##reg##" + endLabel + "##, label %##reg##" + functionLabel + "##\n\t##nreg##" + functionLabel + "##:\n"
-            var type OType = mutOperand.type`(nothing)
-            type.optional`(false)
-            mutOperand.type`(type)
-        callFunction(const::emptyToken.replaceText("STD::shar__rc_free"), [mutOperand], codeData, compiledData, [], false, llvmIR)
-    if !endLabel.empty?()
-        llvmIR += "\tbr label %##reg##" + endLabel + "##\n\t##nreg##" + endLabel + "##:\n"
-
-// The function applies the "shar__rc_use" function to the operand.
-#alwaysinline
-def useOperand(operand Operand, write codeData CodeData, compiledData CData, write llvmIR String)
-    var needToUse Bool = !(operand.Main::constant?() || operand.access~() == enum::access_noread || operand.type~().nothingType?() || operand.globalConstant?())
-    if needToUse && operand.type~().simple?() && !operand.type~().this?()
-        needToUse = !compiledData.getType(operand.type~().type~(), true).groups~()["STD::Independent"]
-    var endLabel String = ""
-    if needToUse
-        var mutOperand Operand = operand.toReadOnly(codeData, llvmIR)
-        if mutOperand.type~().simple?() && mutOperand.type~().optional?()
-            const functionLabel String = codeData.createLabel()
-            endLabel = codeData.createLabel()
-            const typeRegister String = codeData.createRegister("extractvalue {i64, i32} " + mutOperand.value~() + ", 1", llvmIR)
-            const isNothing String = codeData.createRegister("icmp eq i32 " + typeRegister + ", 0", llvmIR)
-            llvmIR += "\tbr i1 " + isNothing + ", label %##reg##" + endLabel + "##, label %##reg##" + functionLabel + "##\n\t##nreg##" + functionLabel + "##:\n"
-            var type OType = mutOperand.type`(nothing)
-            type.optional`(false)
-            mutOperand.type`(type)
-        callFunction(const::emptyToken.replaceText("STD::shar__rc_use"), [mutOperand], codeData, compiledData, [], false, llvmIR)
-    if !endLabel.empty?()
-        llvmIR += "\tbr label %##reg##" + endLabel + "##\n\t##nreg##" + endLabel + "##:\n"
+attach NamedOperand to IsUsed
+    def used?(operand NamedOperand) Bool
+        return operand.isUsed~()
 
 // The function returns the specified operand as not readable.
-#alwaysinline
-def toNoRead(operand Operand, write codeData CodeData, write llvmIR String) Operand
+def toNoRead(operand Operand, write codeData CodeData, write ir String) Operand
     var result Operand = operand
-    eSwitch result.access~()
-    case access_noread
-        nothing
-    case access_read
-        const newValue String = codeData.createRegister("insertvalue {i64, i32} " + result.value~() + ", i64 0, 0", llvmIR)
-        result.value`(newValue)
-        result.access`(enum::access_noread)
-    case access_write
-        const typePointer String = codeData.createRegister("getelementptr {i64, i32}, {i64, i32}* " + result.value~() + ", i64 0, i32 1", llvmIR)
-        const typeRegister String = codeData.createRegister("load i32, i32* " + typePointer + ", align 4", llvmIR)
-        const newValue String = codeData.createRegister("insertvalue {i64, i32} zeroinitializer, i32 " + typeRegister + ", 1", llvmIR)
-        result.value`(newValue)
-        result.access`(enum::access_noread)
-    default
-        unreachable()
+    result.access`(Access[noread])
+    result.value`(irOperandTypeNumber(operand, codeData, ir))
     return result
 
 // The function returns the specified operand but is read-only.
-#alwaysinline
-def toReadOnly(operand Operand, write codeData CodeData, write llvmIR String) Operand
+def toReadOnly(operand Operand, write codeData CodeData, write ir String) Operand
     eSwitch operand.access~()
-    case access_noread
+    case noread
         errorWrongAccess(operand.code~(), "read only", "no read")
-    case access_read
+    case read
         return operand
-    case access_write
-        const newValue String = codeData.createRegister("load {i64, i32}, {i64, i32}* " + operand.value~() + ", align 8", llvmIR)
+    case write
         var result Operand = operand
-        result.access`(enum::access_read)
-        result.value`(newValue)
+        result.access`(Access[read])
+        result.value`(irLoad(const::objectIRType, result.value~(), "8", codeData, ir))
         return result
-    unreachable()
 
-// The function, if necessary, generates llvm ir code that checks that the type is equal to the specified one.
-def runtimeTypeCheck(operand Operand, expectedType OType, expectedTypeNumber String, write codeData CodeData, compiledData CData, freedOnError Array, write llvmIR String)
-    const operandType OType = operand.type~()
+// The function applies the "shar__to_const" function to the operand.
+def operandToConst(operand Operand, write codeData CodeData, compiledData CData, write ir String)
+    var needToTransform Bool = !(operand.Main::constant?() || operand.access~() == Access[noread] || operand.type~().nothingType?() || operand.globalConst?())
+    if needToTransform && operand.type~().simple?() && !operand.type~().this?()
+        needToTransform = !compiledData.getType(const::emptyToken.replaceText(operand.type~().type~()), true).groups~()["STD::Independent"]
+    var endLabel String = ""
+    if needToTransform
+        var roOperand Operand = operand.toReadOnly(codeData, ir)
+        if roOperand.type~().simple?() && roOperand.type~().optional?()
+            const functionLabel String = codeData.createLabel()
+            endLabel = codeData.createLabel()
+            const typeRegister String = irOperandTypeNumber(roOperand, codeData, ir)
+            irIf(irEq(const::irTypeOfType, typeRegister, const::nothingTypeNumber, codeData, ir), Expectation[unknown], endLabel, functionLabel, codeData, ir)
+            irLabel(functionLabel, ir)
+            var type COType = roOperand.type`(const::dummyCOType)
+            type.isOptional`(false)
+            roOperand.type`(type)
+        callFunction(const::emptyToken.replaceText("STD::shar__to_const"), [roOperand], codeData, compiledData, [], false, true, ir)
+    if !endLabel.empty?()
+        irJmp(endLabel, ir)
+        irLabel(endLabel, ir)
+
+// The function applies the "shar__rc_free" function to the operand.
+def freeOperand(operand Operand, write codeData CodeData, compiledData CData, write ir String)
+    var needToFree Bool = !(operand.Main::constant?() || operand.access~() == Access[noread] || operand.type~().nothingType?() || operand.globalConst?())
+    if needToFree && operand.type~().simple?() && !operand.type~().this?()
+        needToFree = !compiledData.getType(const::emptyToken.replaceText(operand.type~().type~()), true).groups~()["STD::Independent"]
+    var endLabel String = ""
+    if needToFree
+        var roOperand Operand = operand.toReadOnly(codeData, ir)
+        if roOperand.type~().simple?() && roOperand.type~().optional?()
+            const functionLabel String = codeData.createLabel()
+            endLabel = codeData.createLabel()
+            const typeRegister String = irOperandTypeNumber(roOperand, codeData, ir)
+            irIf(irEq(const::irTypeOfType, typeRegister, const::nothingTypeNumber, codeData, ir), Expectation[unknown], endLabel, functionLabel, codeData, ir)
+            irLabel(functionLabel, ir)
+            var type COType = roOperand.type`(const::dummyCOType)
+            type.isOptional`(false)
+            roOperand.type`(type)
+        callFunction(const::emptyToken.replaceText("STD::shar__rc_free"), [roOperand], codeData, compiledData, [], false, true, ir)
+    if !endLabel.empty?()
+        irJmp(endLabel, ir)
+        irLabel(endLabel, ir)
+
+// The function applies the "shar__rc_use" function to the operand.
+def useOperand(operand Operand, write codeData CodeData, compiledData CData, write ir String)
+    var needToUse Bool = !(operand.Main::constant?() || operand.access~() == Access[noread] || operand.type~().nothingType?() || operand.globalConst?())
+    if needToUse && operand.type~().simple?() && !operand.type~().this?()
+        needToUse = !compiledData.getType(const::emptyToken.replaceText(operand.type~().type~()), true).groups~()["STD::Independent"]
+    var endLabel String = ""
+    if needToUse
+        var roOperand Operand = operand.toReadOnly(codeData, ir)
+        if roOperand.type~().simple?() && roOperand.type~().optional?()
+            const functionLabel String = codeData.createLabel()
+            endLabel = codeData.createLabel()
+            const typeRegister String = irOperandTypeNumber(roOperand, codeData, ir)
+            irIf(irEq(const::irTypeOfType, typeRegister, const::nothingTypeNumber, codeData, ir), Expectation[unknown], endLabel, functionLabel, codeData, ir)
+            irLabel(functionLabel, ir)
+            var type COType = roOperand.type`(const::dummyCOType)
+            type.isOptional`(false)
+            roOperand.type`(type)
+        callFunction(const::emptyToken.replaceText("STD::shar__rc_use"), [roOperand], codeData, compiledData, [], false, true, ir)
+    if !endLabel.empty?()
+        irJmp(endLabel, ir)
+        irLabel(endLabel, ir)
+
+// The function checks that the type of the operand is compatible with the specified one.
+def typesCompatibleCheck(operand Operand, expectedType COType, codeData CodeData, compiledData CData)
+    const operandType COType = operand.type~()
+    if expectedType.anyType?() || operandType.anyType?()
+        return
     var isError Bool = false
     var compileTimeEqTypes Bool = false
+    var compileTimeOperandIsNothing Bool = false
     var compileTimeOperandInGroups Bool = false
+    var compileTimeOperandGroupsHaveExpectedGroups_exit Bool = false
+    var compileTimeOperandGroupsHaveExpectedGroups_runTimeOperandIsNotNothing_exit Bool = false
     var compileTimeExpectedInGroups Bool = false
     var compileTimeThisInOperandGroups Bool = false
     var compileTimeThisInExpectedGroups Bool = false
-    var runTimeEqTypes Bool = operandType.anyType?() || expectedType.anyType?()
-    if !runTimeEqTypes
-        var tableIndex Int = 0
-        if operandType.this?()
-            tableIndex = 24
-        elif operandType.gType?()
-            tableIndex = 12
-        if operandType.optional?()
-            tableIndex += 6
-        if expectedType.this?()
-            tableIndex += 4
-        elif expectedType.gType?()
-            tableIndex += 2
-        if expectedType.optional?()
-            tableIndex++
-        runTimeEqTypes = true
-        switch tableIndex
-        case 0
-            runTimeEqTypes = false
-            compileTimeEqTypes = true
-        case 1, 6, 7
-            compileTimeEqTypes = true
-        case 2, 3, 8, 9
-            compileTimeOperandInGroups = true
-        case 4, 5, 10, 11, 24, 25, 30, 31
-            isError = true
-        case 12, 13, 18
-            compileTimeExpectedInGroups = true
-        case 16, 17, 22, 23
-            compileTimeThisInOperandGroups = true
-        case 26, 27, 32, 33
-            compileTimeThisInExpectedGroups = true
-        case 28
-            runTimeEqTypes = false
+    var tableIndex Int = 0
+    if operandType.this?()
+        tableIndex = 24
+    elif !operandType.simple?()
+        tableIndex = 12
+    if operandType.optional?()
+        tableIndex += 6
+    if expectedType.this?()
+        tableIndex += 4
+    elif !expectedType.simple?()
+        tableIndex += 2
+    if expectedType.optional?()
+        tableIndex++
+    switch tableIndex
+    case 0, 6, 7
+        compileTimeEqTypes = true
+    case 1
+        compileTimeEqTypes = true
+        compileTimeOperandIsNothing = true
+    case 2, 8, 9
+        compileTimeOperandInGroups = true
+    case 3
+        compileTimeOperandInGroups = true
+        compileTimeOperandIsNothing = true
+    case 4, 10, 11, 24, 25, 30, 31
+        isError = true
+    case 5
+        compileTimeOperandIsNothing = true
+    case 12, 13, 18, 19
+        compileTimeExpectedInGroups = true
+    case 14, 15, 21
+        compileTimeOperandGroupsHaveExpectedGroups_exit = true
+    case 16, 17, 22, 23
+        compileTimeThisInOperandGroups = true
+    case 20
+        compileTimeOperandGroupsHaveExpectedGroups_runTimeOperandIsNotNothing_exit = true
+    case 26, 27, 32, 33
+        compileTimeThisInExpectedGroups = true
     if !isError
         var allOk Bool = false
         var haveCompileTimeOperations Bool = false
-        if compileTimeEqTypes
+        if compileTimeOperandIsNothing
+            haveCompileTimeOperations = true
+            allOk = operandType.nothingType?()
+        if !allOk && compileTimeEqTypes
             haveCompileTimeOperations = true
             allOk = operandType.typeEq?(expectedType, false)
-        if !allOk && (compileTimeOperandInGroups || compileTimeExpectedInGroups)
+        if !allOk && (compileTimeOperandGroupsHaveExpectedGroups_exit || compileTimeOperandGroupsHaveExpectedGroups_runTimeOperandIsNotNothing_exit)
             haveCompileTimeOperations = true
             allOk = true
-            const simpleType Token = compileTimeOperandInGroups.select(operandType, expectedType).type~()
+        if !allOk && (compileTimeOperandInGroups || compileTimeExpectedInGroups)
+            haveCompileTimeOperations = true
+            const simpleType String = compileTimeOperandInGroups.select(operandType, expectedType).type~()
             const groupType Array = compileTimeOperandInGroups.select(expectedType, operandType).type~()
-            const groupsOfSimpleType Set = compiledData.getType(simpleType, false).groups~()
-            parse :(parse) _, groupNameToken = groupType
-                if !groupsOfSimpleType[groupNameToken.text~()]
-                    allOk = false
+            const groupsOfSimpleType Set = compiledData.getType(const::emptyToken.replaceText(simpleType), true).groups~()
+            parse :(parse) _, group String = groupType
+                allOk = groupsOfSimpleType[group]
+                if !allOk
                     end parse
         if !allOk && (compileTimeThisInOperandGroups || compileTimeThisInExpectedGroups)
             haveCompileTimeOperations = true
             const groupType Array = compileTimeThisInOperandGroups.select(operandType, expectedType).type~()
             const allThisGroups Set = codeData.allThisGroups~()
-            parse :(parse) _, groupNameToken = groupType
-                allOk = allThisGroups[groupNameToken.text~()]
+            parse :(parse) _, group String = groupType
+                allOk = allThisGroups[group]
                 if !allOk
                     end parse
         isError = haveCompileTimeOperations && !allOk
     if isError
-        errorInvalidType(operand.code~(), oTypeToToken(operandType, true).text~(), oTypeToToken(expectedType, true).text~())
-    if runTimeEqTypes
-        const checkLabel String = codeData.createLabel()
-        const throwLabel String = codeData.createLabel()
-        const okLabel String = codeData.createLabel()
-        llvmIR += "\tbr i1 ##flag##nothrow##, label %##reg##" + okLabel + "##, label %##reg##" + checkLabel + "##\n\t##nreg##" + checkLabel + "##:\n"
-        var typeRegister String = ""
-        if operand.access~() == enum::access_write
-            const typePointerRegister String = codeData.createRegister("getelementptr {i64, i32}, {i64, i32}* " + operand.value~() + ", i64 0, i32 1", llvmIR)
-            typeRegister = codeData.createRegister("load i32, i32* " + typePointerRegister + ", align 4", llvmIR)
-        else
-            typeRegister = codeData.createRegister("extractvalue {i64, i32} " + operand.value~() + ", 1", llvmIR)
-        const comparisonRegister String = codeData.createRegister("icmp eq i32 " + typeRegister + ", " + expectedTypeNumber, llvmIR)
-        const likelyRegister String = comparisonRegister.likelyI1Register(codeData, llvmIR)
-        llvmIR += "\tbr i1 " + likelyRegister + ", label %##reg##" + okLabel + "##, label %##reg##" + throwLabel + "##\n\t##nreg##" + throwLabel + "##:\n"
-        createInvalidTypeThrow(codeData, compiledData, freedOnError, llvmIR)
-        llvmIR += "\t##nreg##" + okLabel + "##:\n"
+        errorInvalidType(operand.code~(), coTypeToString(operandType, true), coTypeToString(expectedType, true))
 
-// The function, if necessary, generates llvm ir code that checks that the type is compatible with the specified one.
-def runtimeTypesCompatibleCheck(operand Operand, expectedType OType, write codeData CodeData, compiledData CData, freedOnError Array, write llvmIR String)
+// The function, if necessary, generates IR code that checks that the type is compatible with the specified one.
+def runtimeTypesCompatibleCheck(operand Operand, expectedType COType, write codeData CodeData, compiledData CData, freedOnError Array, write ir String)
     if expectedType.anyType?()
         return
-    const operandType OType = operand.type~()
+    const operandType COType = operand.type~()
     var isError Bool = false
     var compileTimeEqTypes Bool = false
     var compileTimeOperandIsNothing Bool = false
@@ -306,13 +231,13 @@ def runtimeTypesCompatibleCheck(operand Operand, expectedType OType, write codeD
         tableIndex = 36
     elif operandType.this?()
         tableIndex = 24
-    elif operandType.gType?()
+    elif !operandType.simple?()
         tableIndex = 12
     if operandType.optional?()
         tableIndex += 6
     if expectedType.this?()
         tableIndex += 4
-    elif expectedType.gType?()
+    elif !expectedType.simple?()
         tableIndex += 2
     if expectedType.optional?()
         tableIndex++
@@ -386,164 +311,31 @@ def runtimeTypesCompatibleCheck(operand Operand, expectedType OType, write codeD
         if !allOk && compileTimeEqTypes
             haveCompileTimeOperations = true
             allOk = operandType.typeEq?(expectedType, false)
-        if !allOk && compileTimeOperandGroupsHaveExpectedGroups_exit
-            haveCompileTimeOperations = true
-            const operandTypeGroups Array = operandType.type~()
-            const expectedTypeGroups Array = expectedType.type~()
-            parse :(expectedParse) _, expectedTypeGroup = expectedTypeGroups
-                parse :(operandParse) _, operandTypeGroup = operandTypeGroups
-                    allOk = expectedTypeGroup == operandTypeGroup
-                    if allOk
-                        end operandParse
-                if !allOk
-                    end expectedParse
-            if allOk
-                runTimeOperandIsNothing = false
-                runTimeOperandIsNotNothing = false
-                runTimeOperandInGroups = false
-            else
-                allOk = true
-        if !allOk && compileTimeOperandGroupsHaveExpectedGroups_runTimeOperandIsNotNothing_exit
-            haveCompileTimeOperations = true
-            const operandTypeGroups Array = operandType.type~()
-            const expectedTypeGroups Array = expectedType.type~()
-            parse :(expectedParse) _, expectedTypeGroup = expectedTypeGroups
-                parse :(operandParse) _, operandTypeGroup = operandTypeGroups
-                    allOk = expectedTypeGroup == operandTypeGroup
-                    if allOk
-                        end operandParse
-                if !allOk
-                    end expectedParse
-            if allOk
-                runTimeOperandIsNotNothing = true
-            else
-                runTimeOperandInGroups = true
-                allOk = true
-        if !allOk && (compileTimeOperandInGroups || compileTimeExpectedInGroups)
-            haveCompileTimeOperations = true
-            const simpleType Token = compileTimeOperandInGroups.select(operandType, expectedType).type~()
-            const groupType Array = compileTimeOperandInGroups.select(expectedType, operandType).type~()
-            const groupsOfSimpleType Set = compiledData.getType(simpleType, false).groups~()
-            parse :(parse) _, groupToken = groupType
-                allOk = groupsOfSimpleType[groupToken.text~()]
-                if !allOk
-                    end parse
-        if !allOk && (compileTimeThisInOperandGroups || compileTimeThisInExpectedGroups)
-            haveCompileTimeOperations = true
-            const groupType Array = compileTimeThisInOperandGroups.select(operandType, expectedType).type~()
-            const allThisGroups Set = codeData.allThisGroups~()
-            parse :(parse) _, groupNameToken = groupType
-                allOk = allThisGroups[groupNameToken.text~()]
-                if !allOk
-                    end parse
-        isError = haveCompileTimeOperations && !allOk
-    if isError
-        errorInvalidType(operand.code~(), oTypeToToken(operandType, true).text~(), oTypeToToken(expectedType, true).text~())
-    var typeIsCorrectRegister String = ""
-    if runTimeEqTypes || runTimeOperandIsNothing || runTimeOperandIsNotNothing || runTimeOperandInGroups
-        const checkLabel String = codeData.createLabel()
-        const throwLabel String = codeData.createLabel()
-        const okLabel String = codeData.createLabel()
-        llvmIR += "\tbr i1 ##flag##nothrow##, label %##reg##" + okLabel + "##, label %##reg##" + checkLabel + "##\n\t##nreg##" + checkLabel + "##:\n"
-        var operandTypeRegister String = ""
-        if operand.access~() == enum::access_write
-            const operandTypePointerRegister String = codeData.createRegister("getelementptr {i64, i32}, {i64, i32}* " + operand.value~() + ", i64 0, i32 1", llvmIR)
-            operandTypeRegister = codeData.createRegister("load i32, i32* " + operandTypePointerRegister + ", align 4", llvmIR)
-        else
-            operandTypeRegister = codeData.createRegister("extractvalue {i64, i32} " + operand.value~() + ", 1", llvmIR)
-        if runTimeEqTypes
-            typeIsCorrectRegister = codeData.createRegister("icmp eq i32 " + operandTypeRegister + ", ##tnum##" + oTypeToToken(expectedType, false).text~() + "##", llvmIR)
-        if runTimeOperandIsNothing || runTimeOperandIsNotNothing
-            const oredRegister String = codeData.createRegister("icmp " + runTimeOperandIsNothing.select("eq", "ne") + " i32 " + operandTypeRegister + ", 0", llvmIR)
-            if typeIsCorrectRegister.empty?()
-                typeIsCorrectRegister = oredRegister
-            else
-                typeIsCorrectRegister = codeData.createRegister("or i1 " + typeIsCorrectRegister + ", " + oredRegister, llvmIR)
-        if runTimeOperandInGroups
-            var groups String = oTypeToToken(expectedType, false).text~()
-            groups.copySelf(2, 0, groups.length~() - 3)
-            delete(groups, groups.length~() - 3, 3)
-            const oredRegister String  = codeData.createRegister("call i1 ##ingroups##" + groups + "##(i32 " + operandTypeRegister + ")", llvmIR)
-            if typeIsCorrectRegister.empty?()
-                typeIsCorrectRegister = oredRegister
-            else
-                typeIsCorrectRegister = codeData.createRegister("or i1 " + typeIsCorrectRegister + ", " + oredRegister, llvmIR)
-        const likelyRegister String = typeIsCorrectRegister.likelyI1Register(codeData, llvmIR)
-        llvmIR += "\tbr i1 " + likelyRegister + ", label %##reg##" + okLabel + "##, label %##reg##" + throwLabel + "##\n\t##nreg##" + throwLabel + "##:\n"
-        codeData.createInvalidTypeThrow(compiledData, freedOnError.addItem$(operand), llvmIR)
-        llvmIR += "\t##nreg##" + okLabel + "##:\n"
-
-// The function checks that the type of the operand is compatible with the specified one.
-def typesCompatibleCheck(operand Operand, expectedType OType, write codeData CodeData, compiledData CData)
-    const operandType OType = operand.type~()
-    if expectedType.anyType?() || operandType.anyType?()
-        return
-    var isError Bool = false
-    var compileTimeEqTypes Bool = false
-    var compileTimeOperandIsNothing Bool = false
-    var compileTimeOperandInGroups Bool = false
-    var compileTimeOperandGroupsHaveExpectedGroups_exit Bool = false
-    var compileTimeOperandGroupsHaveExpectedGroups_runTimeOperandIsNotNothing_exit Bool = false
-    var compileTimeExpectedInGroups Bool = false
-    var compileTimeThisInOperandGroups Bool = false
-    var compileTimeThisInExpectedGroups Bool = false
-    var tableIndex Int = 0
-    if operandType.this?()
-        tableIndex = 24
-    elif operandType.gType?()
-        tableIndex = 12
-    if operandType.optional?()
-        tableIndex += 6
-    if expectedType.this?()
-        tableIndex += 4
-    elif expectedType.gType?()
-        tableIndex += 2
-    if expectedType.optional?()
-        tableIndex++
-    switch tableIndex
-    case 0, 6, 7
-        compileTimeEqTypes = true
-    case 1
-        compileTimeEqTypes = true
-        compileTimeOperandIsNothing = true
-    case 2, 8, 9
-        compileTimeOperandInGroups = true
-    case 3
-        compileTimeOperandInGroups = true
-        compileTimeOperandIsNothing = true
-    case 4, 10, 11, 24, 25, 30, 31
-        isError = true
-    case 5
-        compileTimeOperandIsNothing = true
-    case 12, 13, 18, 19
-        compileTimeExpectedInGroups = true
-    case 14, 15, 21
-        compileTimeOperandGroupsHaveExpectedGroups_exit = true
-    case 16, 17, 22, 23
-        compileTimeThisInOperandGroups = true
-    case 20
-        compileTimeOperandGroupsHaveExpectedGroups_runTimeOperandIsNotNothing_exit = true
-    case 26, 27, 32, 33
-        compileTimeThisInExpectedGroups = true
-    if !isError
-        var allOk Bool = false
-        var haveCompileTimeOperations Bool = false
-        if compileTimeOperandIsNothing
-            haveCompileTimeOperations = true
-            allOk = operandType.nothingType?()
-        if !allOk && compileTimeEqTypes
-            haveCompileTimeOperations = true
-            allOk = operandType.typeEq?(expectedType, false)
         if !allOk && (compileTimeOperandGroupsHaveExpectedGroups_exit || compileTimeOperandGroupsHaveExpectedGroups_runTimeOperandIsNotNothing_exit)
             haveCompileTimeOperations = true
-            allOk = true
+            const operandTypeGroups Array = operandType.type~()
+            const expectedTypeGroups Array = expectedType.type~()
+            parse :(expectedParse) _, expectedTypeGroup String = expectedTypeGroups
+                allOk = !operandTypeGroups.binarySearchString(expectedTypeGroup).nothing?()
+                if !allOk
+                    end expectedParse
+            if allOk
+                if compileTimeOperandGroupsHaveExpectedGroups_exit
+                    runTimeOperandIsNothing = false
+                    runTimeOperandIsNotNothing = false
+                    runTimeOperandInGroups = false
+                else
+                    runTimeOperandIsNotNothing = true
+            else
+                if compileTimeOperandGroupsHaveExpectedGroups_runTimeOperandIsNotNothing_exit
+                    runTimeOperandInGroups = true
+                allOk = true
         if !allOk && (compileTimeOperandInGroups || compileTimeExpectedInGroups)
             haveCompileTimeOperations = true
-            const simpleType Token = compileTimeOperandInGroups.select(operandType, expectedType).type~()
+            const simpleType String = compileTimeOperandInGroups.select(operandType, expectedType).type~()
             const groupType Array = compileTimeOperandInGroups.select(expectedType, operandType).type~()
-            const groupsOfSimpleType Set = compiledData.getType(simpleType, false).groups~()
-            parse :(parse) _, groupToken = groupType
-                const group String = groupToken.text~()
+            const groupsOfSimpleType Set = compiledData.getType(const::emptyToken.replaceText(simpleType), true).groups~()
+            parse :(parse) _, group String = groupType
                 allOk = groupsOfSimpleType[group]
                 if !allOk
                     end parse
@@ -551,38 +343,140 @@ def typesCompatibleCheck(operand Operand, expectedType OType, write codeData Cod
             haveCompileTimeOperations = true
             const groupType Array = compileTimeThisInOperandGroups.select(operandType, expectedType).type~()
             const allThisGroups Set = codeData.allThisGroups~()
-            parse :(parse) _, groupNameToken = groupType
-                allOk = allThisGroups[groupNameToken.text~()]
+            parse :(parse) _, group String = groupType
+                allOk = allThisGroups[group]
                 if !allOk
                     end parse
         isError = haveCompileTimeOperations && !allOk
     if isError
-        errorInvalidType(operand.code~(), oTypeToToken(operandType, true).text~(), oTypeToToken(expectedType, true).text~())
+        errorInvalidType(operand.code~(), coTypeToString(operandType, true), coTypeToString(expectedType, true))
+    var typeIsCorrect String = ""
+    if runTimeEqTypes || runTimeOperandIsNothing || runTimeOperandIsNotNothing || runTimeOperandInGroups
+        const throwLabel String = codeData.createLabel()
+        const endLabel String = codeData.createLabel()
+        irCheckBegin(ir, false)
+        const operandIRType String = irOperandTypeNumber(operand, codeData, ir)
+        if runTimeEqTypes
+            const irExpectedType String = expectedType.this?().select(codeData.thisTypeRegister~(), sharTypeToIRType(expectedType.type~()))
+            typeIsCorrect = irEq(const::irTypeOfType, operandIRType, irExpectedType, codeData, ir)
+        if runTimeOperandIsNothing || runTimeOperandIsNotNothing
+            const predicatePart String = runTimeOperandIsNothing.select({
+                irEq(const::irTypeOfType, operandIRType, const::nothingTypeNumber, codeData, ir),
+                irNotEq(const::irTypeOfType, operandIRType, const::nothingTypeNumber, codeData, ir)
+            })
+            if typeIsCorrect.empty?()
+                typeIsCorrect = predicatePart
+            else
+                typeIsCorrect = irOr(typeIsCorrect, predicatePart, codeData, ir)
+        if runTimeOperandInGroups
+            const predicatePart String = irInGroups(operandIRType, expectedType.type~(), codeData, ir)
+            if typeIsCorrect.empty?()
+                typeIsCorrect = predicatePart
+            else
+                typeIsCorrect = irOr(typeIsCorrect, predicatePart, codeData, ir)
+        irIf(typeIsCorrect, Expectation[true], endLabel, throwLabel, codeData, ir)
+        irLabel(throwLabel, ir)
+        createInvalidTypeThrow(codeData, compiledData, freedOnError, ir)
+        irLabel(endLabel, ir)
+        irCheckEnd(ir, false)
+
+// The function is used to generate the IR code that is needed to check that all items in an array (STD::Array) are of the same type.
+def runtimeArrayItemTypeCheck(operand Operand, expectedType COType, expectedTypeNumber String, write codeData CodeData, compiledData CData, freedOnError Array, write ir String)
+    const operandType COType = operand.type~()
+    var isError Bool = false
+    var compileTimeEqTypes Bool = false
+    var compileTimeOperandInGroups Bool = false
+    var compileTimeExpectedInGroups Bool = false
+    var compileTimeThisInOperandGroups Bool = false
+    var compileTimeThisInExpectedGroups Bool = false
+    var runTimeEqTypes Bool = operandType.anyType?() || expectedType.anyType?()
+    if !runTimeEqTypes
+        var tableIndex Int = 0
+        if operandType.this?()
+            tableIndex = 24
+        elif !operandType.simple?()
+            tableIndex = 12
+        if operandType.optional?()
+            tableIndex += 6
+        if expectedType.this?()
+            tableIndex += 4
+        elif !expectedType.simple?()
+            tableIndex += 2
+        if expectedType.optional?()
+            tableIndex++
+        runTimeEqTypes = true
+        switch tableIndex
+        case 0
+            runTimeEqTypes = false
+            compileTimeEqTypes = true
+        case 1, 6, 7
+            compileTimeEqTypes = true
+        case 2, 3, 8, 9
+            compileTimeOperandInGroups = true
+        case 4, 5, 10, 11, 24, 25, 30, 31
+            isError = true
+        case 12, 13, 18
+            compileTimeExpectedInGroups = true
+        case 16, 17, 22, 23
+            compileTimeThisInOperandGroups = true
+        case 26, 27, 32, 33
+            compileTimeThisInExpectedGroups = true
+        case 28
+            runTimeEqTypes = false
+    if !isError
+        var allOk Bool = false
+        var haveCompileTimeOperations Bool = false
+        if compileTimeEqTypes
+            haveCompileTimeOperations = true
+            allOk = operandType.typeEq?(expectedType, false)
+        if !allOk && (compileTimeOperandInGroups || compileTimeExpectedInGroups)
+            haveCompileTimeOperations = true
+            const simpleType String = compileTimeOperandInGroups.select(operandType, expectedType).type~()
+            const groupType Array = compileTimeOperandInGroups.select(expectedType, operandType).type~()
+            const groupsOfSimpleType Set = compiledData.getType(const::emptyToken.replaceText(simpleType), false).groups~()
+            parse :(parse) _, group String = groupType
+                allOk = groupsOfSimpleType[group]
+                if !allOk
+                    end parse
+        if !allOk && (compileTimeThisInOperandGroups || compileTimeThisInExpectedGroups)
+            haveCompileTimeOperations = true
+            const groupType Array = compileTimeThisInOperandGroups.select(operandType, expectedType).type~()
+            const allThisGroups Set = codeData.allThisGroups~()
+            parse :(parse) _, group String = groupType
+                allOk = allThisGroups[group]
+                if !allOk
+                    end parse
+        isError = haveCompileTimeOperations && !allOk
+    if isError
+        errorInvalidType(operand.code~(), coTypeToString(operandType, true), coTypeToString(expectedType, true))
+    if runTimeEqTypes
+        const throwLabel String = codeData.createLabel()
+        const endLabel String = codeData.createLabel()
+        irCheckBegin(ir, false)
+        const operandIRType String = irOperandTypeNumber(operand, codeData, ir)
+        irIf(irEq(const::irTypeOfType, operandIRType, expectedTypeNumber, codeData, ir), Expectation[true], endLabel, throwLabel, codeData, ir)
+        irLabel(throwLabel, ir)
+        createInvalidTypeThrow(codeData, compiledData, freedOnError, ir)
+        irLabel(endLabel, ir)
+        irCheckEnd(ir, false)
 
 // The function finds out whether the type of the operand is "STD::Error", if it is, takes appropriate measures.
-def checkOperandForError(operand Operand, write codeData CodeData, compiledData CData, freedOnError Array, write llvmIR String)
-    const checkLabel String = codeData.createLabel()
+def checkOperandForError(operand Operand, write codeData CodeData, compiledData CData, freedOnError Array, onlyINTCheck Bool, write ir String)
     const errorLabel String = codeData.createLabel()
     const okLabel String = codeData.createLabel()
-    llvmIR += "\tbr i1 ##flag##nothrow##, label %##reg##" + okLabel + "##, label %##reg##" + checkLabel + "##\n\t##nreg##" + checkLabel + "##:\n"
-    const typeNumberRegister String = codeData.createRegister("extractvalue {i64, i32} " + operand.value~() + ", 1", llvmIR)
-    const cmpI1Register String = codeData.createRegister("icmp eq i32 " + typeNumberRegister + ", ##tnum##STD::Error##", llvmIR)
-    const unlikelyRegister String = cmpI1Register.unlikelyI1Register(codeData, llvmIR)
-    llvmIR += "\tbr i1 " + unlikelyRegister + ", label %##reg##" + errorLabel + "##, label %##reg##" + okLabel + "##\n\t##nreg##" + errorLabel + "##:\n"
-    parse _, freedOperand = freedOnError
-        freedOperand.freeOperand(codeData, compiledData, llvmIR)
+    irCheckBegin(ir, onlyINTCheck)
+    irIf(irEq(const::irTypeOfType, irOperandTypeNumber(operand, codeData, ir), const::errorTypeNumber, codeData, ir), Expectation[false], errorLabel, okLabel, codeData, ir)
+    irLabel(errorLabel, ir)
+    parse _, freedOperand Operand = freedOnError
+        freedOperand.freeOperand(codeData, compiledData, ir)
     if codeData.catchLabels~().empty?()
-        freeLevel(codeData, 1, compiledData, llvmIR)
-        const newErrorRegister String = codeData.createRegister("call {i64, i32} @shar.error.add.to.message({i64, i32} " + operand.value~() + ", i64 ptrtoint (##this##\\n<- " + codeData.functionNameForErrorMessage~() + "## to i64))", llvmIR)
-        llvmIR += "\tret {i64, i32} " + newErrorRegister + "\n"
+        freeLevel(codeData, 1, compiledData, ir)
+        irReturn(irAddMessageToError(operand.value~(), "\n<- " + codeData.functionNameForErrorMessage~(), codeData, ir), ir)
     else
         const catchLabels Array = codeData.catchLabels~()
-        const catchLabel Label = catchLabels[catchLabels.length~() - 1]
-        freeLevel(codeData, catchLabel.level~(), compiledData, llvmIR)
-        llvmIR += "\tstore {i64, i32} " + operand.value~() + ", {i64, i32}* %##reg##0##, align 8\n\tbr label %##reg##" + catchLabel.label~() + "##\n"
-    llvmIR += "\t##nreg##" + okLabel + "##:\n"
-
-// The function creates an operand with an error.
-#alwaysinline
-def createError(id, message String) String
-    return "{i64 ptrtoint ([5 x i64]* ##llvmconst##>private unnamed_addr constant [5 x i64] [i64 " + id + ", i64 ptrtoint (##this##" + message + "## to i64), i64 0, i64 0, i64 0], align 8<## to i64), i32 ##tnum##STD::Error##}"
+        const catchLabel Label = catchLabels[catchLabels.length() - 1]
+        freeLevel(codeData, catchLabel.level~(), compiledData, ir)
+        irStore(const::objectIRType, operand.value~(), codeData.getErrorVariableRegister(), "8", ir)
+        irJmp(catchLabel.label~(), ir)
+    irLabel(okLabel, ir)
+    irCheckEnd(ir, onlyINTCheck)

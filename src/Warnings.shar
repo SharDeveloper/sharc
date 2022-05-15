@@ -1,10 +1,21 @@
 module Main
 
-def warningVarSetItself(name Token)
-    ("Warning: " + name.coordinatesToString() + "Assigning a variable its own value doesn't make sense.").println()
-
-def warningDeclaredButNotUsed(name Token, whatNotUsed String)
-    ("Warning: " + name.coordinatesToString() + whatNotUsed + " \q" + name.text~() + "\q declared but not used.").println()
-
+#cold
 def warningUnneededGroupInDefaultFunction(subGroupName Token, groupName String)
-    ("Warning: " + subGroupName.coordinatesToString() + "There is no point in specifying the \q" + subGroupName.text~() + "\q group, since the \q" + groupName + "\q group has already been specified, and all members of the \q" + groupName + "\q group are already members of the \q" + subGroupName.text~() + "\q group.").println()
+    ("Warning: " + coordinatesToString(subGroupName) + "There is no point in specifying the \q" + subGroupName.text~() + "\q group, since the \q" + groupName + "\q group has already been specified, and all members of the \q" + groupName + "\q group are already members of the \q" + subGroupName.text~() + "\q group.").println()
+
+#cold
+def warningDeclaredButNotUsed(name Token, whatNotUsed String)
+    ("Warning: " + coordinatesToString(name) + whatNotUsed + " \q" + name.text~() + "\q declared but not used.").println()
+
+#cold
+def warningNotChangeVariable(variable Token)
+    ("Warning: " + coordinatesToString(variable) + "The value of the variable \q" + variable.text~() + "\q does not change. ").println()
+
+#cold
+def warningVarSetItself(name Token)
+    ("Warning: " + coordinatesToString(name) + "Assigning a variable its own value doesn't make sense.").println()
+
+#cold
+def warningFunctionDeprecated(function Token)
+    ("Warning: " + coordinatesToString(function) + "Calling the deprecated \q" + function.text~() + "\q function. ").println()

@@ -2,45 +2,143 @@ module Main
 
 // Type (including type and primitives).
 type Type
-    // export?    Bool
-    // name       Token
-    // primitive? Bool
+    isExport   Bool
+    type       TType
+    name       Token
+    fields     Map // Map(name String, field Field)
+    docComment String
 
-attach Type to FieldExport
-    #alwaysinline
+// Type of type
+enum TType
+    type
+    primitive
+    enum
+
+type Field
+    type     OType
+    isHidden Bool
+
+// Compiled type.
+type CType
+    isExport   Bool
+    isEnum     Bool
+    fullName   String
+    groups     Set   // Set(String)
+    newGroups  Array // [String]
+    fields     Map   // Map(name String, field CField)
+    docComment String
+
+type CField
+    type     COType
+    isHidden Bool
+
+attach Type to IsExport
     def export?(type Type) Bool
-        return type.typeGetItem(0)
+        return type.isExport~()
 
-    #alwaysinline
-    def export`(write type Type, new Bool) Bool
-        return type.typePut(0, new)
+attach Type to IsEnum
+    def enum?(type Type) Bool
+        eSwitch type.type~()
+        case enum
+            return true
+        case type, primitive
+            return false
 
-attach Type to FieldName
-    #alwaysinline
-    def name~(type Type) Token
-        return type.typeGetItem(1)
-
-    #alwaysinline
-    def name`(write type Type, new <>Token) <>Token
-        return type.typePut(1, new)
-
-attach Type to FieldPrimitive
-    #alwaysinline
+attach Type to IsPrimitive
     def primitive?(type Type) Bool
-        return type.typeGetItem(2)
+        eSwitch type.type~()
+        case primitive
+            return true
+        case type, enum
+            return false
 
-    #alwaysinline
-    def primitive`(write type Type, new Bool) Bool
-        return type.typePut(2, new)
+attach CType to IsExport
+    def export?(type CType) Bool
+        return type.isExport~()
 
-#alwaysinline
-def Type(isExport Bool, name Token, isPrimitive Bool) Type
-    return Type.fromList({isExport, name, isPrimitive})
+attach CType to IsEnum
+    def enum?(type CType) Bool
+        return type.isEnum~()
 
-// The function compiles the data in the type.
-def compileType(type Type, write compiledData CData)
+attach Field to IsHidden
+    def hidden?(field Field) Bool
+        return field.isHidden~()
+
+attach CField to IsHidden
+    def hidden?(field CField) Bool
+        return field.isHidden~()
+
+// The function pre-compiles the data in the type.
+def precompileType(type Type, write compiledData CData)
     var groups Set = Set()
     groups.add("STD::Any")
     if !(compiledData.currentModule~() == "STD" && type.name~().text~() == "Nothing")
-        groups.add(type.primitive?().select("STD::Primitive", "STD::Type"))
-    compiledData.addCType(CType(type.export?(), compiledData.currentModule~() + "::" + type.name~().text~(), groups))
+        var group String = ""
+        if type.enum?()
+            groups.add("STD::Independent")
+            group = "STD::Enumeration"
+        elif type.primitive?()
+            group = "STD::Primitive"
+        else
+            group = "STD::Type"
+        groups.add(group)
+    compiledData.addCType(CType{{
+        isExport   : type.export?(),
+        isEnum     : type.enum?(),
+        fullName   : compiledData.currentModule~() + "::" + type.name~().text~(),
+        groups     : groups,
+        newGroups  : [],
+        fields     : Map(),
+        docComment : type.docComment~()
+    }})
+
+// The function compiles the data in the type.
+def compileType(type Type, write compiledData CData)
+    var compiledType CType = compiledData.getType(const::emptyToken.replaceText(compiledData.currentModule~() + "::" + type.name~().text~()), false)
+    var compiledFields Map = Map()
+    if compiledType.enum?()
+        parse fieldName String, _  = type.fields~()
+            compiledFields.put(fieldName, CField{type : COType{type : "", isOptional : false}, isHidden : false})
+    else
+        parse fieldName String, field Field = type.fields~()
+            compiledFields.put(fieldName, CField{type : field.type~().compileOType(compiledData), isHidden : field.hidden?()})
+    compiledType.fields`(compiledFields)
+    compiledData.updateType(compiledType)
+
+attach CType to BinarySerializable
+    def serialize(type CType, write bytes Bytes)
+        type.export?().serialize(bytes)
+        type.fullName~()[type.fullName~().look(':') + 2:].serialize(bytes)
+        type.groups~().serializeSet(bytes)
+        type.enum?().serialize(bytes)
+        type.fields~().serializeAArray(bytes)
+        type.docComment~().serialize(bytes)
+
+    def deserialize(noread type CType, bytes Bytes, write position Int) CType
+        var currentPosition Int = position
+        const result CType = CType{{
+            isExport   : Bool.deserialize(bytes, currentPosition),
+            fullName   : String.deserialize(bytes, currentPosition),
+            groups     : Set.deserializeSet(bytes, currentPosition, String),
+            newGroups  : [],
+            isEnum     : Bool.deserialize(bytes, currentPosition),
+            fields     : Map.deserializeAArray(bytes, currentPosition, String, CField),
+            docComment : ""
+        }}
+        String.deserialize(bytes, currentPosition)
+        position = currentPosition
+        return result
+
+attach CField to BinarySerializable
+    def serialize(field CField, write bytes Bytes)
+        field.type~().serialize(bytes)
+        field.hidden?().serialize(bytes)
+
+    def deserialize(noread type CField, bytes Bytes, write position Int) CField
+        var currentPosition Int = position
+        const result CField = CField{{
+            type     : COType.deserialize(bytes, currentPosition),
+            isHidden : Bool.deserialize(bytes, currentPosition)
+        }}
+        position = currentPosition
+        return result
