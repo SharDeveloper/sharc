@@ -1,0 +1,1133 @@
+module Main
+
+enum Expectation
+    unknown
+    true
+    false
+
+const nothingTypeNumber String = "0"
+const errorTypeNumber   String = "1"
+
+const irEmptyArray String = "{i64 ptrtoint ([3 x i64]* @empty.array to i64), i32 ##tnum##STD::Array##}"
+const irEmptyList  String = "{i64 ptrtoint ([2 x i64]* @empty.list to i64), i32 ##tnum##STD::List##}"
+const irFalse      String = "0"
+const irNothing    String = "{i64 0, i32 0}"
+
+const irBoolType         String = "i1"
+const irCharType         String = "i32"
+const irDataType         String = "i64"
+const irEnumElementType  String = "i32"
+const irGroupIndexType   String = "i32"
+const irStringLengthType String = "i64"
+const irTypeOfType       String = "i32"
+const objectIRType       String = "{i64, i32}"
+
+const builtinConstants String = {
+    "@empty.array = private unnamed_addr constant [3 x i64] zeroinitializer, align 8\n"
+    "@empty.list = private unnamed_addr constant [2 x i64] zeroinitializer, align 8\n"
+    "@empty.string = private unnamed_addr constant [4 x i32] zeroinitializer, align 8\n"
+    "@empty.type = private unnamed_addr constant i64 0, align 8\n"
+    "@utf8.const.no.return.value = private unnamed_addr constant [49 x i8] c\qThe global constant code did not return a value.\\00\q, align 1\n"
+    "@utf8.func.no.return.value = private unnamed_addr constant [37 x i8] c\qThe function did not return a value.\\00\q, align 1\n"
+    "@utf8.error.invalid.type = private unnamed_addr constant [14 x i8] c\qInvalid type.\\00\q, align 1\n"
+    "@utf8.not.enough.memory.message = private unnamed_addr constant [20 x i8] c\qNot enough memory.\\0A\\00\q, align 1\n"
+}
+
+def irRegister(expression String, write codeData CodeData, write ir String) String
+    const result String = "reg##" + codeData.registerCounter~().toString() + "##"
+    codeData.registerCounter`(codeData.registerCounter~() + 1)
+    ir += "\t%##n" + result + " = " + expression + "\n"
+    return "%##" + result
+
+def irMalloc(size String, write codeData CodeData, write ir String) String
+    return irRegister("call i64* @shar.malloc(i64 " + size + ")", codeData, ir)
+
+def irUnreachable(write ir String)
+    ir += "\tunreachable\n"
+
+def irLoad(type, ptr, align String, write codeData CodeData, write ir String) String
+    return irRegister("load " + type + ", " + type + "* " + ptr + ", align " + align, codeData, ir)
+
+def irStore(type, value, ptr, align String, write ir String)
+    ir += "\tstore " + type + " " + value + ", " + type + "* " + ptr + ", align " + align + "\n"
+
+def irOffsetPtr(type, ptr, offset String, write codeData CodeData, write ir String) String
+    return irRegister("getelementptr " + type + ", " + type + "* " + ptr + ", i64 " + offset, codeData, ir)
+
+def irReturn(value, write ir String)
+    ir += "\tret {i64, i32} " + value + "\n"
+
+def irRegNumberToReg(registerNumber String) String
+    return "%##reg##" + registerNumber + "##"
+
+def irBool(value Bool) String
+    return value.select("{i64 1, i32 ##tnum##STD::Bool##}", "{i64 0, i32 ##tnum##STD::Bool##}")
+
+def irChar(char Token) String
+    return "{i64 " + charToIRInt(char) + ", i32 ##tnum##STD::Char##}"
+
+def irInt(int String) String
+    return "{i64 " + int + ", i32 ##tnum##STD::Int##}"
+
+def irReal(real Token) String
+    var realAsInt Int = 0
+    try
+        realAsInt = Real.fromString(real.text~()).unsafe_getValue()
+    catch
+        errorInvalidNumber(real)
+    return "{i64 " + realAsInt.toString() + ", i32 ##tnum##STD::Real##}"
+
+def irString(string Token) String
+    const rawString String = stringToRaw(string)
+    if rawString.empty?()
+        return "{i64 ptrtoint ([4 x i32]* @empty.string to i64), i32 ##tnum##STD::String##}"
+    const irType String = "[" + (rawString.length() + 4).toString() + " x i32]"
+    var irData String = "##llvmconst##>private unnamed_addr constant " + irType + " [i32 0, i32 0, i32 " + (rawString.length() & 0xffffffff).toString() + ", i32 " + (rawString.length() >> 32).toString()
+    parse _, char = rawString
+        irData += ", i32 " + charToInt(char).toString()
+    irData += "], align 8<##"
+    return "{i64 ptrtoint (" + irType + "* " + irData + " to i64), i32 ##tnum##STD::String##}"
+
+def irAssume(assumedReg, write ir String)
+    ir += "\tcall void @llvm.assume(i1 " + assumedReg + ")\n"
+
+def irObjectData(object String, write codeData CodeData, write ir String) String
+    return irRegister("extractvalue {i64, i32} " + object + ", 0", codeData, ir)
+
+def irTrunc(fromType, data, toType String, write codeData CodeData, write ir String) String
+    return irRegister("trunc " + fromType + " " + data + " to " + toType, codeData, ir)
+
+def irZext(fromType, data, toType String, write codeData CodeData, write ir String) String
+    return irRegister("zext " + fromType + " " + data + " to " + toType, codeData, ir)
+
+def irIntToPtr(int, type String, write codeData CodeData, write ir String) String
+    return irRegister("inttoptr i64 " + int + " to " + type + "*", codeData, ir)
+
+def irI1ToBool(i1 String, write codeData CodeData, write ir String) String
+    return irRegister("insertvalue {i64, i32} {i64 0, i32 ##tnum##STD::Bool##}, i64 " + irRegister("zext i1 " + i1 + " to i64", codeData, ir) +", 0", codeData, ir)
+
+def irConst(name String, write codeData CodeData, write ir String) String
+    return irRegister("call {i64, i32} ##const##" + name + "##(i8* " + codeData.threadDataRegister~() + ")", codeData, ir)
+
+def irCheckBegin(write ir String, onlyINTCheck Bool)
+    ir += onlyINTCheck.select("\t##intcheck##begin##\n", "\t##check##begin##\n")
+
+def irCheckEnd(write ir String, onlyINTCheck Bool)
+    ir += onlyINTCheck.select("\t##intcheck##end##\n", "\t##check##end##\n")
+
+def irPhi(type String, values, labels Array, write codeData CodeData, write ir String) String
+    var result String = "phi " + type + " "
+    const lastIndex Int = values.length() -1
+    parse index, value String = values
+        result += "[" + value + ", %##reg##" + labels[index] + (index == lastIndex).select("##]", "##], ")
+    return irRegister(result, codeData, ir)
+
+def sharTypeToIRType(name String) String
+    return "##tnum##" + name + "##"
+
+def irArgumentType(argumentNumber Int, access Access, write codeData CodeData, write ir String) String
+    const argument String = "%" + argumentNumber.toString()
+    eSwitch access
+    case noread
+        return argument
+    case read
+        return irRegister("extractvalue {i64, i32} " + argument + ", 1", codeData, ir)
+    case write
+        const typePointer String = irRegister("getelementptr {i64, i32}, {i64, i32}* " + argument + ", i64 0, i32 1", codeData, ir)
+        return irLoad("i32", typePointer, "4", codeData, ir)
+
+def irOperandTypeNumber(operand Operand, write codeData CodeData, write ir String) String
+    eSwitch operand.access~()
+    case noread
+        return operand.value~()
+    case read
+        if operand.Main::constant?()
+            return operand.value~()[operand.value~().lookBack(' ') + 1 : operand.value~().length() - 1]
+        return irRegister("extractvalue {i64, i32} " + operand.value~() + ", 1", codeData, ir)
+    case write
+        const typePointer String = irRegister("getelementptr {i64, i32}, {i64, i32}* " + operand.value~() + ", i64 0, i32 1", codeData, ir)
+        return irLoad("i32", typePointer, "4", codeData, ir)
+
+def irOperandData(operand Operand, write codeData CodeData, write ir String) String
+    eSwitch operand.access~()
+    case noread
+        errorWrongAccess(operand.code~(), "read only", "no read")
+    case read
+        if operand.Main::constant?()
+            return operand.value~()["{i64 ".length() : operand.value~().lookBack(',')]
+        return irRegister("extractvalue {i64, i32} " + operand.value~() + ", 0", codeData, ir)
+    case write
+        const typePointer String = irRegister("getelementptr {i64, i32}, {i64, i32}* " + operand.value~() + ", i64 0, i32 0", codeData, ir)
+        return irLoad("i64", typePointer, "8", codeData, ir)
+
+def irEq(type, arg1, arg2 String, write codeData CodeData, write ir String) String
+    return irRegister("icmp eq " + type + " " + arg1 + ", " + arg2, codeData, ir)
+
+def irNotEq(type, arg1, arg2 String, write codeData CodeData, write ir String) String
+    return irRegister("icmp ne " + type + " " + arg1 + ", " + arg2, codeData, ir)
+
+def irUle(type, arg1, arg2 String, write codeData CodeData, write ir String) String
+    return irRegister("icmp ule " + type + " " + arg1 + ", " + arg2, codeData, ir)
+
+def irInGroups(type String, groups Array, write codeData CodeData, write ir String) String
+    return irRegister("call i1 ##ingroups##" + groups.join(",") + "##(i32 " + type + ")", codeData, ir)
+
+def irIf(predicate String, expectation Expectation, trueLabel, falseLabel String, write codeData CodeData, write ir String)
+    var predicate_ String = ""
+    eSwitch expectation
+    case unknown
+        predicate_ = predicate
+    case true
+        predicate_ = irRegister("call i1 @llvm.expect.i1(i1 " + predicate + ", i1 1)", codeData, ir)
+    case false
+        predicate_ = irRegister("call i1 @llvm.expect.i1(i1 " + predicate + ", i1 0)", codeData, ir)
+    ir += "\tbr i1 " + predicate_ + ", label %##reg##" + trueLabel + "##, label %##reg##" + falseLabel + "##\n"
+
+def irSwitch(type, operand, defaultLabel String, switchVariantsAndLabels Map, write ir String)
+    var variants Array = []
+    parse variant String, _ = switchVariantsAndLabels
+        variants.addItem(variant)
+    variants.sort(true)
+    ir += "\tswitch " + type + " " + operand + ", label %##reg##" + defaultLabel + "## [\n"
+    parse _, variant String = variants
+        const label String = switchVariantsAndLabels[variant]
+        ir += "\t\t" + type + " " + variant + ", label %##reg##" + label + "##\n"
+    ir += "\t]\n"
+
+def irLabel(label, write ir String)
+    ir += "\t##nreg##" + label + "##:\n"
+
+def irJmp(label, write ir String)
+    ir += "\tbr label %##reg##" + label + "##\n"
+
+def irOr(arg1, arg2 String, write codeData CodeData, write ir String) String
+    return irRegister("or i1 " + arg1 + ", " + arg2, codeData, ir)
+
+def irAnd(arg1, arg2 String, write codeData CodeData, write ir String) String
+    return irRegister("and i1 " + arg1 + ", " + arg2, codeData, ir)
+
+def irErrorConstantNoReturnValue(write codeData CodeData, write ir String) String
+    const result String = irRegister("call {i64, i32} @error__create_utf8_message({i64, i32} {i64 1, i32 3}, {i64, i32} zeroinitializer, i8* bitcast ([49 x i8]* @utf8.const.no.return.value to i8*))", codeData, ir)
+    irAddMessageToError(result, "\n<- " + codeData.functionNameForErrorMessage~(), codeData, ir)
+    return result
+
+def irErrorFunctionNoReturnValue(write codeData CodeData, write ir String) String
+    const result String = irRegister("call {i64, i32} @error__create_utf8_message({i64, i32} {i64 1, i32 3}, {i64, i32} zeroinitializer, i8* bitcast ([37 x i8]* @utf8.func.no.return.value to i8*))", codeData, ir)
+    irAddMessageToError(result, "\n<- " + codeData.functionNameForErrorMessage~(), codeData, ir)
+    return result
+
+def irErrorInvalidType(write codeData CodeData, write ir String) String
+    const result String = irRegister("call {i64, i32} @error__create_utf8_message({i64, i32} {i64 0, i32 3}, {i64, i32} zeroinitializer, i8* bitcast ([14 x i8]* @utf8.error.invalid.type to i8*))", codeData, ir)
+    irAddMessageToError(result, "\n<- " + codeData.functionNameForErrorMessage~(), codeData, ir)
+    return result
+
+// The function creates an interrupt with an error about the wrong type.
+def createInvalidTypeThrow(write codeData CodeData, compiledData CData, freedOnError Array, write ir String)
+    parse _, freedOperand Operand = freedOnError
+        freedOperand.freeOperand(codeData, compiledData, ir)
+    const error String = irErrorInvalidType(codeData, ir)
+    if codeData.catchLabels~().empty?()
+        codeData.freeLevel(1, compiledData, ir)
+        irReturn(error, ir)
+    else
+        const catchLabel Label = codeData.catchLabels~()[codeData.catchLabels~().length() - 1]
+        codeData.freeLevel(catchLabel.level~(), compiledData, ir)
+        irStore(const::objectIRType, error, codeData.getErrorVariableRegister(), "8", ir)
+        irJmp(catchLabel.label~(), ir)
+
+def irConstArray(itemsOperands Array) String
+    const irType String = "[" + (itemsOperands.length() + 3).toString() + "x i64]"
+    var result String = "{i64 ptrtoint (" + irType + "* ##llvmconst##>private unnamed_addr constant " + irType + " [i64 0, i64 " + itemsOperands.length().toString() + ", i64 "
+    do
+        const firstItem String = itemsOperands[0].type!(Operand).value~()
+        result += firstItem[firstItem.lookBack(' ') + 1 : firstItem.length() - 1]
+    parse _, item Operand = itemsOperands
+        result += ", " + item.value~()[1 : item.value~().lookBack(',')]
+    result += "], align 8<## to i64), i32 ##tnum##STD::Array##}"
+    return result
+
+def irArray(itemsOperands Array, write codeData CodeData, compiledData CData, itemsType COType, freedOnError Array, write ir String) String
+    const itemsTypeNumber String = irOperandTypeNumber(itemsOperands[0], codeData, ir)
+    if itemsType.optional?() || itemsType.anyType?()
+        const throwLabel String = codeData.createLabel()
+        const okLabel String = codeData.createLabel()
+        irCheckBegin(ir, false)
+        irIf(irEq(const::irTypeOfType, itemsTypeNumber, const::nothingTypeNumber, codeData, ir), Expectation[false], throwLabel, okLabel, codeData, ir)
+        irLabel(throwLabel, ir)
+        createInvalidTypeThrow(codeData, compiledData, freedOnError, ir)
+        irLabel(okLabel, ir)
+        irCheckEnd(ir, false)
+    for :(index Int = 1) index < itemsOperands.length(); index++
+        runtimeArrayItemTypeCheck(itemsOperands[index], itemsType, itemsTypeNumber, codeData, compiledData, freedOnError, ir)
+    const memory String = irMalloc(((itemsOperands.length() + 3) * 8).toString(), codeData, ir)
+    do
+        irStore("i64", "1", memory, "8", ir)
+        irStore("i64", itemsOperands.length().toString(), irOffsetPtr("i64", memory, "1", codeData, ir), "8", ir)
+        irStore("i64", irRegister("zext i32 " + itemsTypeNumber + " to i64", codeData, ir), irOffsetPtr("i64", memory, "2", codeData, ir), "8", ir)
+    parse index, item Operand = itemsOperands
+        const itemValue String = item.Main::constant?().select({
+            item.value~()[item.value~().look(' ') + 1 : item.value~().lookBack(',')],
+            irRegister("extractvalue {i64, i32} " + item.value~() + ", 0", codeData, ir)
+        })
+        irStore("i64", itemValue, irOffsetPtr("i64", memory, (index + 3).toString(), codeData, ir), "8", ir)
+    const memoryAsI64 String = irRegister("ptrtoint i64* " + memory + " to i64", codeData, ir)
+    return irRegister("insertvalue {i64, i32} {i64 0, i32 ##tnum##STD::Array##}, i64 " + memoryAsI64 + ", 0", codeData, ir)
+
+def irConstList(itemsOperands Array) String
+    const length String = itemsOperands.length().toString()
+    const irType String = "{i64, i64, [" + length + " x <{i64, i32}>]}"
+    var result String = "{i64 ptrtoint (" + irType + "* ##llvmconst##>private unnamed_addr constant " + irType + " {i64 0, i64 " + length + ", [" + length + " x <{i64, i32}>] ["
+    const lastIndex Int = itemsOperands.length() - 1
+    parse index, item Operand = itemsOperands
+        result += "<{i64, i32}> <" + item.value~() + (index == lastIndex).select(">]}, align 8<## to i64), i32 ##tnum##STD::List##}", ">, ")
+    return result
+
+def irList(itemsOperands Array, write codeData CodeData, write ir String) String
+    const memory String = irMalloc((16 + 12 * itemsOperands.length()).toString(), codeData, ir)
+    const length String = itemsOperands.length().toString()
+    irStore("i64", "1", memory, "8", ir)
+    irStore("i64", length, irOffsetPtr("i64", memory, "1", codeData, ir), "8", ir)
+    const itemsPointer String = irRegister("bitcast i64* " + irOffsetPtr("i64", memory, "2", codeData, ir) + " to <{i64, i32}>*", codeData, ir)
+    parse index, item Operand = itemsOperands
+        const itemPointer String = irOffsetPtr("<{i64, i32}>", itemsPointer, index.toString(), codeData, ir)
+        if item.Main::constant?()
+            irStore("<{i64, i32}>", "<" + item.value~() + ">", itemPointer, "4", ir)
+        else
+            const dataPointer String = irRegister("getelementptr <{i64, i32}>, <{i64, i32}>* " + itemPointer + ", i64 0, i32 0", codeData, ir)
+            const typePointer String = irRegister("getelementptr <{i64, i32}>, <{i64, i32}>* " + itemPointer + ", i64 0, i32 1", codeData, ir)
+            const data String = irRegister("extractvalue {i64, i32} " + item.value~() + ", 0", codeData, ir)
+            const type String = irRegister("extractvalue {i64, i32} " + item.value~() + ", 1", codeData, ir)
+            irStore("i64", data, dataPointer, "4", ir)
+            irStore("i32", type, typePointer, "4", ir)
+    const memoryAsI64 String = irRegister("ptrtoint i64* " + memory + " to i64", codeData, ir)
+    return irRegister("insertvalue {i64, i32} {i64 0, i32 ##tnum##STD::List##}, i64 " + memoryAsI64 + ", 0", codeData, ir)
+
+def irConstType(values Map, sortedFieldsNames Array, typeName, write ir String) String
+    if values.empty?()
+        return "{i64 ptrtoint (i64* @empty.type to i64), i32 ##tnum##" + typeName + "##}"
+    const length String = values.length().toString()
+    const irType String = "{i64, [" + length + " x i64], [" + length + " x i32]}"
+    var result String = "{i64 ptrtoint (" + irType + "* ##llvmconst##>private unnamed_addr constant " + irType + " {i64 " + (values.length() << 40).toString() + ", [" + length + " x i64] ["
+    var types String = "[" + length + " x i32] ["
+    const lastIndex Int = values.length() - 1
+    parse index, fieldName String = sortedFieldsNames
+        const fieldValue String = values[fieldName].type!(Operand).value~()
+        const separatorIndex Int = fieldValue.lookBack(',')
+        result += fieldValue[1 : separatorIndex] + (index == lastIndex).select("], ", ", ")
+        types += fieldValue[separatorIndex + 2 : fieldValue.length() - 1] + (index == lastIndex).select("]}", ", ")
+    result += types + ", align 8<## to i64), i32 ##tnum##" + typeName + "##}"
+    return result
+
+def irType(values Map, sortedFieldsNames Array, write codeData CodeData, typeName, write ir String) String
+    const memory String = irMalloc((8 + values.length() * 12).toString(), codeData, ir)
+    irStore("i64", ((values.length() << 40) | 1).toString(), memory, "8", ir)
+    const allDataPointer String = irOffsetPtr("i64", memory, "1", codeData, ir)
+    const typesPointer String = irRegister("bitcast i64* " + irOffsetPtr("i64", allDataPointer, values.length().toString(), codeData, ir) + " to i32*", codeData, ir)
+    parse index, fieldName String = sortedFieldsNames
+        const value Operand = values[fieldName]
+        const data String = irOperandData(value, codeData, ir)
+        const typeNumber String = irOperandTypeNumber(value, codeData, ir)
+        const indexAsString String = index.toString()
+        irStore("i64", data, irOffsetPtr("i64", allDataPointer, indexAsString, codeData, ir), "8", ir)
+        irStore("i32", typeNumber, irOffsetPtr("i32", typesPointer, indexAsString, codeData, ir), "4", ir)
+    return irRegister("insertvalue {i64, i32} {i64 0, i32 ##tnum##" + typeName + "##}, i64 " + irRegister("ptrtoint i64* " + memory + " to i64", codeData, ir) + ", 0", codeData, ir)
+
+def irEnumElement(elementID Int, typeName String) String
+    return "{i64 " + elementID.toString() +  ", i32 ##tnum##" + typeName + "##}"
+
+def irGroupTypesList(groupFullName String, write codeData CodeData, write ir String) String
+    return irRegister("bitcast ##glist##" + groupFullName + "## to i32*", codeData, ir)
+
+def irIncIndexRegister(type, incRegisterNumber, originalRegister, write ir String)
+    ir += "\t%##nreg##" + incRegisterNumber + "## = add " + type + " 1, " + originalRegister + "\n"
+
+def irGetErrorID(error String, write codeData CodeData, write ir String) String
+    return irRegister("call {i64, i32} @error__get_id({i64, i32} " + error + ")", codeData, ir)
+
+def irGetErrorMessage(error String, write codeData CodeData, write ir String) String
+    return irRegister("call {i64, i32} @error__get_message({i64, i32} " + error + ")", codeData, ir)
+
+def irGetErrorData(error String, write codeData CodeData, write ir String) String
+    return irRegister("call {i64, i32} @error__get_data({i64, i32} " + error + ")", codeData, ir)
+
+def irFreeError(error, threadDataRegister, write ir String)
+    return ir += "\tcall void @error__free({i64, i32} " + error + ", i8* " + threadDataRegister + ")\n"
+
+def irCallFunction(functionName String, irArguments, argumentsFromSignature Array, nothrow, isWorker, checkArguments Bool, write codeData CodeData, write ir String) String
+    const irFunctionName String = nothrow.select("##ntfunc##", "##func##") + functionName + "##"
+    if isWorker
+        ir += "\tcall void @worker__create({i64, i32} ({i64, i32}, {i64, i32}, i8*, i1)* " + irFunctionName + ", {i64, i32} " + irArguments[0] + ", {i64, i32} " + irArguments[1] + ")\n"
+        return const::irNothing
+    var functionCall String = "call {i64, i32} " + irFunctionName + "("
+    parse index, irArgument String = irArguments
+        do
+            var irType String = ""
+            eSwitch argumentsFromSignature[index].type!(CFSArgument).access~()
+            case noread
+                irType = "i32 "
+            case read
+                irType = "{i64, i32} "
+            case write
+                irType = "{i64, i32}* "
+            functionCall += irType
+        functionCall += irArgument + ", "
+    functionCall += "i8* " + codeData.threadDataRegister~() + (checkArguments || const::userCommandArguments.ignoreNoThrow~()).select(", i1 1)", ", i1 0)")
+    return irRegister(functionCall, codeData, ir)
+
+def irAddMessageToError(error, message String, write codeData CodeData, write ir String) String
+    var irMessage String = message
+    irMessage.replacePart("\n", "\\0A")
+    irMessage.replacePart("\q", "\\22")
+    const irMessageType String = "[" + (message.length() + 1).toString() + " x i8]"
+    irMessage = "##llvmconst##>private unnamed_addr constant " + irMessageType + " c\q" + irMessage + "\\00\q, align 1<##"
+    ir += "\tcall void @error__add_utf8_string_to_message({i64, i32} " + error + ", i8* getelementptr (" + irMessageType + ", " + irMessageType + "* " + irMessage + ", i64 0, i64 0))\n"
+    return error
+
+def irTypeNameToConstant(typeName, typeNumber String) String
+    var result String = "@ctnc."  + typeNumber + " = private unnamed_addr constant [" + (typeName.length() + 4).toString() + " x i32] [i32 0, i32 0, i32 " + (typeName.length() & 0xffffffff).toString() + ", i32 0"
+    parse _, char = typeName
+        result += ", i32 " + charToInt(char).toString()
+    result += "], align 8\n"
+    return result
+
+def irCreateFieldsNamesConstants(fields Array, write ir String)
+    parse typeNumber Int, fieldsFromOneType Array = fields
+        parse fieldIndex Int, fieldName String = fieldsFromOneType
+            ir += "@cfn." + typeNumber.toString() + "." + fieldIndex.toString() + " = private unnamed_addr constant [" + (fieldName.length() + 4).toString() + " x i32] [i32 0, i32 0, i32 " + (fieldName.length() & 0xffffffff).toString() + ", i32 0"
+            parse _, char = fieldName
+                ir += ", i32 " + charToInt(char).toString()
+            ir += "], align 8\n"
+
+def irCreateGetFieldNameFunctions(fields Array, write ir String)
+    var typeSwitchCases String = ""
+    var registerNumber Int = 4
+    var fieldsSwitches String = ""
+    parse typeNumber Int, typeFields Array = fields
+        if !typeFields.empty?()
+            const typeNumberAsString String = typeNumber.toString()
+            const fieldSwitchLabel String = registerNumber.toString()
+            registerNumber++
+            typeSwitchCases += "\t\ti32 " + typeNumberAsString + ", label %" + fieldSwitchLabel + "\n"
+            fieldsSwitches += "\t" + fieldSwitchLabel + ":\n\tswitch i32 %1, label %3 [\n"
+            var returns String = ""
+            parse fieldIndex Int, fieldName String = typeFields
+                const fieldIndexAsString String = fieldIndex.toString()
+                const returnLabel String = registerNumber.toString()
+                registerNumber++
+                fieldsSwitches += "\t\ti32 " + fieldIndexAsString + ", label %" + returnLabel + "\n"
+                returns += "\t" + returnLabel + ":\n\tret {i64, i32} {i64 ptrtoint ([" + (fieldName.length() + 4).toString() + " x i32]* @cfn." + typeNumberAsString + "." + fieldIndexAsString + " to i64), i32 4}\n"
+            fieldsSwitches += "\t]\n" + returns
+    ir += fieldsSwitches.empty?().select({
+        "define {i64, i32} @shar.get.field.name(i32, i32) unnamed_addr nounwind {\n"
+        "\tret {i64, i32} {i64 ptrtoint ([4 x i32]* @empty.string to i64), i32 4}\n"
+        "}\n\n",
+        "define {i64, i32} @shar.get.field.name(i32, i32) unnamed_addr nounwind {\n" +
+        "\tswitch i32 %0, label %3 [\n" +
+        typeSwitchCases +
+        "\t]\n"
+        "\t3:\n"
+        "\tret {i64, i32} {i64 ptrtoint ([4 x i32]* @empty.string to i64), i32 4}\n" +
+        fieldsSwitches +
+        "}\n\n"
+    })
+
+def irConstantsInit(usedConstants Map, write ir String)
+    var constantsInitFunction String = "\ndefine private void @constnants.init(i8*) unnamed_addr nounwind noinline {\n"
+    var registerNumber Int = 2
+    parse constantName String, code String = usedConstants
+        constantsInitFunction += "\t%" + registerNumber.toString() + " = call {i64, i32} @get.c." + constantName.replacePart$("::", ".") + "(i8* %0) noinline\n"
+        ir += code + "\n"
+        registerNumber++
+    ir += constantsInitFunction + "\tret void\n}\n\n"
+
+def irCreateGenericFunction(functionName String, nothrow Bool, typesInGroups Map /*Map(typeNumber, typeName)*/, argumentsFromSignature Array,  write ir String)
+    ir += "define {i64, i32} " + createFunctionIRName(functionName, "", !nothrow) + "("
+    var registerNumber Int = 0
+    var passedArguments String = "("
+    var thisArgumentRegister String = ""
+    var thisArgumentAccess Access = Access[read]
+    parse _, argument CFSArgument = argumentsFromSignature
+        var irType String = ""
+        eSwitch argument.access~()
+        case noread
+            irType = "i32"
+        case read
+            irType = "{i64, i32}"
+        case write
+            irType = "{i64, i32}*"
+        if thisArgumentRegister.empty?() && argument.type~().this?() && !argument.type~().optional?()
+            thisArgumentRegister = registerNumber.toString()
+            thisArgumentAccess = argument.access~()
+        passedArguments += irType + " %" + registerNumber.toString() + ", "
+        ir += irType + ", "
+        registerNumber++
+    passedArguments += "i8* %" + registerNumber.toString() + ", i1 %" + (registerNumber + 1).toString() + ")"
+    registerNumber += 3
+    if typesInGroups.empty?()
+        const resultRegister String = registerNumber.toString()
+        ir += {
+            "i8*, i1) unnamed_addr alwaysinline nounwind {\n"
+            "\t%" + resultRegister + " = call {i64, i32} " + createFunctionIRName(functionName, "This", !nothrow) + passedArguments + "\n"
+            "\t ret {i64, i32} %" + resultRegister + "\n"
+            "}\n\n"
+        }
+        return
+    ir += "i8*, i1) unnamed_addr nounwind {\n"
+    var thisTypeRegister String = ""
+    eSwitch thisArgumentAccess
+    case noread
+        thisTypeRegister = thisArgumentRegister
+    case read
+        thisTypeRegister = registerNumber.toString()
+        registerNumber++
+        ir += "\t%" + thisTypeRegister + " = extractvalue {i64, i32} %" + thisArgumentRegister + ", 1\n"
+    case write
+        const pointerRegister String = registerNumber.toString()
+        registerNumber++
+        thisTypeRegister = registerNumber.toString()
+        registerNumber++
+        ir += {
+            "\t%" + pointerRegister + " = getelementptr {i64, i32}, {i64, i32}* %" + thisArgumentRegister + ", i64 0, i32 1\n"
+            "\t%" + thisTypeRegister + " = load i32, i32* %" + pointerRegister + ", align 4\n"
+        }
+    var typesNumbers Array = []
+    parse typeNumber String, _ = typesInGroups
+        typesNumbers.addItem(Int.fromString(typeNumber))
+    typesNumbers.sort(true)
+    var cases String = ""
+    const thisCaseLabel String = (registerNumber + typesInGroups.length() * 2).toString()
+    ir += "\tswitch i32 %" + thisTypeRegister + ", label %" + thisCaseLabel + " [\n"
+    parse _, typeNumber Int = typesNumbers
+        const typeNumberAsString String = typeNumber.toString()
+        const label String = registerNumber.toString()
+        registerNumber++
+        const resultRegister String = registerNumber.toString()
+        registerNumber++
+        ir += "\t\ti32 " + typeNumberAsString + ", label %" + label + "\n"
+        cases += {
+            "\t" + label + ":\n"
+            "\t%" + resultRegister + " = call {i64, i32} " + createFunctionIRName(functionName, typesInGroups[typeNumberAsString], !nothrow) + passedArguments + "\n"
+            "\tret {i64, i32} %" + resultRegister + "\n"
+        }
+    registerNumber++
+    const resultRegister String = registerNumber.toString()
+    ir += {
+        "\t]\n" +
+        cases +
+        "\t" + thisCaseLabel + ":\n"
+        "\t%" + resultRegister + " = call {i64, i32} " + createFunctionIRName(functionName, "This", !nothrow) + passedArguments + "\n"
+        "\tret {i64, i32} %" + resultRegister + "\n"
+        "}\n\n"
+    }
+
+def irCreateInGroupsFunctions(groupsAsString String, functionName String, usedData UsedData, write ir String)
+    ir += "define private i1 " + functionName + "(i32) unnamed_addr alwaysinline nounwind {\n"
+    const groups Array = groupsAsString.split(',')
+    var allTypes <>Set = usedData.groupsTypes~()[groups[groups.length() - 1]]
+    if allTypes.nothing?()
+        allTypes = Set()
+    else
+        for :(groupIndex Int = 0) groupIndex < groups.length() - 1; groupIndex++
+            const groupTypes <>Set = usedData.groupsTypes~()[groups[groupIndex]]
+            if groupTypes.nothing?()
+                allTypes = Set()
+                end groupIndex
+            parse _, type String = allTypes
+                if !groupTypes[type]
+                    allTypes.remove(type)
+    var functionBody String = ""
+    if allTypes.empty?()
+        functionBody = "\tret i1 0\n"
+    elif allTypes.length() == usedData.types~().length()
+        functionBody = "\tret i1 1\n"
+    else
+        var typesNumbersInGroups Array = []
+        parse _, typeName String = allTypes
+            typesNumbersInGroups.addItem(Int.fromString(usedData.types~()[typeName]))
+        typesNumbersInGroups.sort(true)
+        functionBody = "\tswitch i32 %0, label %false [\n"
+        parse _, typeNumber Int = typesNumbersInGroups
+            functionBody += "\t\ti32 " + typeNumber.toString() + ", label %true\n"
+        functionBody += {
+            "\t]\n"
+            "\ttrue:\n"
+            "\tret i1 1\n"
+            "\tfalse:\n"
+            "\tret i1 0\n"
+        }
+    ir += functionBody + "}\n\n"
+
+def irCreateTypeNumberToTypeNameFunction(usedTypes Map, write ir String)
+    var usedTypesArray Array = "".repeat(usedTypes.length(), Array)
+    parse typeName String, typeNumber String = usedTypes
+        usedTypesArray.setItem(Int.fromString(typeNumber), typeName)
+    ir += {
+        "define private {i64, i32} @shar.type.number.to.type.name(i32) unnamed_addr nounwind {\n"
+        "\tswitch i32 %0, label %notype [\n"
+    }
+    var registerNumber Int = 2
+    var returns String = ""
+    parse typeNumber, typeName String = usedTypesArray
+        const typeNumberAsString String = typeNumber.toString()
+        const label String = registerNumber.toString()
+        registerNumber++
+        ir += "\t\ti32 " + typeNumberAsString + ", label %" + label + "\n"
+        returns += {
+            "\t" + label + ":\n"
+            "\tret {i64, i32} {i64 ptrtoint ([" + (typeName.length() + 4).toString() + " x i32]* @ctnc." + typeNumberAsString + " to i64), i32 4}\n"
+        }
+    ir += {
+        "\t]\n" +
+        returns +
+        "\tnotype:\n"
+        "\tret {i64, i32} {i64 ptrtoint ([4 x i32]* @empty.string to i64), i32 4}\n"
+        "}\n\n"
+    }
+
+// The function creates the function name in ir code.
+def createFunctionIRName(functionName, typeName String, mayThrow Bool) String
+    var suffix String = ""
+    switch functionName[functionName.length() - 1]
+    case '!'
+        suffix = ".1"
+    case '?'
+        suffix = ".2"
+    case '$'
+        suffix = ".3"
+    default
+        suffix = ".0"
+    var result String = "@f."
+    result += (suffix[1] == '0').select(functionName, functionName[:functionName.length() - 1])
+    if !typeName.empty?()
+        result += "." + typeName
+    result.replacePart("::", ".")
+    result += suffix + mayThrow.select(".1", ".0")
+    return result
+
+// The function creates the name of the constant in the llvm ir code.
+def createConstantIRName(constantName String) String
+    return "c." + constantName.replacePart$("::", ".")
+
+def builtinFunctions(mainFunctionMayThrow Bool) String
+    return {
+        "define i32 @main(i32, i8**) unnamed_addr nounwind{\n"
+        "\t%3 = call i8* @shar__init(i32 %0, i8** %1, {i64, i32} ({i64, i32}, i8*, i1)* " + createFunctionIRName("STD::shar__rc_free", "", false) + ", {i64, i32} ({i64, i32}, i8*, i1)* " + createFunctionIRName("STD::shar__rc_use", "", false) + ")\n"
+        "\tcall void @constnants.init(i8* %3)\n"
+        "\tcall void @shar__enable__threads()\n"
+        "\t%4 = call {i64, i32} " + createFunctionIRName("Main::main", "", mainFunctionMayThrow || const::userCommandArguments.ignoreNoThrow~()) + "(i8* %3, i1 0)\n"
+        "\t%5 = call i1 @shar__end({i64, i32} %4, i8* %3)\n"
+        "\t%6 = zext i1 %5 to i32\n"
+        "\tret i32 %6\n"
+        "}\n\n"
+        "define private i64* @shar.malloc(i64) unnamed_addr alwaysinline nounwind {\n"
+        "\t%2 = call i8* @malloc(i64 %0)\n"
+        "\t%3 = icmp eq i8* %2, null\n"
+        "\t%4 = call i1 @llvm.expect.i1(i1 %3, i1 0)\n"
+        "\tbr i1 %4, label %5, label %7\n"
+        "\t5:\n"
+        "\t%6 = bitcast [20 x i8]* @utf8.not.enough.memory.message to i8*\n"
+        "\tcall void @string__print_utf8_error(i8* %6)\n"
+        "\tunreachable\n"
+        "\t7:\n"
+        "\t%8 = bitcast i8* %2 to i64*\n"
+        "\tret i64* %8\n"
+        "}\n\n"
+        "define private i64* @shar.realloc(i64*, i64) alwaysinline nounwind {\n"
+        "\t%3 = bitcast i64* %0 to i8*\n"
+        "\t%4 = call i8* @realloc(i8* %3, i64 %1)\n"
+        "\t%5 = icmp eq i8* %4, null\n"
+        "\t%6 = call i1 @llvm.expect.i1(i1 %5, i1 0)\n"
+        "\tbr i1 %6, label %7, label %9\n"
+        "\t7:\n"
+        "\t%8 = bitcast [20 x i8]* @utf8.not.enough.memory.message to i8*\n"
+        "\tcall void @string__print_utf8_error(i8* %8)\n"
+        "\tunreachable\n"
+        "\t9:\n"
+        "\t%10 = bitcast i8* %4 to i64*\n"
+        "\tret i64* %10\n"
+        "}\n\n"
+        "define private void @shar.free(i64*) alwaysinline nounwind {\n"
+        "\t%2 = bitcast i64* %0 to i8*\n"
+        "\tcall void @free(i8* %2)\n"
+        "\tret void\n"
+        "}\n\n"
+    }
+
+// The function creates an ir-code with variable allocations.
+def createIRVariables(codeData CodeData, startVarNumber Int) String
+    var ir String = ""
+    for :(currentNumber Int = startVarNumber) currentNumber < codeData.newVariableNumber~(); currentNumber++
+        ir += "\t%" + currentNumber.toString() + " = alloca {i64, i32}, align 8\n"
+    return ir
+
+// The function turns a character from source into a number for IR code.
+def charToIRInt(char Token) String
+    const cleanedChar String = char.text~()[1 : char.text~().length() - 1]
+    var result String = ""
+    if cleanedChar[0] == '\\'
+        switch cleanedChar
+        case "\\n"
+            result = "10"
+        case "\\t"
+            result = "9"
+        case "\\\\"
+            result = "92"
+        case "\\q"
+            result = "34"
+        case "\\p"
+            result = "39"
+        default
+            if cleanedChar.length() != 7
+                errorInvalidCharacterInCode(char)
+            var resultAsInt Int = 0
+            try
+                resultAsInt = hexToInt("0x" + cleanedChar[1:])
+            catch
+                errorInvalidCharacterInCode(char)
+            if resultAsInt > 0x10ffff
+                errorInvalidCharacterInCode(char)
+            result = resultAsInt.toString()
+    elif cleanedChar.length() == 1
+        result = charToInt(cleanedChar[0]).toString()
+    else
+        errorInvalidCharacterInCode(char)
+    return result
+
+// The function turns an integer from source into an integer for IR code.
+def intToIRInt(int Token) String
+    var result Int = 0
+    const intText String = int.text~()
+    try
+        result = (intText.length() > 1 && intText[1] == 'x').select(hexToInt(intText), Int.fromString(intText))
+    catch
+        errorInvalidNumber(int)
+    return result.toString()
+
+// The function generates ir code for a constant.
+def constantToFinalIR(compiledData CData, constantName Token, write compilingConstants, write compilingFunctions Set, write usedData UsedData)
+    if !usedData.constants~()[constantName.text~()].nothing?()
+        return
+    if !constantName.text~().containPart?("::")
+        errorNotFound(constantName, "constant")
+    const constant CConstant = compiledData.getConstant(constantName, true)
+    const irName String = constant.fullName~().createConstantIRName()
+    const errorType String = "[" + ("Recursive constant \q\q.".length() + constant.fullName~().length() + 1).toString() + " x i8]"
+    const ir String = {
+        "@" + irName + " = private unnamed_addr global {{i64, i32}, i8} zeroinitializer, align 8\n"
+        "@" + irName + ".error.message = private unnamed_addr constant " + errorType + " c\qRecursive constant \\22" + constant.fullName~() + "\\22.\\00\q, align 1\n\n"
+        "define private {i64, i32} @get." + irName + "(i8*) unnamed_addr alwaysinline nounwind {\n"
+        "\t%2 = getelementptr {{i64, i32}, i8}, {{i64, i32}, i8}* @" + irName + ", i64 0, i32 0\n"
+        "\t%3 = getelementptr {{i64, i32}, i8}, {{i64, i32}, i8}* @" + irName + ", i64 0, i32 1\n"
+        "\t%4 = load i8, i8* %3, align 1\n"
+        "\t%5 = trunc i8 %4 to i1\n"
+        "\t%6 = call i1 @llvm.expect.i1(i1 %5, i1 1)\n"
+        "\tbr i1 %6, label %7, label %9\n"
+        "\t7:\n"
+        "\t%8 = load {i64, i32}, {i64, i32}* %2, align 8\n"
+        "\tret {i64, i32} %8\n"
+        "\t9:\n"
+        "\t%10 = icmp eq i8 %4, 2\n"
+        "\tbr i1 %10, label %11, label %13\n"
+        "\t11:\n"
+        "\t%12 = getelementptr " + errorType + ", " + errorType + "* @" + irName + ".error.message, i64 0, i32 0\n"
+        "\tcall void @string__print_utf8_error(i8* %12)\n"
+        "\tunreachable\n"
+        "\t13:\n"
+        "\tstore i8 2, i8* %3, align 1\n"
+        "\t%14 = call {i64, i32} @calc." + irName + "(i8* %0)\n"
+        "\t%15 = extractvalue {i64, i32} %14, 1\n"
+        "\t%16 = icmp eq i32 %15, 1\n"
+        "\tbr i1 %16, label %17, label %18\n"
+        "\t17:\n"
+        "\tcall void @string__print_error({i64, i32} %14)\n"
+        "\tunreachable\n"
+        "\t18:\n"
+        "\tstore {i64, i32} %14, {i64, i32}* %2, align 8\n"
+        "\tstore i8 1, i8* %3, align 1\n"
+        "\tret {i64, i32} %14\n"
+        "}\n\n"
+        "define private {i64, i32} @calc." + irName + "(i8*) unnamed_addr nounwind noinline {\n" +
+        constant.ir~().toFinalIR(constant.irFirstRegisterNumber~(), constantName, compiledData, compilingConstants, compilingFunctions, usedData, true) +
+        "}\n"
+    }
+    var usedConstants Map = usedData.constants`(Map())
+    usedConstants.put(constant.fullName~(), ir)
+    usedData.constants`(usedConstants)
+
+// The function generates ir code for a function.
+def functionToFinalIR(compiledData CData, functionAndTypeName Token, write compilingConstants, write compilingFunctions Set, write usedData UsedData)
+    if !usedData.functions~()[functionAndTypeName.text~()].nothing?()
+        return
+    const separatorIndex <>Int = functionAndTypeName.text~().look('.')
+    const functionName Token = functionAndTypeName.replaceText({
+        separatorIndex.nothing?().select(
+            functionAndTypeName.text~()[:functionAndTypeName.length() - 1],
+            functionAndTypeName.text~()[:separatorIndex]
+        )
+    })
+    const typeName Token = separatorIndex.nothing?().select({
+        const::emptyToken,
+        functionAndTypeName.replaceText(functionAndTypeName.text~()[separatorIndex + 1 : functionAndTypeName.length() - 1])
+    })
+    const functionVariant Char = functionAndTypeName.text~()[functionAndTypeName.length() - 1]
+    const function CFunction = compiledData.getFunction(functionName, true)
+    var simpleFunction <>SimpleFunction = nothing
+    tSwitch function.finalFunction~()
+    case SimpleFunction
+        if !typeName.empty?()
+            errorNotFound(functionAndTypeName, "function")
+        simpleFunction = function.finalFunction~()
+    case GroupsFunctions
+        const groupsFunctions GroupsFunctions = function.finalFunction~()
+        if typeName.empty?()
+            const functionGroups Array = groupsFunctions.groups~()
+            do
+                const functionNameWithVariant String = functionName.text~().addItem$(functionVariant)
+                if usedData.groupsFunctions~()[functionNameWithVariant].nothing?()
+                    var usedGroupsFunctions Map = usedData.groupsFunctions`(Map())
+                    usedGroupsFunctions.put(functionNameWithVariant, functionGroups)
+                    usedData.groupsFunctions`(usedGroupsFunctions)
+            var usedTypesFromGroups <>Set = usedData.groupsTypes~()[functionGroups[functionGroups.length() - 1]]
+            if usedTypesFromGroups.nothing?()
+                usedTypesFromGroups = Set()
+            else
+                for :(groupIndex Int = 0) groupIndex < functionGroups.length() - 1; groupIndex++
+                    const groupTypes <>Set = usedData.groupsTypes~()[functionGroups[groupIndex]]
+                    if groupTypes.nothing?()
+                        usedTypesFromGroups = Set()
+                        end groupIndex
+                    parse _, type String = usedTypesFromGroups
+                        if !groupTypes[type]
+                            usedTypesFromGroups.remove(type)
+            usedTypesFromGroups.add("This")
+            parse usedType, _ = usedTypesFromGroups
+                compilingFunctions.add(functionName.replaceText((functionName.text~() + "." + usedType).addItem$(functionVariant)))
+        elif typeName.text~() == "This"
+            simpleFunction = groupsFunctions.functions~()["+"]
+            if simpleFunction.nothing?()
+                simpleFunction = groupsFunctions.functions~()["-"]
+                var usedFunctions Map = usedData.functions`(Map())
+                usedFunctions.put(functionAndTypeName.text~(), irCreateDefaultFunctionWithError(functionName.text~(), simpleFunction.signature~().arguments~(), functionVariant == '1'))
+                usedData.functions`(usedFunctions)
+                return
+        else
+            compiledData.getType(typeName, true)
+            simpleFunction = groupsFunctions.functions~()[typeName.text~()]
+            if simpleFunction.nothing?()
+                compilingFunctions.add(functionName.replaceText((functionName.text~() + ".This").addItem$(functionVariant)))
+                return
+    var functionIR String = ""
+    if !simpleFunction.nothing?()
+        functionIR = "define private {i64, i32} " + createFunctionIRName(functionName.text~(), typeName.text~(), functionVariant == '1') + "("
+        if !simpleFunction.signature~().arguments~().empty?()
+            parse _, argument CFSArgument = simpleFunction.signature~().arguments~()
+                var irType String = ""
+                eSwitch argument.access~()
+                case noread
+                    irType = "i32, "
+                case read
+                    irType = "{i64, i32}, "
+                case write
+                    irType = "{i64, i32}* noalias, "
+                functionIR += irType
+        functionIR += "i8*, i1) "
+        var irAttributes String = ""
+        const attributes CFAttributes = simpleFunction.attributes~()
+        if attributes.alwaysinline~()
+            irAttributes = "unnamed_addr alwaysinline nounwind {\n"
+        elif attributes.inline~()
+            irAttributes = "unnamed_addr inlinehint nounwind {\n"
+        elif attributes.noinline~()
+            irAttributes = "unnamed_addr noinline nounwind {\n"
+        elif attributes.cold~()
+            irAttributes = "unnamed_addr cold nounwind {\n"
+        else
+            irAttributes = "unnamed_addr nounwind {\n"
+        functionIR += irAttributes + simpleFunction.ir~().toFinalIR(simpleFunction.irFirstRegisterNumber~(), functionAndTypeName, compiledData, compilingConstants, compilingFunctions, usedData, functionVariant == '1') + "}\n\n"
+    var usedFunctions Map = usedData.functions`(Map())
+    usedFunctions.put(functionAndTypeName.text~(), functionIR)
+    usedData.functions`(usedFunctions)
+
+def irCreateDefaultFunctionWithError(functionName String, argumentsFromSignature Array, mayThrow Bool) String
+    var functionIR String = ""
+    functionIR = "define private {i64, i32} " + createFunctionIRName(functionName, "This", mayThrow) + "("
+    if !argumentsFromSignature.empty?()
+        parse _, argument CFSArgument = argumentsFromSignature
+            var irType String = ""
+            eSwitch argument.access~()
+            case noread
+                irType = "i32, "
+            case read
+                irType = "{i64, i32}, "
+            case write
+                irType = "{i64, i32}* noalias, "
+            functionIR += irType
+    const addedMessageMemoryRegister String = (argumentsFromSignature.length() + 3).toString()
+    const errorRegister String = (argumentsFromSignature.length() + 4).toString()
+    const messageFirstCharPointer String = (argumentsFromSignature.length() + 5).toString()
+    const addedMessageType String = "[" + ("\n<- ".length() + functionName.length() + 1).toString() + " x i8]"
+    functionIR += {
+        "i8*, i1) unnamed_addr cold nounwind {\n"
+        "\t%" + addedMessageMemoryRegister + " = alloca " + addedMessageType + ", align 1\n"
+        "\t%" + errorRegister + " = call {i64, i32} @error__create_utf8_message({i64, i32} {i64 0, i32 3}, {i64, i32} zeroinitializer, i8* bitcast ([14 x i8]* @utf8.error.invalid.type to i8*))\n"
+        "\tstore " + addedMessageType + " c\q\\0A<- " + functionName + "\\00\q, " + addedMessageType + "* %" + addedMessageMemoryRegister + ", align 1\n"
+        "\t%" + messageFirstCharPointer + " = getelementptr " + addedMessageType + ", " + addedMessageType + "* %" + addedMessageMemoryRegister +", i64 0, i64 0\n"
+        "\tcall void @error__add_utf8_string_to_message({i64, i32} %"  + errorRegister + ", i8* %" + messageFirstCharPointer + ")\n"
+        "\tret {i64, i32} %" + errorRegister + "\n"
+        "}\n\n"
+    }
+    return functionIR
+
+// The function creates ir code by removing any shar inserts from it.
+#noinline
+def toFinalIR(ir String, firstRegisterNumber Int, errorCoordinates Token, compiledData CData, write compilingConstants, write compilingFunctions Set, write usedData UsedData, mayThrow Bool) String
+    var previousPosition Int = 0
+    var finalIR String = ""
+    for :(mainLoop)
+        const signatureStart <>Int = ir.lookPartFromAtoB("##", previousPosition, ir.length())
+        if signatureStart.nothing?()
+            end mainLoop
+        finalIR += ir[previousPosition : signatureStart]
+        const idPosition Int = signatureStart + 2
+        const signatureNext <>Int = ir.lookPartFromAtoB("##", idPosition, ir.length())
+        if signatureNext.nothing?()
+            errorNotFoundSignatureMiddle(errorCoordinates)
+        const id String = ir[idPosition : signatureNext]
+        const signatureEnd <>Int = ir.lookPartFromAtoB("##", signatureNext + 2, ir.length())
+        if signatureEnd.nothing?()
+            errorNotFoundSignatureEnd(errorCoordinates.replaceText("##" + id + "##"))
+        const context Token = errorCoordinates.replaceText(ir[signatureNext + 2 : signatureEnd])
+        previousPosition = signatureEnd + 2
+        switch :(switch) id
+        case "tnum"
+            const typeName String = context.text~()
+            if !typeName.containPart?("::")
+                errorNotFound(context, "type")
+            var typeNumber <>String = usedData.types~()[typeName]
+            if typeNumber.nothing?()
+                const typeGroups Set = compiledData.getType(context.replaceText(typeName), true).groups~()
+                do
+                    var usedGroupsTypes Map = usedData.groupsTypes`(Map())
+                    parse _, group String = typeGroups
+                        var usedGroupTypes Set = usedGroupsTypes.put(group, Set())
+                        usedGroupTypes.add(typeName)
+                        usedGroupsTypes.put(group, usedGroupTypes)
+                    usedData.groupsTypes`(usedGroupsTypes)
+                do
+                    var usedTypes Map = usedData.types`(Map())
+                    typeNumber = usedTypes.length().toString()
+                    usedTypes.put(typeName, typeNumber)
+                    usedData.types`(usedTypes)
+                parse functionName String, groupsNames Array = usedData.groupsFunctions~()
+                    var typeInGroups Bool = true
+                    parse :(groupsParse) _, groupName String = groupsNames
+                        typeInGroups = typeInGroups && typeGroups[groupName]
+                    if typeInGroups
+                        const fullFunctionName String = (functionName[:functionName.length() - 1] + "." + typeName).addItem$(functionName[functionName.length() - 1])
+                        compilingFunctions.add(const::emptyToken.replaceText(fullFunctionName))
+            finalIR += typeNumber
+        case "func", "ntfunc"
+            var functionName String = context.text~()
+            const separatorIndex <>Int = functionName.lookBack('.')
+            var type String = ""
+            if !separatorIndex.nothing?()
+                type = functionName[separatorIndex + 1:]
+                functionName = functionName[:separatorIndex]
+            if !functionName.containPart?("::")
+                errorNotFound(errorCoordinates.replaceText(functionName), "function")
+            var memoryManagerFunction Bool = false
+            switch functionName
+            case "STD::shar__rc_use", "STD::shar__rc_free", "STD::shar__to_const"
+                memoryManagerFunction = true
+            const functionVariant Char = ((const::userCommandArguments.ignoreNoThrow~() || (mayThrow && id[0] == 'f')) && !memoryManagerFunction).select('1', '0')
+            var functionFullName String = functionName
+            if !type.empty?()
+                if type != "This"
+                    if !type.containPart?("::")
+                        errorNotFound(errorCoordinates.replaceText(type), "type")
+                    if compiledData.getFunction(errorCoordinates.replaceText(functionName), true).finalFunction~().type!(GroupsFunctions).functions~()[type].nothing?()
+                        type = "This"
+                functionFullName += "." + type
+            functionFullName.addItem(functionVariant)
+            compilingFunctions.add(context.replaceText(functionFullName))
+            finalIR += createFunctionIRName(functionName, type, functionVariant == '1')
+        case "ingroups"
+            var inGroupsFunctionName <>String = usedData.inGroups~()[context.text~()]
+            if inGroupsFunctionName.nothing?()
+                do
+                    var usedInGroups Map = usedData.inGroups`(Map())
+                    inGroupsFunctionName = "@in.groups." + usedInGroups.length().toString()
+                    usedInGroups.put(context.text~(), inGroupsFunctionName)
+                    usedData.inGroups`(usedInGroups)
+                parse _, groupName String = context.text~().split(',')
+                    if !groupName.containPart?("::")
+                        errorNotFound(context.replaceText(groupName), "group")
+                    compiledData.getGroup(context.replaceText(groupName), true)
+            finalIR += inGroupsFunctionName
+        case "const"
+            compilingConstants.add(context)
+            finalIR += "@get." + context.text~().createConstantIRName()
+        case "llvmconst"
+            var position Int = signatureNext + 2
+            if ir[position] != '>'
+                errorNotFoundSignatureEnd(errorCoordinates.replaceText("##" + id + "##"))
+            var nesting Int = 1
+            for :(loop)
+                position++
+                if position == ir.length()
+                    errorNotFoundSignatureEnd(errorCoordinates.replaceText("##" + id + "##"))
+                if ir.partsEqual?(position, "<##", 0, 3)
+                    if nesting == 1
+                        end loop
+                    nesting--
+                    position += 2
+                elif ir.partsEqual?(position, "##>", 0, 3)
+                    nesting++
+                    position += 2
+            previousPosition = position + 3
+            const constantValue String = toFinalIR(ir[signatureNext + 3 : position], -1, errorCoordinates, compiledData, compilingConstants, compilingFunctions, usedData, true)
+            var constantName <>String = usedData.llvmConstants~()[constantValue]
+            if constantName.nothing?()
+                var usedConstants Map = usedData.llvmConstants`(Map())
+                constantName = "@lc." + usedConstants.length().toString()
+                usedConstants.put(constantValue, constantName)
+                usedData.llvmConstants`(usedConstants)
+            finalIR += constantName
+        case "llvmdeclare"
+            const declarationEnd <>Int = ir.lookPartFromAtoB("##", signatureEnd + 2, ir.length())
+            if declarationEnd.nothing?()
+                errorNotFoundSignatureEnd(errorCoordinates.replaceText("##" + id + "##"))
+            const declaration String = ir[signatureEnd + 2 : declarationEnd]
+            var usedDeclares Map = usedData.llvmDeclares`(Map())
+            usedDeclares.put(context.text~(), declaration)
+            usedData.llvmDeclares`(usedDeclares)
+            previousPosition = declarationEnd + 2
+        case "glist"
+            const groupName Token = context
+            var constantTypeAndName <>String = usedData.groupListConstants~()[groupName.text~()]
+            if constantTypeAndName.nothing?()
+                if !groupName.text~().containPart?("::")
+                    errorNotFound(context, "group")
+                compiledData.getGroup(groupName, true)
+                var typesNumbers Array = []
+                parse _, allTypesWithSameName Map = compiledData.types~()
+                    parse _, type CType = allTypesWithSameName
+                        if type.groups~()[groupName.text~()]
+                            var typeNumber <>String = usedData.types~()[type.fullName~()]
+                            if typeNumber.nothing?()
+                                const typeGroups Set = compiledData.getType(context.replaceText(type.fullName~()), true).groups~()
+                                do
+                                    var usedGroupsTypes Map = usedData.groupsTypes`(Map())
+                                    parse _, group String = typeGroups
+                                        var usedGroupTypes Set = usedGroupsTypes.put(group, Set())
+                                        usedGroupTypes.add(type.fullName~())
+                                        usedGroupsTypes.put(group, usedGroupTypes)
+                                    usedData.groupsTypes`(usedGroupsTypes)
+                                do
+                                    var usedTypes Map = usedData.types`(Map())
+                                    typeNumber = usedTypes.length().toString()
+                                    usedTypes.put(type.fullName~(), typeNumber)
+                                    usedData.types`(usedTypes)
+                                parse functionName String, groupsNames Array = usedData.groupsFunctions~()
+                                    var typeInGroups Bool = true
+                                    parse :(groupsParse) _, usedGroupName String = groupsNames
+                                        typeInGroups = typeInGroups && typeGroups[usedGroupName]
+                                    if typeInGroups
+                                        const functionVariant Char = functionName[functionName.length() - 1]
+                                        const fullFunctionName String = (functionName[:functionName.length() - 1] + "." + type.fullName~()).addItem$(functionVariant)
+                                        compilingFunctions.add(const::emptyToken.replaceText(fullFunctionName))
+                            typesNumbers.addItem(typeNumber)
+                constantTypeAndName = "[" + (typesNumbers.length() + 1).toString() + " x i32]"
+                var constantValue String = "private unnamed_addr constant " + constantTypeAndName + " [i32 " + typesNumbers.length().toString()
+                parse _, typeNumber String = typesNumbers
+                    constantValue += ", i32 " + typeNumber
+                constantValue += "], align 4"
+                do
+                    var usedConstants Map = usedData.llvmConstants`(Map())
+                    const constantName String = "@lc." + usedConstants.length().toString()
+                    usedConstants.put(constantValue, constantName)
+                    usedData.llvmConstants`(usedConstants)
+                    constantTypeAndName += "* " + constantName
+                var groupListConstants Map = usedData.groupListConstants`(Map())
+                groupListConstants.put(groupName.text~(), constantTypeAndName)
+                usedData.groupListConstants`(groupListConstants)
+            finalIR += constantTypeAndName
+        case "check", "intcheck"
+            if context.text~() != "begin"
+                if context.text~() == "end"
+                    errorCheckEndWithoutBegin(errorCoordinates)
+                errorUnknownIdentifier(errorCoordinates.replaceText(id + context.text~() + "##"))
+            var innerDeep Int = 1
+            const startIndex Int = previousPosition
+            for :(loop)
+                var nextID <>String = nothing
+                const nextIDIndex <>Int = ir.lookAnyPartFromAtoB(["##check##end##", "##intcheck##end##", "##check##begin##", "##intcheck##begin##"], previousPosition, ir.length(), nextID)
+                if nextID.nothing?()
+                    errorNotFoundCheckEnd(errorCoordinates)
+                if nextID[nextID.length() - 3] == 'd'
+                    if innerDeep == 1
+                        if (mayThrow && id[0] == 'c') || const::userCommandArguments.ignoreNoThrow~()
+                            finalIR += ir[startIndex : nextIDIndex].toFinalIR(-1, errorCoordinates, compiledData, compilingConstants, compilingFunctions, usedData, mayThrow)
+                        previousPosition = nextIDIndex + nextID.length()
+                        end loop
+                    innerDeep--
+                else
+                    innerDeep++
+                previousPosition = nextIDIndex + nextID.length()
+        case "nreg", "reg"
+            finalIR += ir[signatureStart : signatureEnd + 2]
+        default
+            errorUnknownIdentifier(replaceText(errorCoordinates, id))
+    finalIR += ir[previousPosition:]
+    finalIR.replacePart("\n\t\n", "\n")
+    if firstRegisterNumber != -1
+        finalIR.unnameRegisters(firstRegisterNumber, errorCoordinates)
+    return finalIR
+
+// The function replaces the registers created at compile time with llvm ir registers.
+def unnameRegisters(write ir String, firstRegisterNumber Int, errorCoordinates Token)
+    var registers Map = Map()
+    do
+        var registerNumber Int = firstRegisterNumber
+        var previousEndEdge Int = 0
+        var newIR String = ""
+        const length Int = ir.length()
+        for :(loop)
+            const nregIndex <>Int = ir.lookPartFromAtoB("##nreg##", previousEndEdge, length)
+            if nregIndex.nothing?()
+                end loop
+            const endEdge <>Int = ir.lookPartFromAtoB("##", nregIndex + 8, length)
+            if endEdge.nothing?()
+                errorNotFoundSignatureEnd(errorCoordinates.replaceText("##nreg##"))
+            const registerName String = ir[nregIndex + 8 : endEdge]
+            if registerName.empty?()
+                errorNoRegisterName(errorCoordinates.replaceText("##nreg##"))
+            const llvmRegister String = registerNumber.toString()
+            registerNumber++
+            if !registers.put(registerName, llvmRegister).nothing?()
+                errorDoubleDeclaredRegister(errorCoordinates.replaceText(registerName))
+            newIR += ir[previousEndEdge : nregIndex] + llvmRegister
+            previousEndEdge = endEdge + 2
+        newIR += ir[previousEndEdge : length]
+        ir = newIR
+    do
+        var previousEndEdge Int = 0
+        var newIR String = ""
+        const length Int = ir.length()
+        for :(loop)
+            const regIndex <>Int = ir.lookPartFromAtoB("##reg##", previousEndEdge, length)
+            if regIndex.nothing?()
+                end loop
+            const endEdge <>Int = ir.lookPartFromAtoB("##", regIndex + 7, length)
+            if endEdge.nothing?()
+                errorNotFoundSignatureEnd(errorCoordinates.replaceText("##reg##"))
+            const registerName String = ir[regIndex + 7 : endEdge]
+            if registerName.empty?()
+                errorNoRegisterName(errorCoordinates.replaceText("##reg##"))
+            const llvmRegister <>String = registers[registerName]
+            if llvmRegister.nothing?()
+                errorNotFoundRegister(errorCoordinates.replaceText(registerName))
+            newIR += ir[previousEndEdge : regIndex] + llvmRegister
+            previousEndEdge = endEdge + 2
+        newIR += ir[previousEndEdge : length]
+        ir = newIR

@@ -2,100 +2,129 @@ module Main
 
 // Global constant.
 type Constant
-    // export?  Bool
-    // name     Token
-    // type     OType
-    // value    Expression
+    isExport   Bool
+    name       Token
+    type       OType
+    value      $Any // $Expression | [Block]
+    docComment String
 
-attach Constant to FieldExport
-    #alwaysinline
+// Compiled constant.
+type CConstant
+    isExport              Bool
+    fullName              String
+    ir                    String
+    irFirstRegisterNumber Int
+    type                  COType
+    isTrueConstant        Bool
+    docComment            String
+
+attach Constant to IsExport
     def export?(constant Constant) Bool
-        return constant.typeGetItem(0)
+        return constant.isExport~()
 
-    #alwaysinline
-    def export`(write constant Constant, new Bool) Bool
-        return constant.typePut(0, new)
-
-attach Constant to FieldName
-    #alwaysinline
-    def name~(constant Constant) Token
-        return constant.typeGetItem(1)
-
-    #alwaysinline
-    def name`(write constant Constant, new <>Token) <>Token
-        return constant.typePut(1, new)
-
-attach Constant to FieldType
-    #alwaysinline
-    def type~(constant Constant) OType
-        return constant.typeGetItem(2)
-
-    #alwaysinline
-    def type`(write constant Constant, new <>OType) <>OType
-        return constant.typePut(2, new)
-
-attach Constant to FieldValue
-    #alwaysinline
-    def value~(constant Constant) Expression
-        return constant.typeGetItem(3)
-
-    #alwaysinline
-    def value`(write constant Constant, new <>Expression) <>Expression
-        return constant.typePut(3, new)
-
-#alwaysinline
-def Constant(isExport Bool, name Token, type OType, value Expression) Constant
-    return Constant.fromList({isExport, name, type, value})
+attach CConstant to IsExport
+    def export?(constant CConstant) Bool
+        return constant.isExport~()
 
 // The function partially compiles the constant.
-#alwaysinline
 def precompileConstant(constant Constant, write compiledData CData)
-    var constants Map = compiledData.constants`(nothing)
+    var constants Map = compiledData.constants`(Map())
     var constantsWithSameName <>Map = constants.put(constant.name~().text~(), Map())
     if constantsWithSameName.nothing?()
         constantsWithSameName = Map()
-    if !constantsWithSameName.put{
-        (compiledData.currentModule~(),
-        CConstant(constant.export?(),
-        compiledData.currentModule~() + "::" + constant.name~().text~(),
-        "",
-        constant.type~().toFull(compiledData))).nothing?()
-    }
+    if !constantsWithSameName.put(compiledData.currentModule~(), CConstant{{
+        isExport              : constant.export?(),
+        fullName              : compiledData.currentModule~() + "::" + constant.name~().text~(),
+        ir                    : "",
+        irFirstRegisterNumber : 0,
+        type                  : constant.type~().compileOType(compiledData),
+        isTrueConstant        : false,
+        docComment            : constant.docComment~()
+    }}).nothing?()
         errorAlreadyExist(constant.name~(), "constant")
     constants.put(constant.name~().text~(), constantsWithSameName)
     compiledData.constants`(constants)
 
 // The function partially compiles the constant.
-#alwaysinline
 def compileConstant(constant Constant, write compiledData CData)
     var compiledConstant CConstant = compiledData.constants~()[constant.name~().text~()][compiledData.currentModule~()]
-    var codeData CodeData = CodeData{
-        ("const::" + compiledData.currentModule~() + "::" + constant.name~().text~() /*functionNameForErrorMessage*/,
-        Set() /*allThisGroups*/,
-        OType.fromList({}) /*resultType*/,
-        Map() /*namedOperands*/,
-        1 /*level*/,
-        0 /*registerCounter*/,
-        Map() /*endLabels*/,
-        Map() /*nextLabels*/,
-        Map() /*fallthroughLabels*/,
-        [] /*catchLabels*/,
-        [] /*allocs*/,
-        [] /*unneededAllocs*/,
-        false /*ownerNoThrow*/,
-        "" /*defaultFunctionName*/,
-        "" /*thisTypeName*/)
-    }
-    var llvmIR String = ""
-    const constOperand Operand = constant.value~().compileExpression(compiledConstant.type~(), codeData, compiledData, [], llvmIR)
-    llvmIR = codeData.allocsToIR() + llvmIR
-    constOperand.operandToConst(codeData, compiledData, llvmIR)
-    llvmIR += "\tret [2 x i64] " + constOperand.value~() + "\n"
-    llvmIR.sharRegistersToLLVMRegisters(1, constant.name~())
-    var constants Map = compiledData.constants`(nothing)
+    var codeData CodeData = CodeData{{
+        functionNameForErrorMessage : "const::" + compiledData.currentModule~() + "::" + constant.name~().text~(),
+        allThisGroups               : Set(),
+        resultType                  : compiledConstant.type~(),
+        namedOperands               : Map(),
+        level                       : 1,
+        registerCounter             : 0,
+        endLabels                   : Map(),
+        nextLabels                  : Map(),
+        fallthroughLabels           : Map(),
+        catchLabels                 : [],
+        newVariableNumber           : 3,
+        errorVariableRegister       : "%2",
+        unusedVariables             : [],
+        ownerNoThrow                : false,
+        defaultFunctionName         : "",
+        thisTypeRegister            : "",
+        threadDataRegister          : "%0",
+        overridedThisType           : "",
+        changingVariables           : Set()
+    }}
+    var ir String = ""
+    if constant.value~().type?(Array)
+        const code Array = constant.value~()
+        if code[0].type!(Block).line~()[0].type!(Token).text~() == "IR" && code[0].type!(Block).line~()[0].type!(Token).fileName~().empty?()
+            const irCode Array = code[0].type!(Block).line~()
+            for :(index Int = 1) index < irCode.length(); index++
+                ir += "\t" + irCode[index].type!(Token).text~() + "\n"
+        else
+            const lastIsTerminator Bool = code.compileCode(codeData, compiledData, ir)
+            ir = createIRVariables(codeData, 2) + ir
+            if !lastIsTerminator
+                codeData.freeLevel(1, compiledData, ir)
+                irReturn(compiledConstant.type~().nothingType?().select({
+                    const::irNothing,
+                    irErrorConstantNoReturnValue(codeData, ir)
+                }), ir)
+            codeData.deleteLevel(1)
+    else
+        const constOperand Operand = constant.value~().compileExpression(compiledConstant.type~(), codeData, compiledData, [], ir)
+        if constOperand.Main::constant?()
+            ir = "\tret {i64, i32} " + constOperand.value~() + "\n"
+            compiledConstant.isTrueConstant`(true)
+            compiledConstant.type`(constOperand.type~())
+        else
+            ir = createIRVariables(codeData, 2) + ir
+            constOperand.operandToConst(codeData, compiledData, ir)
+            irReturn(constOperand.value~(), ir)
+    compiledConstant.irFirstRegisterNumber`(codeData.newVariableNumber~())
+    compiledConstant.ir`(ir)
+    var constants Map = compiledData.constants`(Map())
     var constantsWithSameName <>Map = constants.put(constant.name~().text~(), Map())
-    compiledConstant = constantsWithSameName.put(compiledData.currentModule~(), CConstant.fromList({}))
-    compiledConstant.llvmIR`(llvmIR)
     constantsWithSameName.put(compiledData.currentModule~(), compiledConstant)
     constants.put(constant.name~().text~(), constantsWithSameName)
     compiledData.constants`(constants)
+
+attach CConstant to BinarySerializable
+    def serialize(constant CConstant, write bytes Bytes)
+        constant.export?().serialize(bytes)
+        constant.fullName~()[constant.fullName~().look(':') + 2:].serialize(bytes)
+        constant.ir~().serialize(bytes)
+        constant.irFirstRegisterNumber~().serialize(bytes)
+        constant.type~().serialize(bytes)
+        constant.isTrueConstant~().serialize(bytes)
+        constant.docComment~().serialize(bytes)
+
+    def deserialize(noread type CConstant, bytes Bytes, write position Int) CConstant
+        var currentPosition Int = position
+        const result CConstant = CConstant{{
+            isExport              : Bool.deserialize(bytes, currentPosition),
+            fullName              : String.deserialize(bytes, currentPosition),
+            ir                    : String.deserialize(bytes, currentPosition),
+            irFirstRegisterNumber : Int.deserialize(bytes, currentPosition),
+            type                  : COType.deserialize(bytes, currentPosition),
+            isTrueConstant        : Bool.deserialize(bytes, currentPosition),
+            docComment            : ""
+        }}
+        String.deserialize(bytes, currentPosition)
+        position = currentPosition
+        return result

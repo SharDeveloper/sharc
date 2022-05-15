@@ -1,0 +1,42 @@
+module Main
+
+const moduleSignature Bytes
+    var result Bytes = Bytes()
+    parse _, char = "shar module 0.5|"
+        result.addItem(intToByte(charToInt(char)))
+    return result
+
+// A function inside a module.
+type ModuleFunction
+    isExport      Bool
+    name          String
+    module        String
+    owningGroups  Array // [String]
+    thisType      String
+    finalFunction SimpleFunction
+
+attach ModuleFunction to IsExport
+    def export?(function ModuleFunction) Bool
+        return function.isExport~()
+
+attach ModuleFunction to BinarySerializable
+    def serialize(function ModuleFunction, write bytes Bytes)
+        function.export?().serialize(bytes)
+        function.name~().serialize(bytes)
+        function.module~().serialize(bytes)
+        function.owningGroups~().serializeContainer(bytes)
+        function.thisType~().serialize(bytes)
+        function.finalFunction~().serialize(bytes)
+
+    def deserialize(noread type ModuleFunction, bytes Bytes, write position Int) ModuleFunction
+        var currentPosition Int = position
+        const result ModuleFunction = ModuleFunction{{
+            isExport      : Bool.deserialize(bytes, currentPosition),
+            name          : String.deserialize(bytes, currentPosition),
+            module        : String.deserialize(bytes, currentPosition),
+            owningGroups  : Array.deserializeContainer(bytes, currentPosition, String),
+            thisType      : String.deserialize(bytes, currentPosition),
+            finalFunction : SimpleFunction.deserialize(bytes, currentPosition)
+        }}
+        position = currentPosition
+        return result

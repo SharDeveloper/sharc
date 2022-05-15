@@ -1,279 +1,349 @@
 module Main
 
 type Function
-    // attributes FAttributes
-    // export?    Bool
-    // name       Token
-    // arguments  [FArgument]
-    // resultType OType
-    // code       [Block]
+    attributes FAttributes
+    isExport   Bool
+    name       Token
+    arguments  Array // [FArgument]
+    resultType OType
+    code       Array // [Block]
+    docComment String
 
-attach Function to FieldAttributes
-    #alwaysinline
-    def attributes~(function Function) FAttributes
-        return function.typeGetItem(0)
+// Attributes of the function.
+// "this" - creates a function that is part of the specified group, becoming the default implementation.
+// "override" - overrides a function with the "this" attribute for a particular type.
+type FAttributes
+    cold         Bool
+    noinline     Bool
+    inline       Bool
+    alwaysinline Bool
+    unsafewrite  Bool
+    nothrow      Bool
+    worker       Bool
+    deprecated   Bool
+    this         Array // [Token]
+    override     Token
 
-    #alwaysinline
-    def attributes`(write function Function, new <>FAttributes) <>FAttributes
-        return function.typePut(0, new)
+const defaultFAttributes FAttributes = FAttributes{{
+    cold         : false,
+    noinline     : false,
+    inline       : false,
+    alwaysinline : false,
+    unsafewrite  : false,
+    nothrow      : false,
+    worker       : false,
+    deprecated   : false,
+    this         : [],
+    override     : const::emptyToken
+}}
 
-attach Function to FieldExport
-    #alwaysinline
+// Compiled function Attributes.
+type CFAttributes
+    cold         Bool
+    noinline     Bool
+    inline       Bool
+    alwaysinline Bool
+    unsafewrite  Bool
+    nothrow      Bool
+    worker       Bool
+    deprecated   Bool
+
+type FArgument
+    access Access
+    name   Token
+    type   OType
+
+// Compiled function.
+type CFunction
+    isExport      Bool
+    fullName      String
+    finalFunction $Any // SimpleFunction | GroupsFunctions
+
+// A type for storing data for a simple function.
+type SimpleFunction
+    attributes            CFAttributes
+    signature             CFSignature
+    ir                    String
+    irFirstRegisterNumber Int
+    fromCurrentModule     Bool
+    docComment            String
+
+// A type for storing functions from groups.
+type GroupsFunctions
+    groups    Array // [String]
+    functions Map // Map(String ("+" - default, "-" -  require, other - type name), SimpleFunction)
+
+attach Function to IsExport
     def export?(function Function) Bool
-        return function.typeGetItem(1)
+        return function.isExport~()
 
-    #alwaysinline
-    def export`(write function Function, new Bool) Bool
-        return function.typePut(1, new)
+attach CFunction to IsExport
+    def export?(function CFunction) Bool
+        return function.isExport~()
 
-attach Function to FieldName
-    #alwaysinline
-    def name~(function Function) Token
-        return function.typeGetItem(2)
+attach SimpleFunction to IsFromCurrentModule
+    def fromCurrentModule?(function SimpleFunction) Bool
+        return function.fromCurrentModule~()
 
-    #alwaysinline
-    def name`(write function Function, new <>Token) <>Token
-        return function.typePut(2, new)
+def compileFAttributes(attributes FAttributes) CFAttributes
+    return CFAttributes{{
+        cold         : attributes.cold~(),
+        noinline     : attributes.noinline~(),
+        inline       : attributes.inline~(),
+        alwaysinline : attributes.alwaysinline~(),
+        unsafewrite  : attributes.unsafewrite~(),
+        nothrow      : attributes.nothrow~(),
+        worker       : attributes.worker~(),
+        deprecated   : attributes.deprecated~()
+    }}
 
-attach Function to FieldArguments
-    #alwaysinline
-    def arguments~(function Function) Array
-        return function.typeGetItem(3)
-
-    #alwaysinline
-    def arguments`(write function Function, new Array) Array
-        return function.typePut(3, new)
-
-attach Function to FieldResultType
-    #alwaysinline
-    def resultType~(function Function) OType
-        return function.typeGetItem(4)
-
-    #alwaysinline
-    def resultType`(write function Function, new <>OType) <>OType
-        return function.typePut(4, new)
-
-attach Function to FieldCode
-    #alwaysinline
-    def code~(function Function) Array
-        return function.typeGetItem(5)
-
-    #alwaysinline
-    def code`(write function Function, new Array) Array
-        return function.typePut(5, new)
-
-#alwaysinline
-def Function(attributes FAttributes, isExport Bool, name Token, arguments Array, resultType OType, code Array) Function
-    return Function.fromList({attributes, isExport, name, arguments, resultType, code})
+// The function gets the signature of the specified function.
+def getSignature(function Function) FSignature
+    var arguments Array = []
+    parse _, argument FArgument = function.arguments~()
+        arguments.addItem(FSArgument{{
+            access : argument.access~(),
+            type   : argument.type~()
+        }})
+    return FSignature{{
+        coordinates : function.name~().replaceText("("),
+        arguments   : arguments,
+        resultType  : function.resultType~()
+    }}
 
 // The function partially compiles the function that is determined when the type is added to the group.
-#alwaysinline
 def precompileAttachmentFunction(function Function, write compiledData CData, type CType, group CGroup)
-    if function.attributes~().worker?()
+    if function.attributes~().worker~()
         errorFunctionCannotBeAWorker(function.name~())
     if !group.functions~()[function.name~().text~()]
         errorNoFunctionInGroup(function.name~(), group.fullName~())
-    const groupModule String = group.fullName~().split(':')[0]
-    var compiledFunction CFunction = compiledData.borrowFunction(function.name~().replaceText(groupModule + "::" +function.name~().text~()))
+    const groupModule String = group.fullName~()[:group.fullName~().look(':')]
+    var compiledFunction CFunction = compiledData.getFunction(function.name~().replaceText(groupModule + "::" + function.name~().text~()), false)
     var groupsFunctions GroupsFunctions = compiledFunction.finalFunction`(nothing)
     const requireFunction SimpleFunction = groupsFunctions.functions~()["-"]
-    const functionSignature FSignature = function.getSignature().toFull(compiledData)
-    const requireFunctionSignature FSignature = requireFunction.signature~().replaceThisType(type.fullName~())
-    functionSignature.signatureCompatible!(requireFunctionSignature, compiledData)
-    if function.attributes~().nothrow?()
-        const arguments Array = functionSignature.arguments~()
-        parse _, argument = arguments
+    const functionSignature CFSignature = function.getSignature().compileFSignature(compiledData)
+    const requireFunctionSignature CFSignature = requireFunction.signature~().replaceThisType(type.fullName~())
+    functionSignature.signatureCompatible!(requireFunctionSignature, compiledData, function.name~())
+    if function.attributes~().nothrow~()
+        parse _, argument CFSArgument = functionSignature.arguments~()
             if !(argument.type~().anyType?() || argument.type~().simple?())
                 errorNothrowOnInvalidFunction(function.name~())
-    var functions Map = groupsFunctions.functions`(nothing)
-    functions.put(type.fullName~(), SimpleFunction(function.attributes~(), functionSignature, "", true))
+    var functions Map = groupsFunctions.functions`(Map())
+    functions.put(type.fullName~(), SimpleFunction{{
+        attributes            : function.attributes~().compileFAttributes(),
+        signature             : functionSignature,
+        ir                    : "",
+        irFirstRegisterNumber : 0,
+        fromCurrentModule     : true,
+        docComment            : function.docComment~()
+    }})
     groupsFunctions.functions`(functions)
     compiledFunction.finalFunction`(groupsFunctions)
-    compiledData.refitFunction(compiledFunction)
+    compiledData.updateFunction(compiledFunction)
 
 // A function partially compiles a function that is defined as part of a group but has an implementation.
-#alwaysinline
 def precompileDefaultFunction(function Function, write compiledData CData)
-    if function.attributes~().worker?()
-        errorFunctionCannotBeAWorker(function.name~())
-    const functionSignature FSignature = function.getSignature().toFull(compiledData)
-    functionSignature.this!()
-    var mapWithDefaultFunction Map = Map()
-    mapWithDefaultFunction.put("+", SimpleFunction(function.attributes~(), functionSignature, "", true))
     var groupsFullNames Array = []
     do
-        var allGroups Array = []
-        parse _, groupName = function.attributes~().this~()
+        var groups Array = []
+        parse _, groupName Token = function.attributes~().this~()
             const group CGroup = compiledData.getGroup(groupName, false)
             const groupFullName String = group.fullName~()
             if groupsFullNames.contain?(groupFullName)
                 errorAlreadyExist(groupName, "group")
             groupsFullNames.addItem(groupFullName)
-            allGroups.addItem(group)
-        for :(firstIndex Int = 0) firstIndex < allGroups.length~() - 1; firstIndex++
-            for :(secondIndex Int = firstIndex) secondIndex < allGroups.length~(); secondIndex++
-                const firstGroup CGroup = allGroups[firstIndex]
-                const secondGroup CGroup = allGroups[secondIndex]
+            groups.addItem(group)
+        for :(firstIndex Int = 0) firstIndex < groupsFullNames.length() - 1; firstIndex++
+            for :(secondIndex Int = firstIndex) secondIndex < groupsFullNames.length(); secondIndex++
+                const firstGroup CGroup = groups[firstIndex]
+                const secondGroup CGroup = groups[secondIndex]
                 if firstGroup.subGroups~()[secondGroup.fullName~()]
                     warningUnneededGroupInDefaultFunction(function.attributes~().this~()[secondIndex].replaceText(secondGroup.fullName~()), firstGroup.fullName~())
-    var allFunctions Map = compiledData.functions`(nothing)
+                if secondGroup.subGroups~()[firstGroup.fullName~()]
+                    warningUnneededGroupInDefaultFunction(function.attributes~().this~()[firstIndex].replaceText(firstGroup.fullName~()), secondGroup.fullName~())
+    if function.attributes~().worker~()
+        errorFunctionCannotBeAWorker(function.name~())
+    const functionSignature CFSignature = function.getSignature().compileFSignature(compiledData)
+    functionSignature.cfsHaveThis!(function.name~())
+    var allFunctions Map = compiledData.functions`(Map())
     var functionsWithSameName <>Map = allFunctions.put(function.name~().text~(), Map())
     if functionsWithSameName.nothing?()
         functionsWithSameName = Map()
-    if !functionsWithSameName.put{
-        (compiledData.currentModule~(),
-        CFunction(function.export?(), compiledData.currentModule~() + "::" + function.name~().text~(),
-        GroupsFunctions(groupsFullNames, mapWithDefaultFunction))).nothing?()
-    }
+    var mapWithDefaultFunction Map = Map()
+    mapWithDefaultFunction.put("+", SimpleFunction{{
+        attributes            : function.attributes~().compileFAttributes(),
+        signature             : functionSignature,
+        ir                    : "",
+        irFirstRegisterNumber : 0,
+        fromCurrentModule     : true,
+        docComment            : function.docComment~()
+    }})
+    if !functionsWithSameName.put(compiledData.currentModule~(), CFunction{{
+        isExport      : function.export?(),
+        fullName      : compiledData.currentModule~() + "::" + function.name~().text~(),
+        finalFunction : GroupsFunctions{groups : groupsFullNames, functions : mapWithDefaultFunction}
+    }}).nothing?()
         errorAlreadyExist(function.name~(), "function")
     allFunctions.put(function.name~().text~(), functionsWithSameName)
     compiledData.functions`(allFunctions)
 
 // A function partially compiles a function that overrides, for a particular type, a group-related function.
-#alwaysinline
 def precompileOverrideFunction(function Function, write compiledData CData)
-    if function.attributes~().worker?()
+    if function.attributes~().worker~()
         errorFunctionCannotBeAWorker(function.name~())
     var defaultFunctionName Token = function.attributes~().override~()
     defaultFunctionName.addString("::" + function.name~().text~())
-    var compiledFunction CFunction = compiledData.borrowFunction(defaultFunctionName)
+    var compiledFunction CFunction = compiledData.getFunction(defaultFunctionName, false)
     if !compiledFunction.finalFunction~().type?(GroupsFunctions)
         errorDefaultFunctionNotFound(defaultFunctionName)
     var groupsFunctions GroupsFunctions = compiledFunction.finalFunction`(nothing)
-    var groupsFunctionsMap Map = groupsFunctions.functions`(nothing)
-    var defaultFunction <>SimpleFunction = groupsFunctionsMap["+"]
+    var groupsFunctionsMap Map = groupsFunctions.functions`(Map())
+    const defaultFunction <>SimpleFunction = groupsFunctionsMap["+"]
     if defaultFunction.nothing?()
         errorDefaultFunctionNotFound(defaultFunctionName)
-    const fullSignature FSignature = function.getSignature().toFull(compiledData)
-    const thisTypeToken Token = fullSignature.getThisType(defaultFunction.signature~())
-    const thisType CType = compiledData.getType(thisTypeToken, false)
-    parse _, groupName = groupsFunctions.groups~()
+    const functionSignature CFSignature = function.getSignature().compileFSignature(compiledData)
+    const thisTypeName String = functionSignature.getThisType(defaultFunction.signature~(), function.name~())
+    const thisType CType = compiledData.getType(const::emptyToken.replaceText(thisTypeName), false)
+    parse _, groupName String = groupsFunctions.groups~()
         if !thisType.groups~()[groupName]
-            errorTypeNotInGroup(thisTypeToken, groupName)
-    fullSignature.signatureCompatible!(defaultFunction.signature~().replaceThisType(thisTypeToken.text~()), compiledData)
-    if function.attributes~().nothrow?()
-        const arguments Array = fullSignature.arguments~()
-        parse _, argument = arguments
+            errorTypeNotInGroup(function.name~().replaceText(thisTypeName), groupName)
+    functionSignature.signatureCompatible!(defaultFunction.signature~().replaceThisType(thisTypeName), compiledData, function.name~())
+    if function.attributes~().nothrow~()
+        parse _, argument CFSArgument = functionSignature.arguments~()
             if !(argument.type~().anyType?() || argument.type~().simple?())
                 errorNothrowOnInvalidFunction(function.name~())
-    if !groupsFunctionsMap.put(thisType.fullName~(), SimpleFunction(function.attributes~(), fullSignature, "", true)).nothing?()
+    if !groupsFunctionsMap.put(thisTypeName, SimpleFunction{{
+        attributes            : function.attributes~().compileFAttributes(),
+        signature             : functionSignature,
+        ir                    : "",
+        irFirstRegisterNumber : 0,
+        fromCurrentModule     : true,
+        docComment            : function.docComment~()
+    }}).nothing?()
         errorAlreadyExist(function.name~(), "function")
     groupsFunctions.functions`(groupsFunctionsMap)
     compiledFunction.finalFunction`(groupsFunctions)
-    compiledData.refitFunction(compiledFunction)
+    compiledData.updateFunction(compiledFunction)
 
 // The function partially compiles a function that does not in any way belong to any group.
-#alwaysinline
 def precompileSimpleFunction(function Function, write compiledData CData)
-    const functionSignature FSignature = function.getSignature().toFull(compiledData)
+    const functionSignature CFSignature = function.getSignature().compileFSignature(compiledData)
     const functionArguments Array = functionSignature.arguments~()
-    if {
-        function.attributes~().worker?() &&
-        !(
-            functionArguments.length~() == 2 &&
-            functionArguments[0].type~().simple?() &&
-            functionArguments[1].type~().simple?() &&
-            !functionArguments[0].type~().optional?() &&
-            !functionArguments[1].type~().optional?() &&
-            functionArguments[0].type~().type~().text~() == "STD::PipelineOut" &&
-            functionArguments[1].type~().type~().text~() == "STD::PipelineIn" &&
-            functionArguments[0].access~() == enum::access_read &&
-            functionArguments[1].access~() == enum::access_read &&
+    if function.attributes~().worker~()
+        const firstArgument CFSArgument = functionArguments[0]
+        const secondArgument CFSArgument = functionArguments[1]
+        if !({
+            functionArguments.length() == 2 &&
+            firstArgument.type~().simple?() && secondArgument.type~().simple?() &&
+            !(firstArgument.type~().optional?() || secondArgument.type~().optional?()) &&
+            firstArgument.type~().type~() == "STD::PipelineOut" && secondArgument.type~().type~() == "STD::PipelineIn" &&
+            firstArgument.access~() == Access[read] && secondArgument.access~() == Access[read] &&
             functionSignature.resultType~().nothingType?()
-        )
-    }
-        errorFunctionCannotBeAWorker(function.name~())
-    elif function.attributes~().nothrow?()
-        parse _, argument = functionArguments
+        })
+            errorFunctionCannotBeAWorker(function.name~())
+    elif function.attributes~().nothrow~()
+        parse _, argument CFSArgument = functionArguments
             if !(argument.type~().anyType?() || argument.type~().simple?())
                 errorNothrowOnInvalidFunction(function.name~())
-    var allFunctions Map = compiledData.functions`(nothing)
+    var allFunctions Map = compiledData.functions`(Map())
     var functionsWithSameName <>Map = allFunctions.put(function.name~().text~(), Map())
     if functionsWithSameName.nothing?()
         functionsWithSameName = Map()
-    if !functionsWithSameName.put{
-        (compiledData.currentModule~(),
-        CFunction(function.export?(), compiledData.currentModule~() + "::" + function.name~().text~(),
-        SimpleFunction(function.attributes~(), functionSignature, "", true))).nothing?()
-    }
+    if !functionsWithSameName.put(compiledData.currentModule~(), CFunction{{
+        isExport      : function.export?(),
+        fullName      : compiledData.currentModule~() + "::" + function.name~().text~(),
+        finalFunction : SimpleFunction{
+            attributes            : function.attributes~().compileFAttributes(),
+            signature             : functionSignature,
+            ir                    : "",
+            irFirstRegisterNumber : 0,
+            fromCurrentModule     : true,
+            docComment            : function.docComment~()
+        }
+    }}).nothing?()
         errorAlreadyExist(function.name~(), "function")
     allFunctions.put(function.name~().text~(), functionsWithSameName)
     compiledData.functions`(allFunctions)
 
 // A function compiles a function that is defined when a type is added to a group.
-#alwaysinline
 def compileAttachmentFunction(function Function, write compiledData CData, type CType, group CGroup)
-    const groupModule String = group.fullName~().split(':')[0]
-    const fullFunctionName String = groupModule + "::" +function.name~().text~()
-    var typeFunction SimpleFunction = compiledData.getFunction(function.name~().replaceText(fullFunctionName), false).finalFunction~().functions~()[type.fullName~()]
-    var codeData CodeData = CodeData{
-        (fullFunctionName + " (" + type.fullName~() + ")" /*functionNameForErrorMessage*/,
-        Set() /*allThisGroups*/,
-        typeFunction.signature~().resultType~() /*resultType*/,
-        Map() /*namedOperands*/,
-        1 /*level*/,
-        1 /*registerCounter*/,
-        Map() /*endLabels*/,
-        Map() /*nextLabels*/,
-        Map() /*fallthroughLabels*/,
-        [] /*catchLabels*/,
-        [] /*allocs*/,
-        [] /*unneededAllocs*/,
-        typeFunction.attributes~().nothrow?() /*ownerNoThrow*/,
-        "" /*defaultFunctionName*/,
-        type.fullName~() /*thisTypeName*/)
-    }
-    var llvmIR String = ""
-    typeFunction.signature~().arguments~().runtimeCheckFunctionArguments(codeData, llvmIR)
-    if function.code~()[0].line~()[0].text~() == "llvm" && function.code~()[0].line~()[0].fileName~().empty?()
-        const llvmLines Array = function.code~()[0].line~()
-        for :(index Int = 1) index < llvmLines.length~(); index++
-            llvmIR += "\t" + llvmLines[index].text~() + "\n"
+    const groupModule String = group.fullName~()[:group.fullName~().look(':')]
+    const fullFunctionName String = groupModule + "::" + function.name~().text~()
+    var typeFunction SimpleFunction = compiledData.getFunction(function.name~().replaceText(fullFunctionName), false).finalFunction~().type!(GroupsFunctions).functions~()[type.fullName~()]
+    var codeData CodeData = CodeData{{
+        functionNameForErrorMessage : fullFunctionName + " (" + type.fullName~() + ")",
+        allThisGroups               : Set(),
+        resultType                  : typeFunction.signature~().resultType~(),
+        namedOperands               : Map(),
+        level                       : 1,
+        registerCounter             : 0,
+        endLabels                   : Map(),
+        nextLabels                  : Map(),
+        fallthroughLabels           : Map(),
+        catchLabels                 : [],
+        newVariableNumber           : typeFunction.signature~().arguments~().length() + 3,
+        errorVariableRegister       : "",
+        unusedVariables             : [],
+        ownerNoThrow                : typeFunction.attributes~().nothrow~(),
+        defaultFunctionName         : "",
+        thisTypeRegister            : "",
+        threadDataRegister          : "%" + typeFunction.signature~().arguments~().length().toString(),
+        overridedThisType           : type.fullName~(),
+        changingVariables           : Set()
+    }}
+    var ir String = ""
+    runtimeCheckFunctionArguments(typeFunction.signature~().arguments~(), typeFunction.signature~().arguments~().length() + 1, codeData, ir)
+    if function.code~()[0].type!(Block).line~()[0].type!(Token).text~() == "IR" && function.code~()[0].type!(Block).line~()[0].type!(Token).fileName~().empty?()
+        const irCode Array = function.code~()[0].type!(Block).line~()
+        for :(index Int = 1) index < irCode.length(); index++
+            ir += "\t" + irCode[index].type!(Token).text~() + "\n"
     else
-        var namedOperands Map = Map()
-        const arguments Array = typeFunction.signature~().arguments~()
-        parse index, argument = arguments
-            const argumentOperand Operand = Operand{
-                (function.arguments~()[index].name~(),
-                argument.access~(),
-                "%" + index.toString(),
-                argument.type~(),
-                false, true, true, true, false)
-            }
-            namedOperands.put(argumentOperand.code~().text~(), NamedOperand(0, argumentOperand))
-        codeData.namedOperands`(namedOperands)
-        namedOperands = Map()
-        const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, llvmIR)
-        llvmIR = "\t%##nreg##0## = alloca [2 x i64], align 8\n" + codeData.allocsToIR() + llvmIR
+        do
+            var namedOperands Map = Map()
+            parse index, argument CFSArgument = typeFunction.signature~().arguments~()
+                const argumentName Token = function.arguments~()[index].type!(FArgument).name~()
+                namedOperands.put(argumentName.text~(), NamedOperand{{
+                    level   : 0,
+                    operand : Operand{
+                        code          : argumentName,
+                        access        : argument.access~(),
+                        value         : "%" + index.toString(),
+                        type          : argument.type~(),
+                        isConstant    : false,
+                        isNamed       : true,
+                        isArgument    : true,
+                        isGlobalConst : false
+                    },
+                    isUsed  : true
+                }})
+            codeData.namedOperands`(namedOperands)
+        const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, ir)
+        ir = createIRVariables(codeData, typeFunction.signature~().arguments~().length() + 3) + ir
         if !lastIsTerminator
-            var irPart String = ""
-            codeData.freeLevel(1, compiledData, irPart)
-            if typeFunction.signature~().resultType~().nothingType?()
-                irPart += "\tret [2 x i64] zeroinitializer\n"
-            else
-                irPart += "\tret [2 x i64] " + createError("1", "The function did not return any value.\\n<- " + codeData.functionNameForErrorMessage~()) + "\n"
-            llvmIR += irPart
-        codeData.allOperandsUsed!()
-    llvmIR.sharRegistersToLLVMRegisters(typeFunction.signature~().arguments~().length~() + 1, function.name~())
-    var compiledFunction CFunction = compiledData.borrowFunction(function.name~().replaceText(fullFunctionName))
+            codeData.freeLevel(1, compiledData, ir)
+            irReturn(typeFunction.signature~().resultType~().nothingType?().select({
+                const::irNothing,
+                irErrorFunctionNoReturnValue(codeData, ir)
+            }), ir)
+        codeData.deleteLevel(1)
+    typeFunction.ir`(ir)
+    typeFunction.irFirstRegisterNumber`(codeData.newVariableNumber~())
+    var compiledFunction CFunction = compiledData.getFunction(function.name~().replaceText(fullFunctionName), false)
     var groupsFunctions GroupsFunctions = compiledFunction.finalFunction`(nothing)
-    var functions Map = groupsFunctions.functions`(nothing)
-    typeFunction = functions.put(type.fullName~(), SimpleFunction.fromList({}))
-    typeFunction.llvmIR`(llvmIR)
+    var functions Map = groupsFunctions.functions`(Map())
     functions.put(type.fullName~(), typeFunction)
     groupsFunctions.functions`(functions)
     compiledFunction.finalFunction`(groupsFunctions)
-    compiledData.refitFunction(compiledFunction)
+    compiledData.updateFunction(compiledFunction)
 
 // A function compiles a function that is defined as part of a group but has an implementation.
-#alwaysinline
 def compileDefaultFunction(function Function, write compiledData CData)
     const fullFunctionName String = compiledData.currentModule~() + "::" +function.name~().text~()
-    var defaultFunction SimpleFunction = compiledData.getFunction(function.name~().replaceText(fullFunctionName), false).finalFunction~().functions~()["+"]
+    var defaultFunction SimpleFunction = compiledData.getFunction(function.name~().replaceText(fullFunctionName), false).finalFunction~().type!(GroupsFunctions).functions~()["+"]
     var allThisGroups Set = Set()
-    parse _, mainThisGroupName = function.attributes~().this~()
+    parse _, mainThisGroupName Token = function.attributes~().this~()
         const mainThisGroup CGroup = compiledData.getGroup(mainThisGroupName, false)
-        parse _, subThisGroupName = mainThisGroup.subGroups~()
+        parse _, subThisGroupName String = mainThisGroup.subGroups~()
             allThisGroups.add(subThisGroupName)
         allThisGroups.add(mainThisGroup.fullName~())
     var memoryManagerFunction Bool = false
@@ -281,202 +351,523 @@ def compileDefaultFunction(function Function, write compiledData CData)
         switch function.name~().text~()
         case "shar__rc_use", "shar__rc_free", "shar__to_const"
             memoryManagerFunction = true
-    var codeData CodeData = CodeData{
-        (compiledData.currentModule~() + "::" + function.name~().text~()  + " (@)" /*functionNameForErrorMessage*/,
-        allThisGroups /*allThisGroups*/,
-        defaultFunction.signature~().resultType~() /*resultType*/,
-        Map() /*namedOperands*/,
-        1 /*level*/,
-        1 /*registerCounter*/,
-        Map() /*endLabels*/,
-        Map() /*nextLabels*/,
-        Map() /*fallthroughLabels*/,
-        [] /*catchLabels*/,
-        [] /*allocs*/,
-        [] /*unneededAllocs*/,
-        memoryManagerFunction /*ownerNoThrow*/,
-        "" /*defaultFunctionName*/,
-        "" /*thisTypeName*/)
-    }
-    var llvmIR String = ""
-    memoryManagerFunction.select("", defaultFunction.signature~().arguments~().runtimeCheckFunctionArguments(codeData, llvmIR))
-    if function.code~()[0].line~()[0].text~() == "llvm" && function.code~()[0].line~()[0].fileName~().empty?()
-        const llvmLines Array = function.code~()[0].line~()
-        for :(index Int = 1) index < llvmLines.length~(); index++
-            llvmIR += "\t" + llvmLines[index].text~() + "\n"
+    var codeData CodeData = CodeData{{
+        functionNameForErrorMessage : compiledData.currentModule~() + "::" + function.name~().text~(),
+        allThisGroups               : allThisGroups,
+        resultType                  : defaultFunction.signature~().resultType~(),
+        namedOperands               : Map(),
+        level                       : 1,
+        registerCounter             : 0,
+        endLabels                   : Map(),
+        nextLabels                  : Map(),
+        fallthroughLabels           : Map(),
+        catchLabels                 : [],
+        newVariableNumber           : defaultFunction.signature~().arguments~().length() + 3,
+        errorVariableRegister       : "",
+        unusedVariables             : [],
+        ownerNoThrow                : memoryManagerFunction,
+        defaultFunctionName         : "",
+        thisTypeRegister            : "",
+        threadDataRegister          : "%" + defaultFunction.signature~().arguments~().length().toString(),
+        overridedThisType           : "",
+        changingVariables           : Set()
+    }}
+    var ir String = ""
+    runtimeCheckFunctionArguments(defaultFunction.signature~().arguments~(), defaultFunction.signature~().arguments~().length() + 1, codeData, ir)
+    if function.code~()[0].type!(Block).line~()[0].type!(Token).text~() == "IR" && function.code~()[0].type!(Block).line~()[0].type!(Token).fileName~().empty?()
+        const irCode Array = function.code~()[0].type!(Block).line~()
+        for :(index Int = 1) index < irCode.length(); index++
+            ir += "\t" + irCode[index].type!(Token).text~() + "\n"
     else
-        var namedOperands Map = Map()
-        const arguments Array = defaultFunction.signature~().arguments~()
-        parse index, argument = arguments
-            const argumentOperand Operand = Operand{
-                (function.arguments~()[index].name~(),
-                argument.access~(),
-                "%" + index.toString(),
-                argument.type~(),
-                false, true, true, true, false)
-            }
-            namedOperands.put(argumentOperand.code~().text~(), NamedOperand(0, argumentOperand))
-        codeData.namedOperands`(namedOperands)
-        namedOperands = Map()
-        const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, llvmIR)
-        llvmIR = "\t%##nreg##0## = alloca [2 x i64], align 8\n" + codeData.allocsToIR() + llvmIR
+        do
+            var namedOperands Map = Map()
+            parse index, argument CFSArgument = defaultFunction.signature~().arguments~()
+                const argumentName Token = function.arguments~()[index].type!(FArgument).name~()
+                namedOperands.put(argumentName.text~(), NamedOperand{{
+                    level   : 0,
+                    operand : Operand{
+                        code          : argumentName,
+                        access        : argument.access~(),
+                        value         : "%" + index.toString(),
+                        type          : argument.type~(),
+                        isConstant    : false,
+                        isNamed       : true,
+                        isArgument    : true,
+                        isGlobalConst : false
+                    },
+                    isUsed  : true
+                }})
+            codeData.namedOperands`(namedOperands)
+        const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, ir)
+        ir = createIRVariables(codeData, defaultFunction.signature~().arguments~().length() + 3) + ir
         if !lastIsTerminator
-            var irPart String = ""
-            codeData.freeLevel(1, compiledData, irPart)
-            if defaultFunction.signature~().resultType~().nothingType?()
-                irPart += "\tret [2 x i64] zeroinitializer\n"
-            else
-                irPart += "\tret [2 x i64] " + createError("1", "The function did not return any value.\\n<- " + codeData.functionNameForErrorMessage~()) + "\n"
-            llvmIR += irPart
-        codeData.allOperandsUsed!()
-    llvmIR.sharRegistersToLLVMRegisters(defaultFunction.signature~().arguments~().length~() + 1, function.name~())
-    var compiledFunction CFunction = compiledData.borrowFunction(function.name~().replaceText(fullFunctionName))
+            codeData.freeLevel(1, compiledData, ir)
+            irReturn(defaultFunction.signature~().resultType~().nothingType?().select({
+                const::irNothing,
+                irErrorFunctionNoReturnValue(codeData, ir)
+            }), ir)
+        codeData.deleteLevel(1)
+    defaultFunction.ir`(ir)
+    defaultFunction.irFirstRegisterNumber`(codeData.newVariableNumber~())
+    var compiledFunction CFunction = compiledData.getFunction(function.name~().replaceText(fullFunctionName), false)
     var groupsFunctions GroupsFunctions = compiledFunction.finalFunction`(nothing)
-    var functions Map = groupsFunctions.functions`(nothing)
-    defaultFunction = functions.put("+", SimpleFunction.fromList({}))
-    defaultFunction.llvmIR`(llvmIR)
+    var functions Map = groupsFunctions.functions`(Map())
     functions.put("+", defaultFunction)
     groupsFunctions.functions`(functions)
     compiledFunction.finalFunction`(groupsFunctions)
-    compiledData.refitFunction(compiledFunction)
+    compiledData.updateFunction(compiledFunction)
 
 // A function compiles a function that overrides, for a particular type, a group-related function.
-#alwaysinline
 def compileOverrideFunction(function Function, write compiledData CData)
-    const fullFunctionName String = function.attributes~().override~().text~() + "::" +function.name~().text~()
-    var functions Map = compiledData.getFunction(function.name~().replaceText(fullFunctionName), false).finalFunction~().functions~()
+    const fullFunctionName String = function.attributes~().override~().text~() + "::" + function.name~().text~()
+    var functions Map = compiledData.getFunction(function.name~().replaceText(fullFunctionName), false).finalFunction~().type!(GroupsFunctions).functions~()
     const defaultFunction SimpleFunction = functions["+"]
-    const typeFullName String = compiledData.getType(function.getSignature().getThisType(defaultFunction.signature~()), false).fullName~()
+    const typeFullName String = compiledData.getType(const::emptyToken.replaceText(function.getSignature().compileFSignature(compiledData).getThisType(defaultFunction.signature~(), function.name~())), false).fullName~()
     var typeFunction SimpleFunction = functions[typeFullName]
     var memoryManagerFunction Bool = false
     if function.attributes~().override~().text~() == "STD"
         switch function.name~().text~()
         case "shar__rc_use", "shar__rc_free", "shar__to_const"
             memoryManagerFunction = true
-    var codeData CodeData = CodeData{
-        (fullFunctionName + " (" + typeFullName + ")" /*functionNameForErrorMessage*/,
-        Set() /*allThisGroups*/,
-        typeFunction.signature~().resultType~() /*resultType*/,
-        Map() /*namedOperands*/,
-        1 /*level*/,
-        1 /*registerCounter*/,
-        Map() /*endLabels*/,
-        Map() /*nextLabels*/,
-        Map() /*fallthroughLabels*/,
-        [] /*catchLabels*/,
-        [] /*allocs*/,
-        [] /*unneededAllocs*/,
-        typeFunction.attributes~().nothrow?() || memoryManagerFunction /*ownerNoThrow*/,
-        fullFunctionName /*defaultFunctionName*/,
-        typeFullName /*thisTypeName*/)
-    }
-    var llvmIR String = ""
-    memoryManagerFunction.select("", typeFunction.signature~().arguments~().runtimeCheckFunctionArguments(codeData, llvmIR))
-    if function.code~()[0].line~()[0].text~() == "llvm" && function.code~()[0].line~()[0].fileName~().empty?()
-        const llvmLines Array = function.code~()[0].line~()
-        for :(index Int = 1) index < llvmLines.length~(); index++
-            llvmIR += "\t" + llvmLines[index].text~() + "\n"
+    var codeData CodeData = CodeData{{
+        functionNameForErrorMessage : fullFunctionName + " (" + typeFullName + ")",
+        allThisGroups               : Set(),
+        resultType                  : typeFunction.signature~().resultType~(),
+        namedOperands               : Map(),
+        level                       : 1,
+        registerCounter             : 0,
+        endLabels                   : Map(),
+        nextLabels                  : Map(),
+        fallthroughLabels           : Map(),
+        catchLabels                 : [],
+        newVariableNumber           : typeFunction.signature~().arguments~().length() + 3,
+        errorVariableRegister       : "",
+        unusedVariables             : [],
+        ownerNoThrow                : typeFunction.attributes~().nothrow~() || memoryManagerFunction,
+        defaultFunctionName         : fullFunctionName,
+        thisTypeRegister            : "",
+        threadDataRegister          : "%" + typeFunction.signature~().arguments~().length().toString(),
+        overridedThisType           : typeFullName,
+        changingVariables           : Set()
+    }}
+    var ir String = ""
+    if !memoryManagerFunction
+        runtimeCheckFunctionArguments(typeFunction.signature~().arguments~(), typeFunction.signature~().arguments~().length() + 1, codeData, ir)
+    if function.code~()[0].type!(Block).line~()[0].type!(Token).text~() == "IR" && function.code~()[0].type!(Block).line~()[0].type!(Token).fileName~().empty?()
+        const irCode Array = function.code~()[0].type!(Block).line~()
+        for :(index Int = 1) index < irCode.length(); index++
+            ir += "\t" + irCode[index].type!(Token).text~() + "\n"
     else
-        var namedOperands Map = Map()
-        const arguments Array = typeFunction.signature~().arguments~()
-        parse index, argument = arguments
-            const argumentOperand Operand = Operand{
-                (function.arguments~()[index].name~(),
-                argument.access~(),
-                "%" + index.toString(),
-                argument.type~(),
-                false, true, true, true, false)
-            }
-            namedOperands.put(argumentOperand.code~().text~(), NamedOperand(0, argumentOperand))
-        codeData.namedOperands`(namedOperands)
-        namedOperands = Map()
-        const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, llvmIR)
-        llvmIR = "\t%##nreg##0## = alloca [2 x i64], align 8\n" + codeData.allocsToIR() + llvmIR
+        do
+            var namedOperands Map = Map()
+            parse index, argument CFSArgument = typeFunction.signature~().arguments~()
+                const argumentName Token = function.arguments~()[index].type!(FArgument).name~()
+                namedOperands.put(argumentName.text~(), NamedOperand{{
+                    level   : 0,
+                    operand : Operand{
+                        code          : argumentName,
+                        access        : argument.access~(),
+                        value         : "%" + index.toString(),
+                        type          : argument.type~(),
+                        isConstant    : false,
+                        isNamed       : true,
+                        isArgument    : true,
+                        isGlobalConst : false
+                    },
+                    isUsed  : true
+                }})
+            codeData.namedOperands`(namedOperands)
+        const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, ir)
+        ir = createIRVariables(codeData, typeFunction.signature~().arguments~().length() + 3) + ir
         if !lastIsTerminator
-            var irPart String = ""
-            codeData.freeLevel(1, compiledData, irPart)
-            if typeFunction.signature~().resultType~().nothingType?()
-                irPart += "\tret [2 x i64] zeroinitializer\n"
-            else
-                irPart += "\tret [2 x i64] " + createError("1", "The function did not return any value.\\n<- " + codeData.functionNameForErrorMessage~()) + "\n"
-            llvmIR += irPart
-        codeData.allOperandsUsed!()
-    llvmIR.sharRegistersToLLVMRegisters(typeFunction.signature~().arguments~().length~() + 1, function.name~())
-    var compiledFunction CFunction = compiledData.borrowFunction(function.name~().replaceText(fullFunctionName))
+            codeData.freeLevel(1, compiledData, ir)
+            irReturn(typeFunction.signature~().resultType~().nothingType?().select({
+                const::irNothing,
+                irErrorFunctionNoReturnValue(codeData, ir)
+            }), ir)
+        codeData.deleteLevel(1)
+    typeFunction.ir`(ir)
+    typeFunction.irFirstRegisterNumber`(codeData.newVariableNumber~())
+    var compiledFunction CFunction = compiledData.getFunction(function.name~().replaceText(fullFunctionName), false)
     var groupsFunctions GroupsFunctions = compiledFunction.finalFunction`(nothing)
-    functions = groupsFunctions.functions`(nothing)
-    typeFunction = functions.put(typeFullName, SimpleFunction.fromList({}))
-    typeFunction.llvmIR`(llvmIR)
+    functions = groupsFunctions.functions`(Map())
     functions.put(typeFullName, typeFunction)
     groupsFunctions.functions`(functions)
     compiledFunction.finalFunction`(groupsFunctions)
-    compiledData.refitFunction(compiledFunction)
+    compiledData.updateFunction(compiledFunction)
 
 // A function compiles a function that does not in any way belong to any group.
-#alwaysinline
 def compileSimpleFunction(function Function, write compiledData CData)
-    const fullFunctionName String = compiledData.currentModule~() + "::" +function.name~().text~()
+    const fullFunctionName String = compiledData.currentModule~() + "::" + function.name~().text~()
     var simpleFunction SimpleFunction = compiledData.getFunction(function.name~().replaceText(fullFunctionName), false).finalFunction~()
-    var codeData CodeData = CodeData{
-        (fullFunctionName /*functionNameForErrorMessage*/,
-        Set() /*allThisGroups*/,
-        simpleFunction.signature~().resultType~() /*resultType*/,
-        Map() /*namedOperands*/,
-        1 /*level*/,
-        1 /*registerCounter*/,
-        Map() /*endLabels*/,
-        Map() /*nextLabels*/,
-        Map() /*fallthroughLabels*/,
-        [] /*catchLabels*/,
-        [] /*allocs*/,
-        [] /*unneededAllocs*/,
-        simpleFunction.attributes~().nothrow?() /*ownerNoThrow*/,
-        "" /*defaultFunctionName*/,
-        "" /*thisTypeName*/)
-    }
-    var llvmIR String = ""
-    simpleFunction.signature~().arguments~().runtimeCheckFunctionArguments(codeData, llvmIR)
-    if function.code~()[0].line~()[0].text~() == "llvm" && function.code~()[0].line~()[0].fileName~().empty?()
-        const llvmLines Array = function.code~()[0].line~()
-        for :(index Int = 1) index < llvmLines.length~(); index++
-            llvmIR += "\t" + llvmLines[index].text~() + "\n"
+    var codeData CodeData = CodeData{{
+        functionNameForErrorMessage : fullFunctionName,
+        allThisGroups               : Set(),
+        resultType                  : simpleFunction.signature~().resultType~(),
+        namedOperands               : Map(),
+        level                       : 1,
+        registerCounter             : 0,
+        endLabels                   : Map(),
+        nextLabels                  : Map(),
+        fallthroughLabels           : Map(),
+        catchLabels                 : [],
+        newVariableNumber           : simpleFunction.signature~().arguments~().length() + 3,
+        errorVariableRegister       : "",
+        unusedVariables             : [],
+        ownerNoThrow                : simpleFunction.attributes~().nothrow~(),
+        defaultFunctionName         : "",
+        thisTypeRegister            : "",
+        threadDataRegister          : "%" + simpleFunction.signature~().arguments~().length().toString(),
+        overridedThisType           : "",
+        changingVariables           : Set()
+    }}
+    var ir String = ""
+    runtimeCheckFunctionArguments(simpleFunction.signature~().arguments~(), simpleFunction.signature~().arguments~().length() + 1, codeData, ir)
+    if function.code~()[0].type!(Block).line~()[0].type!(Token).text~() == "IR" && function.code~()[0].type!(Block).line~()[0].type!(Token).fileName~().empty?()
+        const irCode Array = function.code~()[0].type!(Block).line~()
+        for :(index Int = 1) index < irCode.length(); index++
+            ir += "\t" + irCode[index].type!(Token).text~() + "\n"
     else
-        var namedOperands Map = Map()
-        const arguments Array = simpleFunction.signature~().arguments~()
-        parse index, argument = arguments
-            const argumentOperand Operand = Operand{
-                (function.arguments~()[index].name~(),
-                argument.access~(),
-                "%" + index.toString(),
-                argument.type~(),
-                false, true, true, true, false)
-            }
-            namedOperands.put(argumentOperand.code~().text~(), NamedOperand(0, argumentOperand))
-        codeData.namedOperands`(namedOperands)
-        namedOperands = Map()
-        const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, llvmIR)
-        llvmIR = "\t%##nreg##0## = alloca [2 x i64], align 8\n" + codeData.allocsToIR() + llvmIR
+        do
+            var namedOperands Map = Map()
+            parse index, argument CFSArgument = simpleFunction.signature~().arguments~()
+                const argumentName Token = function.arguments~()[index].type!(FArgument).name~()
+                namedOperands.put(argumentName.text~(), NamedOperand{{
+                    level   : 0,
+                    operand : Operand{
+                        code          : argumentName,
+                        access        : argument.access~(),
+                        value         : "%" + index.toString(),
+                        type          : argument.type~(),
+                        isConstant    : false,
+                        isNamed       : true,
+                        isArgument    : true,
+                        isGlobalConst : false
+                    },
+                    isUsed  : true
+                }})
+            codeData.namedOperands`(namedOperands)
+        const lastIsTerminator Bool = function.code~().compileCode(codeData, compiledData, ir)
+        ir = createIRVariables(codeData, simpleFunction.signature~().arguments~().length() + 3) + ir
         if !lastIsTerminator
-            var irPart String = ""
-            codeData.freeLevel(1, compiledData, irPart)
-            if simpleFunction.signature~().resultType~().nothingType?()
-                irPart += "\tret [2 x i64] zeroinitializer\n"
-            else
-                irPart += "\tret [2 x i64] " + createError("1", "The function did not return any value.\\n<- " + codeData.functionNameForErrorMessage~()) + "\n"
-            llvmIR += irPart
-        codeData.allOperandsUsed!()
-    llvmIR.sharRegistersToLLVMRegisters(simpleFunction.signature~().arguments~().length~() + 1, function.name~())
-    var compiledFunction CFunction = compiledData.borrowFunction(function.name~().replaceText(fullFunctionName))
-    simpleFunction = compiledFunction.finalFunction`(nothing)
-    simpleFunction.llvmIR`(llvmIR)
+            codeData.freeLevel(1, compiledData, ir)
+            irReturn(simpleFunction.signature~().resultType~().nothingType?().select({
+                const::irNothing,
+                irErrorFunctionNoReturnValue(codeData, ir)
+            }), ir)
+        codeData.deleteLevel(1)
+    simpleFunction.ir`(ir)
+    simpleFunction.irFirstRegisterNumber`(codeData.newVariableNumber~())
+    var compiledFunction CFunction = compiledData.getFunction(function.name~().replaceText(fullFunctionName), false)
     compiledFunction.finalFunction`(simpleFunction)
-    compiledData.refitFunction(compiledFunction)
+    compiledData.updateFunction(compiledFunction)
 
-// The function gets the signature of the specified function.
-#alwaysinline
-def getSignature(function Function) FSignature
-    var arguments Array = []
-    const functionArguments Array = function.arguments~()
-    parse _, argument = functionArguments
-        arguments.addItem(FSArgument(argument.access~(), argument.type~()))
-    return FSignature(function.name~().replaceText("("), arguments, function.resultType~())
+// The function calls a function with the specified name and arguments.
+#noinline
+def callFunction(functionName Token, arguments Array, write codeData CodeData, compiledData CData, freedOnError Array, needFreeArguments, ignoreExport Bool, write ir String) Operand
+    const isSuperFunction Bool = functionName.text~() == "super"
+    if isSuperFunction && codeData.defaultFunctionName~().empty?()
+        errorNotFound(functionName, "function")
+    const function CFunction = compiledData.getFunction(isSuperFunction.select(functionName.replaceText(codeData.defaultFunctionName~()), functionName), ignoreExport)
+    var resultType <>COType = nothing
+    var functionThisType <>COType = nothing
+    var typedFunction Bool = false
+    var argumentsFromSignature Array = []
+    var functionIsNoThrow Bool = false
+    var haveFinalSignature Bool = false
+    var isWorker Bool = false
+    tSwitch :(switch) function.finalFunction~()
+    case GroupsFunctions
+        const groupsFunctions GroupsFunctions = function.finalFunction~()
+        if isSuperFunction
+            const signature CFSignature = groupsFunctions.functions~()["+"].type!(SimpleFunction).signature~()
+            argumentsFromSignature = signature.arguments~()
+            resultType = signature.resultType~()
+            if arguments.length() != argumentsFromSignature.length()
+                errorWrongNumberOfArguments(functionName)
+            typedFunction = false
+            haveFinalSignature = true
+            functionThisType = COType{type: codeData.overridedThisType~(), isOptional: false}
+            end switch
+        var simpleFunction <>SimpleFunction = groupsFunctions.functions~()["-"]
+        if simpleFunction.nothing?()
+            simpleFunction = groupsFunctions.functions~()["+"]
+        if simpleFunction.attributes~().deprecated~()
+            warningFunctionDeprecated(functionName)
+        const signature CFSignature = simpleFunction.signature~()
+        argumentsFromSignature = signature.arguments~()
+        resultType = signature.resultType~()
+        if arguments.length() != argumentsFromSignature.length()
+            errorWrongNumberOfArguments(functionName)
+        var thisIndexInArguments <>Int = nothing
+        parse :(parse) index, argumentFromSignature CFSArgument = argumentsFromSignature
+            if argumentFromSignature.type~().this?()
+                const argument Operand = arguments[index]
+                if {
+                    argument.type~().simple?() &&
+                    !(
+                        (argumentFromSignature.type~().optional?() && argument.type~().nothingType?()) ||
+                        (argument.type~().optional?() && groupsFunctions.groups~() == const::anyType.type~())
+                    )
+                }
+                    thisIndexInArguments = index
+                    functionThisType = argument.type~()
+                    end parse
+        if thisIndexInArguments.nothing?()
+            var groupsSet Set = Set()
+            parse _, mainGroupName String = groupsFunctions.groups~()
+                parse _, subGroupName String = compiledData.getGroup(const::emptyToken.replaceText(mainGroupName), true).subGroups~()
+                    groupsSet.add(subGroupName)
+                groupsSet.add(mainGroupName)
+            var groupsArray Array = []
+            parse _, groupName String = groupsSet
+                groupsArray.addItem(groupName)
+            groupsArray.sort(true)
+            functionThisType = COType{type : groupsArray, isOptional : false}
+        elif !functionThisType.this?()
+            typedFunction = true
+            haveFinalSignature = true
+            if !(functionThisType.nothing?() || functionThisType.this?())
+                const thisType CType = compiledData.getType(const::emptyToken.replaceText(functionThisType.type~()), true)
+                parse _, groupName String = groupsFunctions.groups~()
+                    if !thisType.groups~()[groupName]
+                        errorTypeNotInGroup(arguments[thisIndexInArguments].type!(Operand).code~().replaceText(coTypeToString(functionThisType, true)), groupName)
+                const overridedFunction <>SimpleFunction = groupsFunctions.functions~()[thisType.fullName~()]
+                if !overridedFunction.nothing?()
+                    const overridedSignature CFSignature = overridedFunction.signature~()
+                    argumentsFromSignature = overridedSignature.arguments~()
+                    resultType = overridedSignature.resultType~()
+                    functionIsNoThrow = overridedFunction.attributes~().nothrow~()
+        if resultType.this?()
+            resultType.type`(functionThisType.type~())
+            if resultType.anyType?() || resultType.nothingType?()
+                resultType.isOptional`(false)
+    case SimpleFunction
+        haveFinalSignature = true
+        const simpleFunction SimpleFunction = function.finalFunction~()
+        const signature CFSignature = simpleFunction.signature~()
+        functionIsNoThrow = simpleFunction.attributes~().nothrow~()
+        isWorker = simpleFunction.attributes~().worker~()
+        argumentsFromSignature = signature.arguments~()
+        resultType = signature.resultType~()
+        if arguments.length() != argumentsFromSignature.length()
+            errorWrongNumberOfArguments(functionName)
+        if simpleFunction.attributes~().deprecated~()
+            warningFunctionDeprecated(functionName)
+    default
+        unreachable()
+    var memoryManagerFunction Bool = false
+    switch function.fullName~()
+    case "STD::shar__rc_free", "STD::shar__rc_use", "STD::shar__to_const"
+        memoryManagerFunction = true
+    var code Token = functionName
+    code.addChar('(')
+    var assumes String = ""
+    var notCheckArguments Bool = true
+    var irArguments Array = []
+    if !arguments.empty?()
+        parse index, argument Operand = arguments
+            code.addString(argument.code~().text~() + ", ")
+            var argumentFromSignature CFSArgument = argumentsFromSignature[index]
+            if argumentFromSignature.type~().this?()
+                argumentFromSignature.type`(functionThisType)
+            var argumentWithCorrectAccess <>Operand = nothing
+            eSwitch argumentFromSignature.access~()
+            case noread
+                argumentWithCorrectAccess = argument.toNoRead(codeData, ir)
+            case read
+                argumentWithCorrectAccess = argument.toReadOnly(codeData, ir)
+            case write
+                if argument.access~() != Access[write]
+                    errorWrongAccess(argument.code~(), "write", argument.access~().toString())
+                codeData.markVariableAsChanged(argument.code~().text~())
+                if argumentFromSignature.type~().optional?() && !(argument.type~().optional?() || argument.type~().anyType?() || argument.type~().nothingType?())
+                    errorWrongAccess(argument.code~(), "optional write", "write")
+                argumentWithCorrectAccess = argument
+                parse anotherIndex, anotherArgument Operand = arguments
+                    if anotherIndex != index && anotherArgument.named?() && anotherArgument.code~() == argument.code~() && argumentsFromSignature[anotherIndex].type!(CFSArgument).access~() != Access[noread]
+                        errorSameArgumentsInCall(anotherArgument.code~())
+            if notCheckArguments
+                if argumentFromSignature.type~().simple?()
+                    notCheckArguments = {
+                        ((argumentFromSignature.type~().typeEq?(argument.type~(), false) && (argumentFromSignature.type~().optional?() || !argument.type~().optional?())) ||
+                        (argumentFromSignature.type~().optional?() && argument.type~().nothingType?()))
+                    }
+                elif haveFinalSignature
+                    if argument.type~().simple?()
+                        if argument.type~().this?()
+                            notCheckArguments = argumentFromSignature.type~().this?() && (argumentFromSignature.type~().optional?() || !argument.type~().optional?())
+                        else
+                            const argumentTypeGroups Set = compiledData.getType(const::emptyToken.replaceText(argument.type~().type~()), true).groups~()
+                            parse :(parse) _, groupFromSignature String = argumentFromSignature.type~().type~()
+                                notCheckArguments = argumentTypeGroups[groupFromSignature]
+                                if !notCheckArguments
+                                    end parse
+                    else
+                        const argumentTypeGroups Array = argument.type~().type~()
+                        parse :(parse) _, groupFromSignature String = argumentFromSignature.type~().type~()
+                            notCheckArguments = !argumentTypeGroups.binarySearchString(groupFromSignature).nothing?()
+                            if !notCheckArguments
+                                end parse
+                else
+                    notCheckArguments = false
+            argument.typesCompatibleCheck(argumentFromSignature.type~(), codeData, compiledData)
+            if argumentWithCorrectAccess.type~().simple?() && !argumentWithCorrectAccess.Main::constant?()
+                const irArgumentType String = irOperandTypeNumber(argumentWithCorrectAccess, codeData, assumes)
+                const irExpectedType String = argumentWithCorrectAccess.type~().this?().select(codeData.thisTypeRegister~(), sharTypeToIRType(argumentWithCorrectAccess.type~().type~()))
+                var assumedReg String = irEq(const::irTypeOfType, irArgumentType, irExpectedType, codeData, assumes)
+                if argumentWithCorrectAccess.type~().optional?()
+                    const isNothing String = irEq(const::irTypeOfType, irArgumentType, const::nothingTypeNumber, codeData, assumes)
+                    assumedReg = irOr(assumedReg, isNothing, codeData, assumes)
+                irAssume(assumedReg, assumes)
+            irArguments.addItem(argumentWithCorrectAccess.value~())
+        var codeText String = code.text`("")
+        codeText.delete(codeText.length() - 2, 2)
+        code.text`(codeText)
+    code.addChar(')')
+    var irFunctionName String = function.fullName~()
+    if typedFunction
+        irFunctionName += "." + functionThisType.type~()
+    elif isSuperFunction
+        irFunctionName += ".This"
+    ir += assumes
+    const callResult String = irCallFunction(irFunctionName, irArguments, argumentsFromSignature, (codeData.ownerNoThrow~() && codeData.catchLabels~().empty?() && !isWorker) || functionIsNoThrow || memoryManagerFunction, isWorker, !notCheckArguments, codeData, ir)
+    const result Operand = Operand{{
+        code          : code,
+        access        : Access[read],
+        value         : callResult,
+        type          : resultType,
+        isConstant    : false,
+        isNamed       : false,
+        isArgument    : false,
+        isGlobalConst : false
+    }}
+    if needFreeArguments
+        parse _, argument Operand = arguments
+            if !argument.named?()
+                argument.freeOperand(codeData, compiledData, ir)
+    if !memoryManagerFunction
+        result.checkOperandForError(codeData, compiledData, freedOnError, functionIsNoThrow && notCheckArguments, ir)
+    return result
+
+// The function generates code that checks the type of function arguments.
+def runtimeCheckFunctionArguments(arguments Array, needToCheckRegisterNumber Int, write codeData CodeData, write ir String)
+    if arguments.empty?()
+        return
+    var localIR String = ""
+    var thisArgumentsIRTypes Array = []
+    var thisArgumentsIsOptional Array = []
+    var thisRegisterIRCode String = ""
+    var predicate String = ""
+    parse index, argument CFSArgument = arguments
+        const type COType = argument.type~()
+        var tmpIR String = ""
+        const irType String = irArgumentType(index, argument.access~(), codeData, tmpIR)
+        if type.this?()
+            if !type.optional?() && codeData.thisTypeRegister~().empty?()
+                codeData.thisTypeRegister`(irType)
+                thisRegisterIRCode = tmpIR
+            else
+                localIR += tmpIR
+                thisArgumentsIRTypes.addItem(irType)
+                thisArgumentsIsOptional.addItem(type.optional?())
+        elif !type.anyType?()
+            localIR += tmpIR
+            var predicatePart String = ""
+            if type.simple?()
+                predicatePart = irEq(const::irTypeOfType, irType, sharTypeToIRType(type.type~()), codeData, localIR)
+            else
+                predicatePart = irInGroups(irType, type.type~(), codeData, localIR)
+            if type.optional?()
+                predicatePart = irOr(irEq(const::irTypeOfType, irType, const::nothingTypeNumber, codeData, localIR), predicatePart, codeData, localIR)
+            if predicate.empty?()
+                predicate = predicatePart
+            else
+                predicate = irAnd(predicate, predicatePart, codeData, localIR)
+    if !thisArgumentsIRTypes.empty?()
+        if codeData.allThisGroups~().length() != 1
+            var thisGroups Array = []
+            parse _, group String = codeData.allThisGroups~()
+                thisGroups.addItem(group)
+            thisGroups.sort(true)
+            const predicatePart String = irInGroups(codeData.thisTypeRegister~(), thisGroups, codeData, localIR)
+            if predicate.empty?()
+                predicate = predicatePart
+            else
+                predicate = irAnd(predicate, predicatePart, codeData, localIR)
+        parse index, irType String = thisArgumentsIRTypes
+            var predicatePart String = irEq(const::irTypeOfType, irType, codeData.thisTypeRegister~(), codeData, localIR)
+            if thisArgumentsIsOptional[index]
+                predicatePart = irOr(predicatePart, irEq(const::irTypeOfType, irType, const::nothingTypeNumber, codeData, localIR), codeData, localIR)
+            if predicate.empty?()
+                predicate = predicatePart
+            else
+                predicate = irAnd(predicate, predicatePart, codeData, localIR)
+    if !predicate.empty?()
+        const checkLabel String = codeData.createLabel()
+        const errorLabel String = codeData.createLabel()
+        const endLabel String = codeData.createLabel()
+        var tmpIR String = ""
+        irIf("%" + needToCheckRegisterNumber.toString(), Expectation[unknown], checkLabel, endLabel, codeData, tmpIR)
+        irLabel(checkLabel, tmpIR)
+        localIR = tmpIR + localIR
+        irIf(predicate, Expectation[true], endLabel, errorLabel, codeData, localIR)
+        irLabel(errorLabel, localIR)
+        irReturn(irErrorInvalidType(codeData, localIR), localIR)
+        irLabel(endLabel, localIR)
+    ir += thisRegisterIRCode + localIR
+
+attach SimpleFunction to BinarySerializable
+    def serialize(function SimpleFunction, write bytes Bytes)
+        function.attributes~().serialize(bytes)
+        function.signature~().serialize(bytes)
+        function.ir~().serialize(bytes)
+        function.irFirstRegisterNumber~().serialize(bytes)
+        function.docComment~().serialize(bytes)
+
+    def deserialize(noread type SimpleFunction, bytes Bytes, write position Int) SimpleFunction
+        var currentPosition Int = position
+        const result SimpleFunction = SimpleFunction{{
+            attributes            : CFAttributes.deserialize(bytes, currentPosition),
+            signature             : CFSignature.deserialize(bytes, currentPosition),
+            ir                    : String.deserialize(bytes, currentPosition),
+            irFirstRegisterNumber : Int.deserialize(bytes, currentPosition),
+            fromCurrentModule     : false,
+            docComment            : ""
+        }}
+        String.deserialize(bytes, currentPosition)
+        position = currentPosition
+        return result
+
+attach CFAttributes to BinarySerializable
+    def serialize(attributes CFAttributes, write bytes Bytes)
+        attributes.cold~().serialize(bytes)
+        attributes.noinline~().serialize(bytes)
+        attributes.inline~().serialize(bytes)
+        attributes.alwaysinline~().serialize(bytes)
+        attributes.unsafewrite~().serialize(bytes)
+        attributes.nothrow~().serialize(bytes)
+        attributes.worker~().serialize(bytes)
+        attributes.deprecated~().serialize(bytes)
+
+    def deserialize(noread type CFAttributes, bytes Bytes, write position Int) CFAttributes
+        var currentPosition Int = position
+        const result CFAttributes = CFAttributes{{
+            cold         : Bool.deserialize(bytes, currentPosition),
+            noinline     : Bool.deserialize(bytes, currentPosition),
+            inline       : Bool.deserialize(bytes, currentPosition),
+            alwaysinline : Bool.deserialize(bytes, currentPosition),
+            unsafewrite  : Bool.deserialize(bytes, currentPosition),
+            nothrow      : Bool.deserialize(bytes, currentPosition),
+            worker       : Bool.deserialize(bytes, currentPosition),
+            deprecated   : Bool.deserialize(bytes, currentPosition)
+        }}
+        position = currentPosition
+        return result
+
+def addFunctionToFunctionWithGroupsFunctions(write functionWithGroupFunctions CFunction, type String, function SimpleFunction)
+    var groupsFunctions GroupsFunctions = functionWithGroupFunctions.finalFunction`(nothing)
+    var functions Map = groupsFunctions.functions`(Map())
+    functions.put(type, function)
+    groupsFunctions.functions`(functions)
+    functionWithGroupFunctions.finalFunction`(groupsFunctions)

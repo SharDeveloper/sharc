@@ -1,152 +1,149 @@
 module Main
 
+const anyType      COType = COType{type : ["STD::Any"], isOptional: false}
+const arrayType    COType = COType{type : "STD::Array", isOptional: false}
+const boolType     COType = COType{type : "STD::Bool", isOptional: false}
+const charType     COType = COType{type : "STD::Char", isOptional: false}
+const intType      COType = COType{type : "STD::Int", isOptional: false}
+const iterableType COType = COType{type : ["STD::Any", "STD::Iterable"], isOptional : false}
+const listType     COType = COType{type : "STD::List", isOptional: false}
+const nothingType  COType = COType{type : "STD::Nothing", isOptional: false}
+const realType     COType = COType{type : "STD::Real", isOptional: false}
+const stringType   COType = COType{type : "STD::String", isOptional: false}
+const thisType     COType = COType{type : "This", isOptional: false}
+
+group OType: IsOptional
+    simple?(This) Bool
+    this?(This) Bool
+
 // The type specified when declaring any objects.
 type OType
-    // type simpleType Token | groupType [Token]
-    // optional? Bool
+    type       $Any // simpleType Token | groupType [Token]
+    isOptional Bool
 
-const emptyOType OType = OType(const::emptyToken, false)
-const boolType OType = OType(const::emptyToken.replaceText("STD::Bool"), false)
-const anyType OType = OType([const::emptyToken.replaceText("STD::Any")], false)
-const intType OType = OType(const::emptyToken.replaceText("STD::Int"), false)
-const charType OType = OType(const::emptyToken.replaceText("STD::Char"), false)
-const stringType OType = OType(const::emptyToken.replaceText("STD::String"), false)
-const listType OType = OType(const::emptyToken.replaceText("STD::List"), false)
+// Compiled operand type
+type COType
+    type       $Any // simpleType String | groupType [String]
+    isOptional Bool
 
-attach OType to FieldType
-    #alwaysinline
-    def type~(type OType) $Any
-        return type.typeGetItem(0)
+const dummyCOType COType = COType{type : "", isOptional : false}
 
-    #alwaysinline
-    def type`(write type OType, new $Any) $Any
-        return type.typePut(0, new)
-
-attach OType to FieldOptional
-    #alwaysinline
+attach OType to IsOptional
     def optional?(type OType) Bool
-        return type.typeGetItem(1)
+        return type.isOptional~()
 
-    #alwaysinline
-    def optional`(write type OType, new Bool) Bool
-        return type.typePut(1, new)
+attach OType to OType
+    def simple?(type OType) Bool
+        return type.type~().type?(Token)
 
-#alwaysinline
-def OType(type $Any, isOptional Bool) OType
-    return OType.fromList({type, isOptional})
+    def this?(type OType) Bool
+        return type.type~().type?(Token) && type.type~().type!(Token).text~() == "This"
 
-// The function finds out if the type is simple.
-#alwaysinline
-def simple?(type OType) Bool
-    return type.type~().type?(Token)
+attach COType to IsOptional
+    def optional?(type COType) Bool
+        return type.isOptional~()
 
-// The function finds out if the type is a list of groups.
-#alwaysinline
-def gType?(type OType) Bool
-    return type.type~().type?(Array)
+attach COType to OType
+    def simple?(type COType) Bool
+        return type.type~().type?(String)
+
+    def this?(type COType) Bool
+        return type.type~().type?(String) && type.type~() == "This"
+
+def nothingType?(type COType) Bool
+    return type.type~().type?(String) && type.type~() == "STD::Nothing"
+
+def anyType?(type COType) Bool
+    return type.type~().type?(Array) && type.type~() == ["STD::Any"]
 
 // The function turns the operand type into a token.
-#alwaysinline
 def oTypeToToken(type OType, withOptionalSignature Bool) Token
     var result Token = const::emptyToken
-    if type.simple?()
+    tSwitch type.type~()
+    case Token
         result = type.type~()
-    else
+    case Array
         const groups Array = type.type~()
-        result = groups[0].replaceText("${" + groups[0].text~())
-        for :(index Int = 1) index < groups.length~(); index++
-            result.addString(",")
-            result.addString(groups[index].text~())
-        result.addString("}")
+        result = groups[0].replaceText("${")
+        const lastIndex Int = groups.length() - 1
+        parse index, groupName Token = groups
+            result.addString(groupName.text~())
+            result.addChar((index == lastIndex).select('}', ','))
     if withOptionalSignature && type.optional?()
         result.text`("<>" + result.text~())
     return result
 
-#alwaysinline
-def this?(type OType) Bool
-    return type.simple?() && type.type~().text~() == "This"
+// The function turns the operand type into a string.
+def coTypeToString(type COType, withOptionalSignature Bool) String
+    var result String = ""
+    tSwitch type.type~()
+    case String
+        result = type.type~()
+    case Array
+        result = "${" + type.type~().join(",") + "}"
+    if withOptionalSignature && type.optional?()
+        result = "<>" + result
+    return result
 
-attach OType to BinarySerializable
-    #alwaysinline
-    def serialize(type OType, write bytes Bytes)
-        if type.simple?()
-            true.serialize(bytes)
-            type.type~().text~().serialize(bytes)
-        else
-            false.serialize(bytes)
-            const groups Array = type.type~()
-            groups.length~().serialize(bytes)
-            parse _, group = groups
-                group.text~().serialize(bytes)
-        type.optional?().serialize(bytes)
-
-    #alwaysinline
-    def deserialize(noread type OType, bytes Bytes, write position Int) OType
-        const startPosition Int = position
-        try
-            var result OType = const::emptyOType
-            if Bool.deserialize(bytes, position)
-                result.type`(const::emptyToken.replaceText(String.deserialize(bytes, position)))
-            else
-                var groups Array = []
-                const length Int = Int.deserialize(bytes, position)
-                for :(counter Int = 0) counter < length; counter++
-                    groups.addItem(const::emptyToken.replaceText(String.deserialize(bytes, position)))
-                result.type`(groups)
-            result.optional`(Bool.deserialize(bytes, position))
-            return result
-        catch id, message
-            position = startPosition
-            throw(id, message)
-
-attach OType to ToFull
-    #alwaysinline
-    def toFull(type OType, compiledData CData) OType
-        var result OType = OType.fromList({})
-        tSwitch type.type~()
-        case Token
-            var typeToken Token = type.type~()
-            if typeToken.text~() == "This"
-                result = type
-            else
-                result = OType(typeToken.replaceText(compiledData.getType(typeToken, false).fullName~()), type.optional?())
-        case Array
-            var oldGroupsArray Array = type.type~()
-            var groupsSet Set = Set()
-            parse _, groupName = oldGroupsArray
-                const group CGroup = compiledData.getGroup(groupName, false)
-                parse _, subGroupName = group.subGroups~()
-                    groupsSet.add(groupName.replaceText(subGroupName))
-                groupsSet.add(groupName.replaceText(group.fullName~()))
-            var newGroupsArray Array = []
-            parse _, groupName = groupsSet
-                newGroupsArray.addItem(groupName)
-            newGroupsArray.sort(true)
-            result = OType(newGroupsArray, type.optional?())
-        default
-            unreachable()
-        if (result.nothingType?() || result.anyType?()) && result.optional?()
-            const resultToken Token =  result.oTypeToToken(true)
-            errorInvalidType(resultToken, resultToken.text~(), resultToken.text~()[2 : resultToken.length~()])
-        return result
-
-// The function finds out if the operand type is "Nothing".
-#alwaysinline
-def nothingType?(type OType) Bool
-    return type.simple?() && type.type~().text~() == "STD::Nothing"
-
-// The function finds out if the operand type is "$Any".
-#alwaysinline
-def anyType?(type OType) Bool
-    return type.gType?() && type.type~().length~() == 1 && type.type~()[0].text~() == "STD::Any"
+def compileOType(type OType, compiledData CData) COType
+    var result <>COType = nothing
+    tSwitch type.type~()
+    case Token
+        result = COType{{
+            type       : (type.type~().type!(Token).text~() == "This").select("This", compiledData.getType(type.type~(), false).fullName~()),
+            isOptional : type.optional?()
+        }}
+    case Array
+        var groupsSet Set = Set()
+        var mainLevelGroups Set = Set()
+        parse _, groupName Token = type.type~()
+            const group CGroup = compiledData.getGroup(groupName, false)
+            if mainLevelGroups.add(group.fullName~())
+                errorAlreadyExist(groupName, "group")
+            groupsSet.add(group.fullName~())
+            parse _, subGroupName String = group.subGroups~()
+                groupsSet.add(subGroupName)
+        var newGroupsArray Array = []
+        parse _, groupName String = groupsSet
+            newGroupsArray.addItem(groupName)
+        newGroupsArray.sort(true)
+        result = COType{{
+            type       : newGroupsArray,
+            isOptional : type.optional?()
+        }}
+    default
+        unreachable()
+    if (result.nothingType?() || result.anyType?()) && result.optional?()
+        const resultAsString String = coTypeToString(result, true)
+        errorInvalidType(type.oTypeToToken(true), resultAsString, resultAsString[2:])
+    return result
 
 // The function compares two types for equality.
-#alwaysinline
-def typeEq?(type1, type2 OType, withOptional Bool) Bool
+def typeEq?(type1, type2 COType, withOptional Bool) Bool
     return type1.simple?() == type2.simple?() && type1.type~() == type2.type~() && (!withOptional || type1.optional?() == type2.optional?())
 
 // The function checks that the two types are equal.
-#alwaysinline
-def typeEq!(type1, type2 OType, expression Token, withOptional Bool)
+def typeEq!(type1, type2 COType, expression Token, withOptional Bool)
     if !type1.typeEq?(type2, withOptional)
-        errorInvalidType(expression, oTypeToToken(type1, true).text~(), oTypeToToken(type2, true).text~())
+        errorInvalidType(expression, coTypeToString(type1, true), coTypeToString(type2, true))
+
+attach COType to BinarySerializable
+    def serialize(type COType, write bytes Bytes)
+        if type.simple?()
+            true.serialize(bytes)
+            type.type~().type!(String).serialize(bytes)
+        else
+            false.serialize(bytes)
+            type.type~().type!(Array).serializeContainer(bytes)
+        type.optional?().serialize(bytes)
+
+    def deserialize(noread type COType, bytes Bytes, write position Int) COType
+        var currentPosition Int = position
+        var result COType = const::dummyCOType
+        if Bool.deserialize(bytes, currentPosition)
+            result.type`(String.deserialize(bytes, currentPosition))
+        else
+            result.type`(Array.deserializeContainer(bytes, currentPosition, String))
+        result.isOptional`(Bool.deserialize(bytes, currentPosition))
+        position = currentPosition
+        return result

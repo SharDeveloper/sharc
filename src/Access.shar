@@ -1,18 +1,50 @@
 module Main
 
-enum
-    access_noread
-    access_read
-    access_write
+enum Access
+    noread
+    read
+    write
 
-// The function turns the access level into a string.
-#alwaysinline
-def accessToString(access Int) String
-    eSwitch access
-    case access_noread
-        return "noread"
-    case access_read
-        return ""
-    case access_write
-        return "write"
-    unreachable()
+attach Access to Shar__sugar__equal
+    def shar__sugar__equal(access1, access2 Access) Bool
+        return access1.enumToInt() == access2.enumToInt()
+
+attach Access to Shar__sugar__notEqual
+    def shar__sugar__notEqual(access1, access2 Access) Bool
+        return access1.enumToInt() != access2.enumToInt()
+
+attach Access to StringWriter
+    def toString(access Access) String
+        eSwitch access
+        case noread
+            return "noread"
+        case read
+            return "read"
+        case write
+            return "write"
+
+attach Access to BinarySerializable
+    def serialize(access Access, write bytes Bytes)
+        var accessAsInt Int = -1
+        eSwitch access
+        case noread
+            accessAsInt = 0
+        case read
+            accessAsInt = 1
+        case write
+            accessAsInt = 2
+        bytes.addItem(intToByte(accessAsInt))
+
+    def deserialize(noread type Access, bytes Bytes, write position Int) Access
+        var result Access = Access[noread]
+        switch byteToInt(bytes[position])
+        case 0
+            nothing
+        case 1
+            result = Access[read]
+        case 2
+            result = Access[write]
+        default
+            throw(const::eid_outOfRange, "Out of range.", nothing)
+        position++
+        return result

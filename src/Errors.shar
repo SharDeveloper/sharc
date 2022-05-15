@@ -1,13 +1,18 @@
 module Main
 
 #cold
-def errorArgNotAlone(argument String)
-    ("The command line argument \q" + argument + "\q must be specified without any other command line arguments.").printlnAsError()
+def errorFlagWithoutValue(flag String)
+    ("The \q" + flag + "\q flag must receive data. ").printlnAsError()
     fail()
 
 #cold
-def errorArgumentSetTwice(argument String)
-    ("The \q" + argument + "\q argument must be specified only once.").printlnAsError()
+def errorFlagNotAlone(flag String)
+    ("The \q" + flag + "\q flag can only be used if specified with no other flags.").printlnAsError()
+    fail()
+
+#cold
+def errorFlagSetTwice(flag String)
+    ("The \q" + flag + "\q flag can only be used once.").printlnAsError()
     fail()
 
 #cold
@@ -26,51 +31,18 @@ def errorNoOutputFile()
     fail()
 
 #cold
-def errorNotExpectedToken(have Token, expected String)
-    if expected.empty?()
-        (have.coordinatesToString() + "The text \q" + have.text~() + "\q cannot be in the place where it is.").printlnAsError()
-    else
-        (have.coordinatesToString() + "In place of the text \q" + have.text~() + "\q, the text \q" + expected + "\q was expected.").printlnAsError()
-    fail()
-
-#cold
-def errorExpectSubBlock(fileName String, lineNumber Int)
-    ("File: \q" + fileName + "\q, line: " + lineNumber.toString() + ". A sub block was expected.").printlnAsError()
-    fail()
-
-#cold
-def errorInvalidName(name Token, nameOf String)
-    (name.coordinatesToString() + "\q" + name.text~()+ "\q is an invalid " + nameOf + " name.").printlnAsError()
-    fail()
-
-#cold
-def errorAlreadyExist(name Token, whatExist String)
-    (name.coordinatesToString() + "A " + whatExist + " with the name \q" + name.text~() + "\q already exists.").printlnAsError()
+def errorCanNotLoadFile(fileName String)
+    ("Failed to load file \q" + fileName + "\q.").printlnAsError()
     fail()
 
 #cold
 def errorNotExpectedEOL(lastToken Token, expected String)
     var mutToken Token = lastToken
-    mutToken.addToColumnIndex(lastToken.length~())
+    mutToken.addToColumnIndex(lastToken.length())
     if expected.empty?()
-        (mutToken.text~() + "Unexpected end of line.").printlnAsError()
+        (coordinatesToString(mutToken) + "Unexpected end of line.").printlnAsError()
     else
-        (mutToken.text~() + "The text \q" + expected + "\q was expected, but the file ended.").printlnAsError()
-    fail()
-
-#cold
-def errorVariousModuleNames(name1, name2 Token)
-    ("The current module contains various module names.\n" + name1.coordinatesToString() + "\n" + name2.coordinatesToString()).printlnAsError()
-    fail()
-
-#cold
-def errorNoThis(coordinates Token)
-    (coordinates.coordinatesToString() + "It was expected that one of the arguments to the function would be of type \qThis\q.").printlnAsError()
-    fail()
-
-#cold
-def errorCanNotLoadFile(fileName String)
-    ("Failed to load file \q" + fileName + "\q.").printlnAsError()
+        (coordinatesToString(mutToken) + "The text \q" + expected + "\q was expected, but the file ended.").printlnAsError()
     fail()
 
 #cold
@@ -86,7 +58,150 @@ def errorWrongLevel(fileName String, lineIndex, expectedLevel, haveLevel Int)
 
 #cold
 def errorInvalidCharacter(code Token)
-    (code.coordinatesToString() + "A character with decimal code " + code.text~() + " is not valid in the source code.").printlnAsError()
+    (coordinatesToString(code) + "A character with decimal code " + code.text~() + " is not valid in the source code.").printlnAsError()
+    fail()
+
+#cold
+def errorNotExpectedToken(have Token, expected String)
+    if expected.empty?()
+        (coordinatesToString(have) + "The text \q" + have.text~() + "\q cannot be in the place where it is.").printlnAsError()
+    else
+        (coordinatesToString(have) + "In place of the text \q" + have.text~() + "\q, the text \q" + expected + "\q was expected.").printlnAsError()
+    fail()
+
+#cold
+def errorExpectSubBlock(fileName String, lineNumber Int)
+    ("File: \q" + fileName + "\q, line: " + lineNumber.toString() + ". A sub block was expected.").printlnAsError()
+    fail()
+
+#cold
+def errorInvalidName(name Token, nameOf String)
+    (coordinatesToString(name) + "\q" + name.text~()+ "\q is an invalid " + nameOf + " name.").printlnAsError()
+    fail()
+
+#cold
+def errorAlreadyExist(name Token, whatExist String)
+    (coordinatesToString(name) + "A " + whatExist + " with the name \q" + name.text~() + "\q already exists.").printlnAsError()
+    fail()
+
+#cold
+def errorNoThis(coordinates Token)
+    (coordinatesToString(coordinates) + "It was expected that one of the arguments to the function would be of type \qThis\q.").printlnAsError()
+    fail()
+
+#cold
+def errorVariousModuleNames(name1, name2 Token)
+    ("The current module contains various module names.\n" + coordinatesToString(name1) + "\n" + coordinatesToString(name2)).printlnAsError()
+    fail()
+
+#cold
+def errorIgnoreNoThrowInModule()
+    ("Flags \q-t\q and \q--throw\q can only be used when compiling final programs.").printlnAsError()
+    fail()
+
+#cold
+def errorFewVariants(name Token, variantsOf, variant1, variant2 String)
+    (coordinatesToString(name) + "Found several \q" + variantsOf + "\q with name \q" + name.text~() + "\q. ("+ variant1 + ", " + variant2 + ")").printlnAsError()
+    fail()
+
+#cold
+def errorNotFound(name Token, whatNotFound String)
+    (coordinatesToString(name) + "A " + whatNotFound + " with the name \q" + name.text~() + "\q was not found.").printlnAsError()
+    fail()
+
+#cold
+def errorRecursiveGroup(groupName Token, subGroupName String)
+    (coordinatesToString(groupName) + "To add a type to the \q" + groupName.text~() + "\q group, it is necessary that the type be in the \q" + subGroupName + "\q group, but to add a type to the \q" + subGroupName + "\q group, it is necessary that the type be in the \q" + groupName.text~() + "\q group.").printlnAsError()
+    fail()
+
+#cold
+def errorExportGroupRequireNotExportGroup(exportGroup Token, notExportGroup String)
+    (coordinatesToString(exportGroup) + "In order to add a type to the exported group \q" + exportGroup.text~() + "\q it is necessary that the type be a member of the non-exported group \q" + notExportGroup + "\q.").printlnAsError()
+    fail()
+
+#cold
+def errorInvalidType(expression Token, haveType, expectType String)
+    (coordinatesToString(expression) + "\q" + expression.text~() + "\q has the wrong type.\nexpected: " + expectType + "\nhave: " + haveType).printlnAsError()
+    fail()
+
+#cold
+def errorAlreadyInGroup(type Token, group String)
+    (coordinatesToString(type) + "Type \q" + type.text~() + "\q is already in the \q" + group + "\q group.").printlnAsError()
+    fail()
+
+#cold
+def errorInvalidAttachToGroup(type Token, group, subGroup String)
+    (coordinatesToString(type) + "A member of the \q" + group + "\q group must be a member of the \q" + subGroup + "\q group, but the \q" + type.text~() + "\q type tries to attaching the \q" + group + "\q group without attaching the \q" + subGroup + "\q group.").printlnAsError()
+    fail()
+
+#cold
+def errorFunctionCannotBeAWorker(function Token)
+    (coordinatesToString(function) + "The worker function must have an input and output, and must not be part of any group.").printlnAsError()
+    fail()
+
+#cold
+def errorNoFunctionInGroup(function Token, group String)
+    (coordinatesToString(function) + "In group \q" + group + "\q there is no function \q" + function.text~() + "\q.").printlnAsError()
+    fail()
+
+#cold
+def errorNothrowOnInvalidFunction(functionName Token)
+    (coordinatesToString(functionName) + "The \q" + functionName.text~() + "\q function cannot have the \qnothrow\q attribute.").printlnAsError()
+    fail()
+
+#cold
+def errorFunctionsNotCompatible(functionName Token, existingSignature, originalSignature String)
+    (coordinatesToString(functionName) + "Function signature \q" + functionName.text~() + "\q is not compatible.\nexisting signature: " + existingSignature + "\noriginal signature: " + originalSignature).printlnAsError()
+    fail()
+
+#cold
+def errorCantAttach(type Token, group, function String)
+    (coordinatesToString(type) + "Type \q" + type.text~() + "\q cannot attach the \q" + group + "\q group, because it does not implement the \q" + function + "\q function.").printlnAsError()
+    fail()
+
+#cold
+def errorDefaultFunctionNotFound(coordinates Token)
+    (coordinatesToString(coordinates) + "The function to be redefined was not found.").printlnAsError()
+    fail()
+
+#cold
+def errorTypeNotInGroup(type Token, group String)
+    (coordinatesToString(type) + "Type \q" + type.text~() + "\q is not a member of the \q" + group + "\q group.").printlnAsError()
+    fail()
+
+#cold
+def errorThisNotSimple(type Token)
+    (coordinatesToString(type) + "The \qThis\q type must be specific.").printlnAsError()
+    fail()
+
+#cold
+def errorNotFoundSignatureEnd(firstPartOfSignature Token)
+    (coordinatesToString(firstPartOfSignature) + "There is no ending sequence \q##\q for " + firstPartOfSignature.text~() + ".").printlnAsError()
+    fail()
+
+#cold
+def errorNoRegisterName(signature Token)
+    (coordinatesToString(signature) + "A register name is expected after \q" + signature.text~() + "\q.").printlnAsError()
+    fail()
+
+#cold
+def errorDoubleDeclaredRegister(register Token)
+    (coordinatesToString(register) + "The register named \q" + register.text~() + "\q is declared twice.").printlnAsError()
+    fail()
+
+#cold
+def errorNotFoundRegister(register Token)
+    (coordinatesToString(register) + "A register named \q" + register.text~() + "\q is not declared anywhere.").printlnAsError()
+    fail()
+
+#cold
+def errorWrongAccess(operand Token, expectedAccess, haveAccess String)
+    (coordinatesToString(operand) + "Invalid access level in expression \q" + operand.text~() + "\q.\nexpect: " + expectedAccess + "\nhave: " + haveAccess).printlnAsError()
+    fail()
+
+#cold
+def errorCanNotWriteToFile(file String)
+    ("Can't write data to file \q" + file + "\q.").printlnAsError()
     fail()
 
 #cold
@@ -100,173 +215,108 @@ def error2Module1Name(fileName1, fileName2, moduleName String)
     fail()
 
 #cold
-def errorAlreadyInGroup(type Token, group String)
-    (type.coordinatesToString() + "Type \q" + type.text~() + "\q is already in the \q" + group + "\q group.").printlnAsError()
+def errorNotFoundTypeInModules(fullTypeName String)
+    ("After loading all the models, information about the \q" + fullTypeName + "\q type was found, then the type itself is not in any module.").printlnAsError()
     fail()
 
 #cold
-def errorInvalindAttachToGroup(type Token, group, subGroup String)
-    (type.coordinatesToString() + "A member of the \q" + group + "\q group must be a member of the \q" + subGroup + "\q group, but the \q" + type.text~() + "\q type tries to attaching the \q" + group + "\q group without attaching the \q" + subGroup + "\q group.").printlnAsError()
-    fail()
-
-#cold
-def errorFewVariants(name Token, variantsOf, variant1, variant2 String)
-    (name.coordinatesToString() + "Found several \q" + variantsOf + "\q with name \q" + name.text~() + "\q. ("+ variant1 + ", " + variant2 + ")").printlnAsError()
-    fail()
-
-#cold
-def errorNotFound(name Token, whatNotFound String)
-    (name.coordinatesToString() + "A " + whatNotFound + " with the name \q" + name.text~() + "\q was not found.").printlnAsError()
-    fail()
-
-#cold
-def errorInvalidType(expression Token, haveType, expectType String)
-    (expression.coordinatesToString() + "\q" + expression.text~() + "\q has the wrong type.\nexpected: " + expectType + "\nhave: " + haveType).printlnAsError()
-    fail()
-
-#cold
-def errorCantAttach(type Token, group, function String)
-    (type.coordinatesToString() + "Type \q" + type.text~() + "\q cannot attach the \q" + group + "\q group, because it does not implement the \q" + function + "\q function.").printlnAsError()
+def errorNotEnumType(type Token)
+    (coordinatesToString(type) + "Type \q" + type.text~() + "\q is not an enumeration.").printlnAsError()
     fail()
 
 #cold
 def errorNoPosibleNothingType(expression Token)
-    (expression.coordinatesToString() + "The expression \q" + expression.text~() + "\q cannot be of type \qSTD::Nothing\q.").printlnAsError()
-    fail()
-
-#cold
-def errorNoFunctionInGroup(function Token, group String)
-    (function.coordinatesToString() + "In group \q" + group + "\q there is no function \q" + function.text~() + "\q.").printlnAsError()
-    fail()
-
-#cold
-def errorWrongNumberOfArguments(coordinates Token)
-    (coordinates.coordinatesToString() + "Wrong number of arguments.").printlnAsError()
-    fail()
-
-#cold
-def errorTypeNotInGroup(type Token, group String)
-    (type.coordinatesToString() + "Type \q" + type.text~() + "\q is not a member of the \q" + group + "\q group.").printlnAsError()
-    fail()
-
-#cold
-def errorWrongAccess(operand Token, expectedAccess, haveAccess String)
-    (operand.coordinatesToString() + "Invalid access level in expression \q" + operand.text~() + "\q.\nexpect: " + expectedAccess + "\nhave: " + haveAccess).printlnAsError()
-    fail()
-
-#cold
-def errorSameArgumentsInCall(coordinates Token)
-    (coordinates.coordinatesToString() + "One and the same variable cannot be passed to a function as two arguments if at least one of the arguments is writable.").printlnAsError()
-    fail()
-
-#cold
-def errorFunctionsNotCompatible(coordinates1, coordinates2 Token)
-    ("Function signatures are not compatible.\nfirst function: " + coordinates1.coordinatesToString() + "\nsecond function: " + coordinates2.coordinatesToString()).printlnAsError()
-    fail()
-
-#cold
-def errorNothrowOnInvalidFunction(functionName Token)
-    (functionName.coordinatesToString() + "The \q" + functionName.text~() + "\q function cannot have the \qnothrow\q attribute.").printlnAsError()
-    fail()
-
-#cold
-def errorDefaultFunctionNotFound(coordinates Token)
-    (coordinates.coordinatesToString() + "The function to be redefined was not found.").printlnAsError()
-    fail()
-
-#cold
-def errorUnreachableCode(coordinates Token)
-    (coordinates.coordinatesToString() + "Code from the specified location will never be able to execute.").printlnAsError()
-    fail()
-
-#cold
-def errorNoCase(operator Token)
-    (operator.coordinatesToString() + "Operator \q" + operator.text~() + "\q must have at least one \qcase\q.").printlnAsError()
-    fail()
-
-#cold
-def errorNoCatch(tryCoordinates Token)
-    (tryCoordinates.coordinatesToString() + "There is \qtry\q but no \qcatch\q.").printlnAsError()
-    fail()
-
-#cold
-def errorInvalidString(string Token)
-    (string.coordinatesToString() + "\q" + string.text~() + "\q is an invalid string.").printlnAsError()
-    fail()
-
-#cold
-def errorThisNotSimple(type Token)
-    (type.coordinatesToString() + "The \qThis\q type must be specific.").printlnAsError()
-    fail()
-
-#cold
-def errorRecursiveGroup(groupName Token, subGroupName String)
-    (groupName.coordinatesToString() + "To add a type to the \q" + groupName.text~() + "\q group, it is necessary that the type be in the \q" + subGroupName + "\q group, but to add a type to the \q" + subGroupName + "\q group, it is necessary that the type be in the \q" + groupName.text~() + "\q group.").printlnAsError()
-    fail()
-
-#cold
-def errorExportGroupRequireNotExportGroup(exportGroup Token, notExportGroup String)
-    (exportGroup.coordinatesToString() + "In order to add a type to the exported group \q" + exportGroup.text~() + "\q it is necessary that the type be a member of the non-exported group \q" + notExportGroup + "\q.").printlnAsError()
-    fail()
-
-#cold
-def errorNotFoundSignatureEnd(firstPartOfSignature Token)
-    (firstPartOfSignature.coordinatesToString() + "There is no ending sequence \q##\q for " + firstPartOfSignature.text~() + ".").printlnAsError()
-    fail()
-
-#cold
-def errorNoRegisterName(signature Token)
-    (signature.coordinatesToString() + "A register name is expected after \q" + signature.text~() + "\q.").printlnAsError()
-    fail()
-
-#cold
-def errorDoubleDeclaredRegister(register Token)
-    (register.coordinatesToString() + "The register named \q" + register.text~() + "\q is declared twice.").printlnAsError()
-    fail()
-
-#cold
-def errorNotFoundRegister(register Token)
-    (register.coordinatesToString() + "A register named \q" + register.text~() + "\q is not declared anywhere.").printlnAsError()
+    (coordinatesToString(expression) + "The expression \q" + expression.text~() + "\q cannot be of type \qSTD::Nothing\q.").printlnAsError()
     fail()
 
 #cold
 def errorInvalidCharacterInCode(char Token)
-    (char.coordinatesToString() + "\q" + char.text~() + "\q is an invalid character.").printlnAsError()
+    (coordinatesToString(char) + "\q" + char.text~() + "\q is an invalid character.").printlnAsError()
+    fail()
+
+#cold
+def errorNothingHaveNoFields(coordinates Token)
+    (coordinatesToString(coordinates) + "Type \qSTD:Nothing\q has no fields.").printlnAsError()
+    fail()
+
+#cold
+def errorFieldOnlyForSimple(coordinates Token)
+    (coordinatesToString(coordinates) + "The fields can be accessed only if at compile time the type of the object to which the field is being accessed is known.").printlnAsError()
+    fail()
+
+#cold
+def errorEnumType(type Token)
+    (coordinatesToString(type) + "The type \q" + type.text~() + "\q is for enumeration elements, not for user-defined types.").printlnAsError()
+    fail()
+
+#cold
+def errorTypeDontContainField(type String, field Token)
+    (coordinatesToString(field) + "Type \q" + type + "\q does not have a \q" + field.text~() + "\q field.").printlnAsError()
     fail()
 
 #cold
 def errorInvalidNumber(number Token)
-    (number.coordinatesToString() + "\q" + number.text~() + "\q is an invalid number.").printlnAsError()
+    (coordinatesToString(number) + "\q" + number.text~() + "\q is an invalid number.").printlnAsError()
     fail()
 
 #cold
-def errorCanNotWriteToFile(file String)
-    ("Can't write data to file \q" + file + "\q.").printlnAsError()
+def errorPutOperandIntoItself(coordinates Token)
+    (coordinatesToString(coordinates) + "You cannot write a variable to itself.").printlnAsError()
     fail()
 
 #cold
-def errorNotFoundMainFunction()
-    ("The function \qMain::main\q was not found.").printlnAsError()
+def errorInvalidString(string Token)
+    (coordinatesToString(string) + string.text~() + " is an invalid string.").printlnAsError()
     fail()
 
 #cold
-def errorNotFoundSignatureMiddle(errorCoordinates Token)
-    (errorCoordinates.coordinatesToString() + "The first identifier \q##\q was found, but the second one was not found.").printlnAsError()
+def errorInvalidTypeForCreator(type Token)
+    (coordinatesToString(type) + "The type \q" + type.text~() + "\q is not a user-defined type.").printlnAsError()
     fail()
 
 #cold
-def errorUnknownIdentifier(id Token)
-    (id.coordinatesToString() + "Unknown identifier \q" + id.text~() + "\q.").printlnAsError()
+def errorNotEnoughtFields(coordinates Token)
+    (coordinatesToString(coordinates) + "Insufficient number of fields specified.").printlnAsError()
     fail()
 
 #cold
-def errorIgnoreNoThrowInModule()
-    ("Flags \q-t\q and \q--throw\q can only be used when compiling final programs.").printlnAsError()
+def errorUnreachableCode(coordinates Token)
+    (coordinatesToString(coordinates) + "Code from the specified location will never be able to execute.").printlnAsError()
     fail()
 
 #cold
-def errorFunctionCannotBeAWorker(function Token)
-    (function.coordinatesToString() + "The worker function must have an input and output, and must not be part of any group.").printlnAsError()
+def errorNoCase(operator Token)
+    (coordinatesToString(operator) + "Operator \q" + operator.text~() + "\q must have at least one \qcase\q.").printlnAsError()
+    fail()
+
+#cold
+def errorESwitchHaveDefault(coordinates Token)
+    (coordinatesToString(coordinates) + "The \qeSwitch\q operator cannot have a \qdefault\q branch. All possible elements should be listed.").printlnAsError()
+    fail()
+
+#cold
+def errorNoCatch(tryCoordinates Token)
+    (coordinatesToString(tryCoordinates) + "There is \qtry\q but no \qcatch\q.").printlnAsError()
+    fail()
+
+#cold
+def errorESwitchTypeNotSimpleOrOptional(operand Token, type String)
+    (coordinatesToString(operand) + "The \qeSwitch\q operator only accepts an expression whose final type is known at compile time and is not optional. The expression \q" + operand.text~()  + "\q is of type \q" + type + "\q at compile time.").printlnAsError()
+    fail()
+
+#cold
+def errorESwitchNotEnoughtElements(coordinates Token)
+    (coordinatesToString(coordinates) + "The number of specified elements is less than the number of possible elements. (for operator \qeSwitch\q, this is mandatory)").printlnAsError()
+    fail()
+
+#cold
+def errorWrongNumberOfArguments(coordinates Token)
+    (coordinatesToString(coordinates) + "Wrong number of arguments.").printlnAsError()
+    fail()
+
+#cold
+def errorSameArgumentsInCall(coordinates Token)
+    (coordinatesToString(coordinates) + "One and the same variable cannot be passed to a function as two arguments if at least one of the arguments is writable.").printlnAsError()
     fail()
 
 #cold
@@ -275,6 +325,26 @@ def errorIncorrectMain()
     fail()
 
 #cold
-def errorNotFoundTypeInModules(fullTypeName String)
-    ("After loading all the models, information about the \q" + fullTypeName + "\q type was found, then the type itself is not in any module.").printlnAsError()
+def errorNotFoundMainFunction()
+    ("The function \qMain::main\q was not found.").printlnAsError()
+    fail()
+
+#cold
+def errorNotFoundSignatureMiddle(coordinates Token)
+    (coordinatesToString(coordinates) + "The first identifier \q##\q was found, but the second one was not found.").printlnAsError()
+    fail()
+
+#cold
+def errorCheckEndWithoutBegin(coordinates Token)
+    (coordinatesToString(coordinates) + "There is an identifier \q##check##end##\q, but there is no corresponding identifier \q##check##begin##\q.").printlnAsError()
+    fail()
+
+#cold
+def errorNotFoundCheckEnd(coordinates Token)
+    (coordinatesToString(coordinates) + "There is an identifier \q##check##begin##\q, but there is no corresponding identifier \q##check##end##\q.").printlnAsError()
+    fail()
+
+#cold
+def errorUnknownIdentifier(id Token)
+    (coordinatesToString(id) + "Unknown identifier \q" + id.text~() + "\q.").printlnAsError()
     fail()

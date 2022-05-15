@@ -2,137 +2,176 @@ module Main
 
 // A type for storing the signature of functions.
 type FSignature
-    // coordinates Token
-    // arguments   [FSArgument]
-    // resultType  OType
+    coordinates Token
+    arguments   Array // [FSArgument]
+    resultType  OType
 
-attach FSignature to FieldCoordinates
-    #alwaysinline
-    def coordinates~(signature FSignature) Token
-        return signature.typeGetItem(0)
+type FSArgument
+    access Access
+    type   OType
 
-    #alwaysinline
-    def coordinates`(write signature FSignature, new <>Token) <>Token
-        return signature.typePut(0, new)
+// Compiled function signature.
+type CFSignature
+    arguments   Array // [CFSArgument]
+    resultType  COType
 
-attach FSignature to FieldArguments
-    #alwaysinline
-    def arguments~(signature FSignature) Array
-        return signature.typeGetItem(1)
+type CFSArgument
+    access Access
+    type   COType
 
-    #alwaysinline
-    def arguments`(write signature FSignature, new Array) Array
-        return signature.typePut(1, new)
-
-attach FSignature to FieldResultType
-    #alwaysinline
-    def resultType~(signature FSignature) OType
-        return signature.typeGetItem(2)
-
-    #alwaysinline
-    def resultType`(write signature FSignature, new <>OType) <>OType
-        return signature.typePut(2, new)
-
-#alwaysinline
-def FSignature(coordinates Token, arguments Array, resultType OType) FSignature
-    return FSignature.fromList({coordinates.replaceText(""), arguments, resultType})
-
-// The function makes sure that one of the arguments to "This" is in the function type.
-#alwaysinline
-def this!(signature FSignature)
-    const arguments Array = signature.arguments~()
-    parse _, argument = arguments
+def fsHaveThis!(signature FSignature)
+    parse _, argument FSArgument = signature.arguments~()
         const argumentType OType = argument.type~()
         if argumentType.this?() && !argumentType.optional?()
             return
     errorNoThis(signatureToToken(signature))
 
+def cfsHaveThis!(signature CFSignature, coordinates Token)
+    parse _, argument CFSArgument = signature.arguments~()
+        const argumentType COType = argument.type~()
+        if argumentType.this?() && !argumentType.optional?()
+            return
+    errorNoThis(coordinates.replaceText(signatureToString(signature)))
+
 // The function turns the function signature into a token.
-#alwaysinline
 def signatureToToken(signature FSignature) Token
     var result Token = signature.coordinates~().replaceText("(")
     const arguments Array = signature.arguments~()
     const resultType OType = signature.resultType~()
-    parse _, argument = arguments
-        if argument.access~() != enum::access_read
-            result.addString(" " + accessToString(argument.access~()))
-        result.addString(oTypeToToken(argument.type~(), true).text~() + ", ")
-    if result.text~().hasSuffix?(", ")
-        result.text`(result.text~()[0 : result.length~() - 2])
-    result.addString(") " + oTypeToToken(resultType, true).text~())
+    const lastIndex Int = arguments.length() - 1
+    parse index, argument FArgument = arguments
+        const access Access = argument.access~()
+        if access != Access[read]
+            result.addString(access.toString() + " ")
+        result.addString(oTypeToToken(argument.type~(), true).text~() + (index == lastIndex).select(") ", ", "))
+    result.addString(oTypeToToken(resultType, true).text~())
     return result
 
-attach FSignature to BinarySerializable
-    #alwaysinline
-    def serialize(signature FSignature, write bytes Bytes)
-        const arguments Array = signature.arguments~()
-        const resultType OType = signature.resultType~()
-        arguments.length~().serialize(bytes)
-        parse _, argument = arguments
-            argument.serialize(bytes)
-        resultType.serialize(bytes)
+// The function turns the function signature into a string.
+def signatureToString(signature CFSignature) String
+    var result String = "("
+    const arguments Array = signature.arguments~()
+    const resultType COType = signature.resultType~()
+    const lastIndex Int = arguments.length() - 1
+    parse index, argument CFSArgument = arguments
+        const access Access = argument.access~()
+        if access != Access[read]
+            result += access.toString() + " "
+        result += coTypeToString(argument.type~(), true) + (index == lastIndex).select(") ", ", ")
+    result += coTypeToString(resultType, true)
+    return result
 
-    #alwaysinline
-    def deserialize(noread type FSignature, bytes Bytes, write position Int) FSignature
-        const startPosition Int = position
-        try
-            const argumentsLength Int = Int.deserialize(bytes, position)
-            var arguments Array = []
-            for :(counter Int = 0) counter < argumentsLength; counter++
-                arguments.addItem(FSArgument.deserialize(bytes, position))
-            const resultType OType = OType.deserialize(bytes, position)
-            return FSignature(const::emptyToken, arguments, resultType)
-        catch id, message
-            position = startPosition
-            throw(id, message)
-
-attach FSignature to ToFull
-    #alwaysinline
-    def toFull(signature FSignature, compiledData CData) FSignature
-        const oldArguments Array = signature.arguments~()
-        var newArguments Array = []
-        parse _, oldArgument = oldArguments
-            newArguments.addItem(FSArgument(oldArgument.access~(), oldArgument.type~().toFull(compiledData)))
-        return FSignature(signature.coordinates~(), newArguments, signature.resultType~().toFull(compiledData))
+def compileFSignature(signature FSignature, compiledData CData) CFSignature
+    var newArguments Array = []
+    parse _, oldArgument FSArgument = signature.arguments~()
+        newArguments.addItem(CFSArgument{access : oldArgument.access~(), type : oldArgument.type~().compileOType(compiledData)})
+    return CFSignature{{
+        arguments   : newArguments,
+        resultType  : signature.resultType~().compileOType(compiledData)
+    }}
 
 // The function replaces the "This" type with a specific type.
-#alwaysinline
-def replaceThisType(signature FSignature, thisType String) FSignature
-    const oldArguments Array = signature.arguments~()
+def replaceThisType(signature CFSignature, thisType String) CFSignature
     var newArguments Array = []
-    parse _, oldArgument = oldArguments
-        const newArgument FSArgument = oldArgument.type~().this?().select(FSArgument(oldArgument.access~(), OType(oldArgument.type~().type~().replaceText(thisType), oldArgument.type~().optional?())), oldArgument)
-        newArguments.addItem(newArgument)
-    const oldResultType OType = signature.resultType~()
-    const newResultType OType = oldResultType.this?().select(OType(oldResultType.type~().replaceText(thisType), oldResultType.optional?()), oldResultType)
-    return FSignature(signature.coordinates~(), newArguments, newResultType)
+    parse _, oldArgument CFSArgument = signature.arguments~()
+        newArguments.addItem(oldArgument.type~().this?().select({
+            CFSArgument{
+                access : oldArgument.access~(),
+                type   : COType{
+                    type       : thisType,
+                    isOptional : oldArgument.type~().optional?()
+                }
+            },
+            oldArgument
+        }))
+    const oldResultType COType = signature.resultType~()
+    const newResultType COType = oldResultType.this?().select({
+        COType{
+            type       : thisType,
+            isOptional : oldResultType.optional?()
+        },
+        oldResultType
+    })
+    return CFSignature{{
+        arguments   : newArguments,
+        resultType  : newResultType
+    }}
 
 // The function finds out if the signatures are compatible.
-def signatureCompatible?(compatibleSignature, originalSignature FSignature, compiledData CData) Bool
-    const compatibleArguments Array = compatibleSignature.arguments~()
-    const originalArguments Array = originalSignature.arguments~()
-    if compatibleArguments.length~() != originalArguments.length~()
+def signatureCompatible?(compatibleSignature, originalSignature CFSignature, compiledData CData) Bool
+    if compatibleSignature.arguments~().length() != originalSignature.arguments~().length()
         return false
-    parse index, compatibleArgument = compatibleArguments
-        const originalArgument FSArgument = originalArguments[index]
+    parse index, compatibleArgument CFSArgument = compatibleSignature.arguments~()
+        const originalArgument CFSArgument = originalSignature.arguments~()[index]
         if !compatibleArgument.argumentCompatible?(originalArgument, compiledData)
             return false
-    return FSArgument(enum::access_read, compatibleSignature.resultType~()).argumentCompatible?(FSArgument(enum::access_read, originalSignature.resultType~()), compiledData)
+    return CFSArgument{access : Access[read], type : compatibleSignature.resultType~()}.argumentCompatible?(CFSArgument{access : Access[read], type : originalSignature.resultType~()}, compiledData)
+
+// The function finds out if the arguments are compatible.
+def argumentCompatible?(compatibleArgument, originalArgument CFSArgument, compiledData CData) Bool
+    if compatibleArgument.access~() != originalArgument.access~() || {
+        (compatibleArgument.type~().optional?() != originalArgument.type~().optional?() && !originalArgument.type~().anyType?())
+    }
+        return false
+    var result Bool = true
+    if originalArgument.type~().simple?()
+        result = originalArgument.type~().typeEq?(compatibleArgument.type~(), false)
+    elif compatibleArgument.type~().simple?()
+        const typeGroups Set = compiledData.getType(const::emptyToken.replaceText(compatibleArgument.type~().type~()), false).groups~()
+        const originalTypeGroups Array = originalArgument.type~().type~()
+        parse :(originalGroupsParse) _, originalTypeGroup String = originalTypeGroups
+            result = typeGroups[originalTypeGroup]
+            if !result
+                end originalGroupsParse
+    else
+        const originalTypeGroups Array = originalArgument.type~().type~()
+        const compatibleTypeGroups Array = compatibleArgument.type~().type~()
+        parse :(parse) _, originalTypeGroup String  = originalTypeGroups
+            if compatibleTypeGroups.binarySearchString(originalTypeGroup).nothing?()
+                result = false
+                end parse
+    return result
 
 // The function makes sure that the signatures of the functions are compatible.
-def signatureCompatible!(compatibleSignature, originalSignature FSignature, compiledData CData)
+def signatureCompatible!(compatibleSignature, originalSignature CFSignature, compiledData CData, functionName Token)
     if !signatureCompatible?(compatibleSignature, originalSignature, compiledData)
-        errorFunctionsNotCompatible(originalSignature.coordinates~(), compatibleSignature.coordinates~())
+        errorFunctionsNotCompatible(functionName, signatureToString(compatibleSignature), signatureToString(originalSignature))
 
 // The function gets what type in the function is considered as "This".
-#alwaysinline
-def getThisType(realFunctionSignature, functionSignatureWithThis FSignature) Token
-    if realFunctionSignature.arguments~().length~() != functionSignatureWithThis.arguments~().length~()
-        errorInvalidType(realFunctionSignature.coordinates~(), signatureToToken(realFunctionSignature).text~(), signatureToToken(functionSignatureWithThis).text~())
-    parse index, argument = functionSignatureWithThis.arguments~()
+def getThisType(realFunctionSignature, functionSignatureWithThis CFSignature, coordinates Token) String
+    if realFunctionSignature.arguments~().length() != functionSignatureWithThis.arguments~().length()
+        errorInvalidType(coordinates, signatureToString(realFunctionSignature), signatureToString(functionSignatureWithThis))
+    parse index, argument CFSArgument = functionSignatureWithThis.arguments~()
         if argument.type~().this?() && !argument.type~().optional?()
-            const realArgumentType OType = realFunctionSignature.arguments~()[index].type~()
+            const realArgumentType COType = realFunctionSignature.arguments~()[index].type!(CFSArgument).type~()
             if !realArgumentType.simple?()
-                errorThisNotSimple(oTypeToToken(realArgumentType, false))
+                errorThisNotSimple(coordinates.replaceText(coTypeToString(realArgumentType, false)))
             return realArgumentType.type~()
-    unreachable()
+
+attach CFSignature to BinarySerializable
+    def serialize(signature CFSignature, write bytes Bytes)
+        signature.arguments~().serializeContainer(bytes)
+        signature.resultType~().serialize(bytes)
+
+    def deserialize(noread type CFSignature, bytes Bytes, write position Int) CFSignature
+        var currentPosition Int = position
+        const result CFSignature = CFSignature{{
+            arguments  : Array.deserializeContainer(bytes, currentPosition, CFSArgument),
+            resultType : COType.deserialize(bytes, currentPosition)
+        }}
+        position = currentPosition
+        return result
+
+attach CFSArgument to BinarySerializable
+    def serialize(argument CFSArgument, write bytes Bytes)
+        argument.access~().serialize(bytes)
+        argument.type~().serialize(bytes)
+
+    def deserialize(noread type CFSArgument, bytes Bytes, write position Int) CFSArgument
+        var currentPosition Int = position
+        const result CFSArgument = CFSArgument{{
+            access : Access.deserialize(bytes, currentPosition),
+            type   : COType.deserialize(bytes, currentPosition)
+        }}
+        position = currentPosition
+        return result

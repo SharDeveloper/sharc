@@ -2,73 +2,36 @@ module Main
 
 // Information about what type to which group should be placed and what functions are provided for this.
 type Attachment
-    // type      Token
-    // group     Token
-    // functions Map(name String, Function)
-
-attach Attachment to FieldType
-    #alwaysinline
-    def type~(attachment Attachment) Token
-        return attachment.typeGetItem(0)
-
-    #alwaysinline
-    def type`(write attachment Attachment, new <>Token) <>Token
-        return attachment.typePut(0, new)
-
-attach Attachment to FieldGroup
-    #alwaysinline
-    def group~(attachment Attachment) <>Token
-        return attachment.typeGetItem(1)
-
-    #alwaysinline
-    def group`(write attachment Attachment, new <>Token) <>Token
-        return attachment.typePut(1, new)
-
-attach Attachment to FieldFunctions
-    #alwaysinline
-    def functions~(attachment Attachment) Map
-        return attachment.typeGetItem(2)
-
-    #alwaysinline
-    def functions`(write attachment Attachment, new <>Map) <>Map
-        return attachment.typePut(2, new)
-
-#alwaysinline
-def Attachment(type, group Token, functions Map) Attachment
-    return Attachment.fromList({type, group, functions})
+    type        Token
+    group       Token
+    functions   Map // Map(name String, Function)
 
 // The function adds types to groups.
-#alwaysinline
 def addTypesToGroups(attachments Array, write compiledData CData)
     var groupedAttachments Map = Map()
-    parse _, attachment = attachments
+    parse _, attachment Attachment = attachments
         var existedAttachments <>Array = groupedAttachments.put(attachment.type~().text~(), [])
         if existedAttachments.nothing?()
             existedAttachments = []
         existedAttachments.addItem(attachment)
         groupedAttachments.put(attachment.type~().text~(), existedAttachments)
-    parse _, attachmentsOfOneType = groupedAttachments
-        var compiledType CType = compiledData.borrowType(attachmentsOfOneType[0].type~())
+    parse _, attachmentsOfOneType Array = groupedAttachments
+        var compiledType CType = compiledData.getType(attachmentsOfOneType[0].type!(Attachment).type~(), false)
         if compiledType.fullName~() == "STD::Nothing"
-            errorNotExpectedToken(attachmentsOfOneType[0].type~(), "")
-        parse _, attachment = attachmentsOfOneType
+            errorNotExpectedToken(attachmentsOfOneType[0].type!(Attachment).type~(), "")
+        parse _, attachment Attachment = attachmentsOfOneType
             const group CGroup = compiledData.getGroup(attachment.group~(), false)
-            if group.fullName~() == "STD::Type" || group.fullName~() == "STD::Primitive"
+            if group.fullName~() == "STD::Type" || group.fullName~() == "STD::Primitive" || group.fullName~() == "STD::Enumeration"
                 errorNotExpectedToken(attachment.group~(), "")
-            var typeGroups Set = compiledType.groups`(nothing)
-            if typeGroups.add(group.fullName~())
+            var compiledTypeGroups Set = compiledType.groups`(Set())
+            if compiledTypeGroups.add(group.fullName~())
                 errorAlreadyInGroup(attachment.type~(), attachment.group~().text~())
-            compiledType.groups`(typeGroups)
-        compiledData.refitType(compiledType)
-    parse _, attachmentsOfOneType = groupedAttachments
-        var compiledType CType = compiledData.borrowType(attachmentsOfOneType[0].type~())
-        parse _, attachment = attachmentsOfOneType
+            compiledType.groups`(compiledTypeGroups)
+        compiledData.updateType(compiledType)
+    parse _, attachmentsOfOneType Array = groupedAttachments
+        const compiledTypeGroups Set = compiledData.getType(attachmentsOfOneType[0].type!(Attachment).type~(), false).groups~()
+        parse _, attachment Attachment = attachmentsOfOneType
             const group CGroup = compiledData.getGroup(attachment.group~(), false)
-            parse _, subGroupName = group.subGroups~()
-                var compiledTypeGroups Set = compiledType.groups`(nothing)
-                if !compiledTypeGroups.add(subGroupName)
-                    const subGroup CGroup = compiledData.getGroup(const::emptyToken.replaceText(subGroupName), false)
-                    if !subGroup.functions~().empty?()
-                        errorInvalindAttachToGroup(attachmentsOfOneType[0].type~(), group.fullName~(), subGroupName)
-                compiledType.groups`(compiledTypeGroups)
-        compiledData.refitType(compiledType)
+            parse _, subGroupName String = group.subGroups~()
+                if !compiledTypeGroups[subGroupName]
+                    errorInvalidAttachToGroup(attachment.type~(), group.fullName~(), subGroupName)
