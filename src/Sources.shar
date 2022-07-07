@@ -253,8 +253,9 @@ def getToken(line, fileName String, lineIndex, write columnIndex Int) <>Token
                 return token
         case '/'
             if token.text~() == "/"
-                if columnIndex + 1 < line.length() && line[columnIndex] == '@'
-                    token.replaceText(line[columnIndex - 1 :])
+                if columnIndex + 1 < line.length() && line[columnIndex + 1] == '@'
+                    token.text`(line[columnIndex - 1:])
+                    columnIndex = line.length()
                     return token
                 return nothing
             eSwitch previousCharType
