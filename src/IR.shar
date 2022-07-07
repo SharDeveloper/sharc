@@ -236,7 +236,7 @@ def createInvalidTypeThrow(write codeData CodeData, compiledData CData, freedOnE
         irJmp(catchLabel.label~(), ir)
 
 def irConstArray(itemsOperands Array) String
-    const irType String = "[" + (itemsOperands.length() + 3).toString() + "x i64]"
+    const irType String = "[" + (itemsOperands.length() + 3).toString() + " x i64]"
     var result String = "{i64 ptrtoint (" + irType + "* ##llvmconst##>private unnamed_addr constant " + irType + " [i64 0, i64 " + itemsOperands.length().toString() + ", i64 "
     do
         const firstItem String = itemsOperands[0].type!(Operand).value~()
