@@ -993,6 +993,27 @@ def toFinalIR(ir String, firstRegisterNumber Int, errorCoordinates Token, compil
                 usedConstants.put(constantValue, constantName)
                 usedData.llvmConstants`(usedConstants)
             finalIR += constantName
+        case "llvmfunc"
+            var position Int = signatureNext + 2
+            if ir[position] != '>'
+                errorNotFoundSignatureEnd(errorCoordinates.replaceText("##" + id + "##"))
+            var nesting Int = 1
+            for :(loop)
+                position++
+                if position == ir.length()
+                    errorNotFoundSignatureEnd(errorCoordinates.replaceText("##" + id + "##"))
+                if ir.partsEqual?(position, "<##", 0, 3)
+                    if nesting == 1
+                        end loop
+                    nesting--
+                    position += 2
+                elif ir.partsEqual?(position, "##>", 0, 3)
+                    nesting++
+                    position += 2
+            previousPosition = position + 3
+            var llvmFunctions String = usedData.llvmFunctions`("")
+            llvmFunctions += toFinalIR(ir[signatureNext + 3 : position], -1, errorCoordinates, compiledData, compilingConstants, compilingFunctions, usedData, true) + "\n"
+            usedData.llvmFunctions`(llvmFunctions)
         case "llvmdeclare"
             const declarationEnd <>Int = ir.lookPartFromAtoB("##", signatureEnd + 2, ir.length())
             if declarationEnd.nothing?()

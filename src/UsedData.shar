@@ -8,6 +8,7 @@ type UsedData
     functions          Map // Map(nameWithVariant String, code String)
     llvmConstants      Map // Map(llvmValue String, llvmName String)
     llvmDeclares       Map // Map(name String, llvmDeclaration String)
+    llvmFunctions      String
     groupsFunctions    Map // Map(functionNameWithVariant String, groupsNames [String])
     groupsTypes        Map // Map(groupName String, typesInGroup Set(String))
     groupListConstants Map // Map(groupName String, constantTypeAndName String)

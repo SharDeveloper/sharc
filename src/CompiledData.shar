@@ -463,6 +463,7 @@ def createProgram(compiledData CData, outputFile String)
             functions          : Map(),
             llvmConstants      : Map(),
             llvmDeclares       : const::builtinLLVMDeclaredFunctions,
+            llvmFunctions      : "",
             groupsFunctions    : Map(),
             groupsTypes        : groupsTypes,
             groupListConstants : Map()
@@ -552,6 +553,7 @@ def createProgram(compiledData CData, outputFile String)
                     if !((typeName.length() == 1 && (typeName[0] == '-' || typeName[0] == '+')) || typeNumber.nothing?())
                         typesInGroups.put(typeNumber, typeName)
             irCreateGenericFunction(functionName, nothrow, typesInGroups, simpleFunction.signature~().arguments~(), ir)
+    ir += usedData.llvmFunctions~()
     irCreateGetFieldNameFunctions(fields, ir)
     parse groupsAsString String, functionName String = usedData.inGroups~()
         irCreateInGroupsFunctions(groupsAsString, functionName, usedData, ir)
