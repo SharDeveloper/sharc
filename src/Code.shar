@@ -816,14 +816,12 @@ def createIntSwitch(casesBlocks Array, operand Operand, haveDefault Bool, labels
         var tokenIndex Int = 1
         for :(loop)
             const numberToken Token = caseBlock.next(tokenIndex)
-            var variant String = ""
+            var variant Int = 0
             try
-                var number Int = 0
                 if numberToken.text~().contain?('x')
-                    number = hexToInt(numberToken.text~())
+                    variant = hexToInt(numberToken.text~())
                 else
-                    number = Int.fromString(numberToken.text~())
-                variant = number.toString()
+                    variant = Int.fromString(numberToken.text~())
             catch
                 errorNotExpectedToken(numberToken, "")
             if !switchVariantsAndLabels.put(variant, labels[caseIndex]).nothing?()
@@ -869,7 +867,7 @@ def createStringSwitch(casesBlocks Array, operand Operand, haveDefault Bool, lab
     var switchVariantsAndLabels Map = Map()
     parse _, length Int = lengths
         const stringsWithSameLength Array = casesByLength[length]
-        switchVariantsAndLabels.put(length.toString(), stringsWithSameLength[0])
+        switchVariantsAndLabels.put(length, stringsWithSameLength[0])
     irSwitch(const::irStringLengthType, irStringLength, defaultOrEndLabel, switchVariantsAndLabels, ir)
     parse _, length Int = lengths
         if length != 0
@@ -885,7 +883,7 @@ def createIRSwitchesForStrings(stringsWithSameLength Array, defaultOrEndLabel, i
     if stringsWithSameLength[1].length() == 1
         var switchVariantsAndLabels Map = Map()
         for :(stringIndex Int = 1) stringIndex < stringsWithSameLength.length(); stringIndex += 2
-            switchVariantsAndLabels.put(charToInt(stringsWithSameLength[stringIndex][0]).toString(), stringsWithSameLength[stringIndex + 1])
+            switchVariantsAndLabels.put(charToInt(stringsWithSameLength[stringIndex][0]), stringsWithSameLength[stringIndex + 1])
         irSwitch(const::irCharType, irChar, defaultOrEndLabel, switchVariantsAndLabels, ir)
     else
         var switchVariantsAndLabels Map = Map()
@@ -898,7 +896,7 @@ def createIRSwitchesForStrings(stringsWithSameLength Array, defaultOrEndLabel, i
             var existedTails <>Array = stringsTails.put(char, [])
             if existedTails.nothing?()
                 const charLabel String = codeData.createLabel()
-                switchVariantsAndLabels.put(charToInt(char).toString(), charLabel)
+                switchVariantsAndLabels.put(charToInt(char), charLabel)
                 existedTails = [charLabel, tail, label]
             else
                 existedTails.addItem(tail)
@@ -920,8 +918,7 @@ def createCharSwitch(casesBlocks Array, operand Operand, haveDefault Bool, label
             const charToken Token = caseBlock.next(tokenIndex)
             if charToken[0] != '\p'
                 errorNotExpectedToken(charToken, "")
-            const irChar String = charToIRInt(charToken)
-            if !switchVariantsAndLabels.put(irChar, labels[caseIndex]).nothing?()
+            if !switchVariantsAndLabels.put(charToIRInt(charToken), labels[caseIndex]).nothing?()
                 errorAlreadyExist(charToken, "case")
             if caseBlock.eol?(tokenIndex)
                 end loop
@@ -1033,7 +1030,7 @@ def compileEnumSwitch(switchBlocks Array, write codeData CodeData, compiledData 
             const elementID <>Int = elements[elementName.text~()]
             if elementID.nothing?()
                 errorNotFound(elementName, "enumeration element")
-            if !switchVariantsAndLabels.put(elementID.toString(), currentLabel).nothing?()
+            if !switchVariantsAndLabels.put(elementID, currentLabel).nothing?()
                 errorAlreadyExist(elementName, "case")
             if caseBlock.eol?(tokenIndex)
                 end loop

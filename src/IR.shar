@@ -64,7 +64,7 @@ def irBool(value Bool) String
     return value.select("{i64 1, i32 ##tnum##STD::Bool##}", "{i64 0, i32 ##tnum##STD::Bool##}")
 
 def irChar(char Token) String
-    return "{i64 " + charToIRInt(char) + ", i32 ##tnum##STD::Char##}"
+    return "{i64 " + charToIRInt(char).toString() + ", i32 ##tnum##STD::Char##}"
 
 def irInt(int String) String
     return "{i64 " + int + ", i32 ##tnum##STD::Int##}"
@@ -185,13 +185,13 @@ def irIf(predicate String, expectation Expectation, trueLabel, falseLabel String
 
 def irSwitch(type, operand, defaultLabel String, switchVariantsAndLabels Map, write ir String)
     var variants Array = []
-    parse variant String, _ = switchVariantsAndLabels
+    parse variant, _ = switchVariantsAndLabels
         variants.addItem(variant)
     variants.sort(true)
     ir += "\tswitch " + type + " " + operand + ", label %##reg##" + defaultLabel + "## [\n"
-    parse _, variant String = variants
+    parse _, variant = variants
         const label String = switchVariantsAndLabels[variant]
-        ir += "\t\t" + type + " " + variant + ", label %##reg##" + label + "##\n"
+        ir += "\t\t" + type + " " + variant.toString() + ", label %##reg##" + label + "##\n"
     ir += "\t]\n"
 
 def irLabel(label, write ir String)
@@ -661,34 +661,32 @@ def createIRVariables(codeData CodeData, startVarNumber Int) String
     return ir
 
 // The function turns a character from source into a number for IR code.
-def charToIRInt(char Token) String
+def charToIRInt(char Token) Int
     const cleanedChar String = char.text~()[1 : char.text~().length() - 1]
-    var result String = ""
+    var result Int = 0
     if cleanedChar[0] == '\\'
         switch cleanedChar
         case "\\n"
-            result = "10"
+            result = 10
         case "\\t"
-            result = "9"
+            result = 9
         case "\\\\"
-            result = "92"
+            result = 92
         case "\\q"
-            result = "34"
+            result = 34
         case "\\p"
-            result = "39"
+            result = 39
         default
             if cleanedChar.length() != 7
                 errorInvalidCharacterInCode(char)
-            var resultAsInt Int = 0
             try
-                resultAsInt = hexToInt("0x" + cleanedChar[1:])
+                result = hexToInt("0x" + cleanedChar[1:])
             catch
                 errorInvalidCharacterInCode(char)
-            if resultAsInt > 0x10ffff
+            if result > 0x10ffff
                 errorInvalidCharacterInCode(char)
-            result = resultAsInt.toString()
     elif cleanedChar.length() == 1
-        result = charToInt(cleanedChar[0]).toString()
+        result = charToInt(cleanedChar[0])
     else
         errorInvalidCharacterInCode(char)
     return result
