@@ -22,9 +22,9 @@ enum CMDLReceived
 
 const helpMessage String = {
     "sharc - compiler for shar programming language.\n"
-    "  -s FILE_NAMES or --sources FILE_NAMES - specify a list of files with source code. (file names are separated by a space)\n"
-    "  -m FILE_NAMES or --modules FILE_NAMES - specify a list of files with modules. (file names are separated by a space)\n"
-    "  -o FILE_NAME or --out FILE_NAME - specify the file with the built project.\n"
+    "  -s or --sources FILE_NAMES - specify a list of files with source code. (file names are separated by a space)\n"
+    "  -m or --modules FILE_NAMES - specify a list of files with modules. (file names are separated by a space)\n"
+    "  -o or --out FILE_NAME - specify the file with the built project.\n"
     "  -t or --throw - compilation is performed ignoring the \qnothrow\q function attribute.\n"
     "  -h or --help - show help.\n"
     "  -v or --version - show version.\n\n"
