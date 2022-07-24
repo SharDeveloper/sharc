@@ -78,6 +78,8 @@ const builtinLLVMDeclaredFunctions Map
             "fs__close_dir"                     , "declare void @fs__close_dir({i64, i32}) nounwind",
             "fs__make_dir"                      , "declare {i64, i32} @fs__make_dir({i64, i32}, {i64, i32}) nounwind",
             "fs__get_tmp_dir_name"              , "declare {i64, i32} @fs__get_tmp_dir_name() mustprogress nofree norecurse nosync readnone willreturn nounwind",
+            "fs__read_symlink"                  , "declare {i64, i32} @fs__read_symlink({i64, i32}) nounwind",
+            "fs__create_symlink"                , "declare {i64, i32} @fs__create_symlink({i64, i32}, {i64, i32}) nounwind",
             "time__current"                     , "declare i64 @time__current() nofree nounwind",
             "time__current_utc"                 , "declare i64 @time__current_utc() nofree nounwind",
             "lib__load"                         , "declare {i64, i32} @lib__load({i64, i32}) nounwind",
